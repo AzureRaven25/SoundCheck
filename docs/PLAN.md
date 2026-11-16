@@ -210,15 +210,15 @@ KaraokeApp/
 ### Phase 0: De-risking spikes (≈2–3 weeks)
 Each is a throwaway prototype that answers one scary question:
 1. **Pipeline**: run HTDemucs + CREPE + LRCLIB + WhisperX on 10 owned songs. *Is the separation and lyric timing good enough?*
-2. **TV audio**: an Apple TV app that plays 2 stems in sync with a live guide-vocal slider + Signalsmith key shift. *Does the TV CPU handle it without glitches?*
-3. **Phone mic**: a web page streaming pitch + audio to the TV app over WebRTC. *What's the real latency on our hardware? Does react-native-webrtc work on tvOS?*
+2. **TV audio**: a Fire TV app that plays 2 stems in sync with a live guide-vocal slider + Signalsmith key shift. *Does the TV CPU handle it without glitches?*
+3. **Phone mic**: a web page streaming pitch + audio to the TV app over WebRTC. *What's the real latency on our hardware? Does react-native-webrtc work on Fire TV?*
 4. **Scoring**: an offline script that scores recorded performances against the reference. *Do the scores feel fair?*
 
-### Phase 1: MVP on Apple TV (≈6–8 weeks)
+### Phase 1: MVP on Fire TV (≈6–8 weeks)
 Monorepo, backend + pipeline, library upload, browse/search, original/karaoke modes, guide slider, key change, synced lyrics, one phone mic, scoring, basic queue.
 
-### Phase 2: Fire TV (Fire OS) + multiplayer (≈4 weeks)
-Android/Oboe host for the audio core, up to 4 mics, duets, profiles, vocal range test, auto key.
+### Phase 2: Apple TV + multiplayer (≈4 weeks)
+AVAudioEngine (tvOS) host for the audio core, up to 4 mics, duets, profiles, vocal range test, auto key.
 
 ### Phase 3: Polish & party features (≈4+ weeks)
 Themes, battles, recording/replay, practice mode, accessibility, performance tuning, TestFlight / Amazon Live App Testing beta.
@@ -242,10 +242,10 @@ Approach licensed karaoke catalog partners with the demo, a Musixmatch lyrics li
 ## 10. Open questions (need your input)
 
 1. ~~**Goal**~~ **Decided (2026-11-15): personal project for now.** We build on Layer A (your own music files). Licensing (Layer B, Musixmatch, legal review) waits until a public launch is on the table, but the `ContentProvider` abstraction keeps that door open.
-2. **First platform**: Apple TV first (recommended: best audio APIs, one OS) or Fire TV first?
-3. **Hardware**: which TV devices and phones do you have for testing?
-4. **Language comfort**: TypeScript/React, Python, Swift, Kotlin, C++. Which are you strongest in?
-5. **Backend preference**: Python/FastAPI (recommended) or TypeScript?
+2. **Decided: Fire TV first.** Phases 1 and 2 swap: the MVP targets Fire TV (Oboe/AAudio host for the C++ core), and Apple TV (AVAudioEngine host) follows in Phase 2 from the same React Native codebase. **Still open:** is the Fire TV device on Fire OS (Android) or Vega OS? That decides between `react-native-tvos` and React Native for Vega for the MVP.
+3. **Decided: test hardware** is an Apple TV, a Fire TV device and an iPhone. There's no Android phone, so the phone web app gets tested in iPhone Safari first; Android Chrome can come later via a friend's phone or an emulator.
+4. **Decided: languages.** You're comfortable with TypeScript/React, Python, Swift/Kotlin and C++, so the stack in §6 stands as is.
+5. **Decided: Python/FastAPI** for the backend.
 
 ---
 
