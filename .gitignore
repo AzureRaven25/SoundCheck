@@ -1,0 +1,8 @@
+.DS_Store
+# Processed song bundles and source audio never go in git.
+library/
+music/
+*.mp3
+*.flac
+*.m4a
+*.wav

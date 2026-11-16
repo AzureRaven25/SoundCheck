@@ -1,0 +1,32 @@
+[project]
+name = "karaoke-pipeline"
+version = "0.1.0"
+description = "Offline song-processing pipeline for KaraokeApp: stems, melody, lyrics, key"
+readme = "README.md"
+authors = [
+    { name = "AzureRaven25", email = "jasegeorgev@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "demucs>=4.0.1",
+    "httpx>=0.28.1",
+    "librosa>=1.0.1",
+    "mutagen>=1.48.1",
+    "numpy>=2.5.5",
+    "soundfile>=0.14.0",
+    "torch>=2.5,<2.9",
+    "torchaudio>=2.5,<2.9",
+    "torchcrepe>=0.0.24",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[project.scripts]
+karaoke-pipeline = "karaoke_pipeline.cli:main"
