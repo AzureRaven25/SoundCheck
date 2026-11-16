@@ -270,3 +270,20 @@ Approach licensed karaoke catalog partners with the demo, a Musixmatch lyrics li
 - Scoring research: https://www.isca-archive.org/interspeech_2025/hsieh25c_interspeech.pdf · https://smcnus.comp.nus.edu.sg/archive/pdf/2017-2018/2017_Perceptual_Evaluation_of_Singing_Quality.pdf · https://arxiv.org/pdf/2206.14357 · https://arxiv.org/pdf/1807.03046
 - Fire TV Vega OS / React Native: https://developer.amazon.com/apps-and-games/blogs/2026/10/react-native-for-vega-os · https://developer.amazon.com/apps-and-games/blogs/2026/10/vega-2-0-sdk-launch · https://newly.app/guides/fire-tv-app-development
 - Phone-as-mic landscape: https://agora.io/en/blog/how-to-create-an-online-karaoke-app-using-agora-sdk
+
+---
+
+## 11. Progress log & known issues
+
+**Built so far (2026-11-16):**
+- `services/pipeline`: song bundles (original, stems, melody, LRCLIB lyrics, key/tempo).
+- `services/catalog`: MusicBrainz-based song database with search, library linking and wishlist.
+- `services/api`: FastAPI server for the TV and phone apps.
+- `apps/tv`: Expo + react-native-tvos app (Home, Search, Song, Player), verified in the browser preview.
+
+**Known issues to fix:**
+- **Repeated same-pitch notes merge** in `melody.json` (e.g. two syllables on the same note become one long note). Scoring's rhythm component will need onset detection (energy/spectral flux on the vocal stem) to split them.
+- **Relative major/minor confusion** in key detection (the C-major demo reads as A minor). Use the melody's final note and the bass stem to break the tie.
+- **Synthetic test audio doesn't separate**: Demucs classifies synthesized tones as instruments, so separation quality can only be judged on real recordings.
+- **TV playback has no key change yet** (expo-audio interim engine); needs the native C++ engine.
+- **Lyrics are line-level**; word-level timing (WhisperX alignment) is still to do.

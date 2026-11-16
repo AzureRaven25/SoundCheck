@@ -7,3 +7,7 @@ music/
 *.m4a
 *.wav
 data/
+.claude/
+__pycache__/
+.venv/
+.pytest_cache/

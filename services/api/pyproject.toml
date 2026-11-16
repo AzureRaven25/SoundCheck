@@ -1,0 +1,32 @@
+[project]
+name = "karaoke-api"
+version = "0.1.0"
+description = "HTTP API for KaraokeApp: catalog search, library, song bundles"
+readme = "README.md"
+authors = [
+    { name = "AzureRaven25", email = "jasegeorgev@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "karaoke-catalog",
+    "psycopg-pool>=3.3.3",
+    "psycopg[binary]>=3.2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+karaoke-api = "karaoke_api:main"
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+karaoke-catalog = { path = "../catalog", editable = true }
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+]
