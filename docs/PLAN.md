@@ -241,7 +241,7 @@ Approach licensed karaoke catalog partners with the demo, a Musixmatch lyrics li
 
 ## 10. Open questions (need your input)
 
-1. **Goal**: personal/portfolio project, or do you intend to launch publicly someday? This decides how early we worry about licensing.
+1. ~~**Goal**~~ **Decided (2026-11-15): personal project for now.** We build on Layer A (your own music files). Licensing (Layer B, Musixmatch, legal review) waits until a public launch is on the table, but the `ContentProvider` abstraction keeps that door open.
 2. **First platform**: Apple TV first (recommended: best audio APIs, one OS) or Fire TV first?
 3. **Hardware**: which TV devices and phones do you have for testing?
 4. **Language comfort**: TypeScript/React, Python, Swift, Kotlin, C++. Which are you strongest in?
