@@ -1,0 +1,27 @@
+[project]
+name = "karaoke-catalog"
+version = "0.1.0"
+description = "Song catalog for KaraokeApp: MusicBrainz import, search, library linking"
+readme = "README.md"
+authors = [
+    { name = "AzureRaven25", email = "jasegeorgev@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[project.scripts]
+karaoke-catalog = "karaoke_catalog.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["tests"]

@@ -14,6 +14,8 @@ class TrackInfo:
     artist: str | None
     album: str | None
     duration: float | None
+    musicbrainz_recording_id: str | None = None  # written by MusicBrainz Picard
+    isrc: str | None = None
 
 
 def _first(tags: dict, *keys: str) -> str | None:
@@ -27,7 +29,7 @@ def _first(tags: dict, *keys: str) -> str | None:
 
 
 def read_track_info(path: Path) -> TrackInfo:
-    title = artist = album = None
+    title = artist = album = mbid = isrc = None
     duration = None
     try:
         f = mutagen.File(path, easy=True)
@@ -38,6 +40,8 @@ def read_track_info(path: Path) -> TrackInfo:
         title = _first(tags, "title")
         artist = _first(tags, "artist", "albumartist")
         album = _first(tags, "album")
+        mbid = _first(tags, "musicbrainz_trackid")
+        isrc = _first(tags, "isrc")
         if f.info is not None and getattr(f.info, "length", None):
             duration = float(f.info.length)
     if title is None:
@@ -48,4 +52,5 @@ def read_track_info(path: Path) -> TrackInfo:
             artist = artist or maybe_artist
         else:
             title = stem
-    return TrackInfo(title=title, artist=artist, album=album, duration=duration)
+    return TrackInfo(title=title, artist=artist, album=album, duration=duration,
+                     musicbrainz_recording_id=mbid, isrc=isrc)

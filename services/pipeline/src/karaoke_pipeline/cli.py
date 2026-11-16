@@ -104,6 +104,8 @@ def process_file(src: Path, library: Path, *, model: str, crepe_model: str, skip
         "title": info.title,
         "artist": info.artist,
         "album": info.album,
+        "musicbrainz_recording_id": info.musicbrainz_recording_id,
+        "isrc": info.isrc,
         "duration": round(duration, 3),
         "original_file": f"original{src.suffix.lower()}",
         **analysis,
