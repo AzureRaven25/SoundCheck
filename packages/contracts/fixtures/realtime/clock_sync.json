@@ -1,0 +1,9 @@
+{
+  "description": "NTP-style offset: phone clock is 250 ms behind host, 40 ms each way, host takes 2 ms to answer.",
+  "pong": { "type": "clock_pong", "v": 1, "memberId": "m1", "id": 7, "t0": 1000000, "t1": 1000290, "t2": 1000292 },
+  "t3": 1000082,
+  "expected": { "offsetMs": 250, "rttMs": 80 },
+  "transport": { "type": "transport", "v": 1, "state": "playing", "trackId": "t", "queueItemId": null, "songPos": 12.5, "hostClock": 1000300, "keyShift": 0, "singerMemberIds": ["m1"] },
+  "phoneNowMs": 1001050,
+  "expectedSongPos": 13.5
+}

@@ -1,0 +1,13 @@
+{
+  "name": "soundcheck",
+  "private": true,
+  "description": "SoundCheck monorepo: website, shared TypeScript packages, Supabase backend. Native apps live in apps/apple and apps/android.",
+  "workspaces": ["packages/*", "apps/web"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --linked --schema public > packages/contracts/src/database.types.ts"
+  },
+  "engines": { "node": ">=22" }
+}
