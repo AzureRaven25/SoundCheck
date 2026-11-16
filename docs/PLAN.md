@@ -91,6 +91,16 @@ To remove vocals or shift the key, we need the actual audio file, and a legal ri
 | **Reference melody (for scoring)** | Generate ourselves: pitch-track the isolated vocal stem (§5.2) | Same, or MIDI melody from the karaoke partner |
 | **Song key / BPM** | Generate ourselves (Essentia / librosa) | Same |
 
+### 4.1 Song catalog database ("every song Spotify has")
+
+We *can* have a browsable database of essentially every released song. We just can't copy it from Spotify: Spotify's Developer Terms forbid building a database out of Spotify content. Instead:
+
+- **MusicBrainz** is the open music encyclopedia: tens of millions of recordings with artists, albums, release dates, ISRCs and genres. Its core data is public domain (CC0), and full database dumps can be downloaded and loaded into our own Postgres. **Cover Art Archive** supplies the album art.
+- **Our `catalog` tables** (Postgres): `artist`, `release`, `recording` (+ ISRC), linked by MusicBrainz IDs, with full-text search over title and artist.
+- **Availability layer**: each recording gets flags for what we actually have: `has_bundle` (processed audio from your library), `has_synced_lyrics` (LRCLIB), and optionally an `apple_music_id` for a Listen link-out.
+- **In the app**: search the whole catalog. Songs with a bundle can be sung right away. Songs without one show as "not in your library yet" and can go on a wishlist of songs to add.
+- **Import strategy**: start with a filtered import (for example only recordings that have an ISRC and appear on official album/single releases), which keeps the database manageable. Then match library files to catalog entries by tags, duration, AcoustID audio fingerprints (Chromaprint) and ISRC.
+
 ---
 
 ## 5. How the core tech works
@@ -242,7 +252,7 @@ Approach licensed karaoke catalog partners with the demo, a Musixmatch lyrics li
 ## 10. Open questions (need your input)
 
 1. ~~**Goal**~~ **Decided (2026-11-15): personal project for now.** We build on Layer A (your own music files). Licensing (Layer B, Musixmatch, legal review) waits until a public launch is on the table, but the `ContentProvider` abstraction keeps that door open.
-2. **Decided: Fire TV first.** Phases 1 and 2 swap: the MVP targets Fire TV (Oboe/AAudio host for the C++ core), and Apple TV (AVAudioEngine host) follows in Phase 2 from the same React Native codebase. **Still open:** is the Fire TV device on Fire OS (Android) or Vega OS? That decides between `react-native-tvos` and React Native for Vega for the MVP.
+2. **Decided: Fire TV first.** Phases 1 and 2 swap: the MVP targets Fire TV (Oboe/AAudio host for the C++ core), and Apple TV (AVAudioEngine host) follows in Phase 2 from the same React Native codebase. **Decided: the test device runs Fire OS (Android)**, so the MVP uses `react-native-tvos` (Android TV build). Vega OS stays a later port.
 3. **Decided: test hardware** is an Apple TV, a Fire TV device and an iPhone. There's no Android phone, so the phone web app gets tested in iPhone Safari first; Android Chrome can come later via a friend's phone or an emulator.
 4. **Decided: languages.** You're comfortable with TypeScript/React, Python, Swift/Kotlin and C++, so the stack in §6 stands as is.
 5. **Decided: Python/FastAPI** for the backend.
