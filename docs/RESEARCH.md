@@ -26,6 +26,14 @@ SoundCheck separates five capabilities: **search**, **metadata**, **artwork**, *
   - *30-second previews* (iTunes Search API `previewUrl`) ✅. Usable only as preview playback with an Apple Music link-back, never for karaoke processing.
 - **Apple Music / Spotify:** MusicKit plays the full catalog on tvOS/iOS, but audio buffers are not accessible (DRM), per Apple engineers on the developer forums ⚠️. So no vocal removal, key change or scoring is possible on those streams. Possible later: a "Listen in Apple Music" deep link.
 
+### Popularity ranking
+Raw release counts are polluted. Placeholder recordings ("[silence]", "[untitled]") and spam/noise projects that re-release one track thousands of times topped the list. The ranking now uses:
+- `3 × (distinct release groups credited to other artists, i.e. compilations and soundtracks)`;
+- `+ min(own release groups, 5)`;
+- after excluding bracketed placeholder titles and MusicBrainz's special artists (`[no artist]`, `[unknown]`, Various Artists).
+
+The top of the list is now classic karaoke material: *When a Man Loves a Woman*, *Stand by Me*, *I Will Survive*, *The Final Countdown*, …
+
 ## 2. Artwork providers
 
 | Provider | Mechanism | Terms / restrictions | Verdict |
@@ -123,7 +131,7 @@ Shared code:
 | GPU processing | **Modal** (serverless GPU, per-second billing, Python-native). Alternatives: RunPod serverless, AWS Batch on g6, Cloud Run with L4 GPUs | Scales to zero; ~$0.01–0.03 per song on an L4/A10G ⚠️. Needs your account (§ blocked items) |
 | Dev worker | The same worker code on the Mac (Apple GPU) pulling from the cloud queue and writing to cloud Storage | Persistent data stays in the cloud; local files are temporary |
 | Asset storage | Supabase Storage (`audio` private, signed URLs; `artwork` public) | S3/R2 as an option when volume grows (R2 has no egress fees) |
-| Catalog scale | Supabase Free = 500 MB database. The full MusicBrainz song table is many GB | Import a ranked subset (most-released songs) and lazily add long-tail songs found through the MusicBrainz API |
+| Catalog scale | Supabase Free = 500 MB database. The full ranked list is **26.5 M songs** (built locally in ~6 min by `ranked_subset.sql`) | **Tiered catalog:** Supabase holds the active catalog (top-ranked songs plus every song a user touches). **Turso** (libSQL, `soundcheck` database in aws-us-east-1) holds a read-only FTS5 index of the long tail. `catalog-search` falls back Supabase → Turso → MusicBrainz live; picking a long-tail song copies it into Supabase. Turso can't hold user data, because foreign keys/RLS between songs and playlists/scores need one Postgres |
 
 ### Needs your input (blocking only those parts)
 1. **GPU worker hosting:** create a Modal (or RunPod) account; it needs a payment method. Until then the dev worker runs on the Mac.

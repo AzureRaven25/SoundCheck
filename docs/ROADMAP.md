@@ -16,7 +16,21 @@ Ordered by dependency: the shared foundation comes first, then the platforms. Mi
 | **M9** | Hardening & launch readiness | all | all | Sentry monitoring, CI (GitHub Actions; you push), performance budgets, accessibility, physical-device verification checklist, licensed-content provider integration | Device matrix sign-off |
 
 ## Current focus
-M0 ✅ → M1 ✅ (deployed to the SoundCheck project 2026-11-16) → **M2 next** → M3/M4.
+M0 ✅ → M1 ✅ → **M2 ✅ (2026-11-16)** → **M3 next** (website), M4 in parallel.
+
+M2 delivered:
+- 100,000 top-ranked songs in Supabase (218 MB);
+- tiered `catalog-search` (Supabase → Turso → MusicBrainz live);
+- blended typo-tolerant ranking;
+- `resolve-artwork` (Cover Art Archive → iTunes);
+- `fetch-lyrics` (LRCLIB, word-level when available);
+- provider cache + global throttle.
+
+M2 leftovers:
+- Turso export runs once `TURSO_AUTH_TOKEN` is set.
+- Copying artwork into Storage (resized WebP + perceptual hash) is deferred to M3, when the web image pipeline exists. Provider URLs are stable CDN links meanwhile.
+- MusicBrainz contact string for the User-Agent (`PROVIDER_CONTACT` function secret).
+- Search latency for very short words (~1.5 s) needs tuning.
 
 ## Blocked on you (independent work continues)
 - GPU host account (Modal or RunPod) for cloud processing: M4 deploy step.

@@ -1,7 +1,7 @@
 -- SoundCheck M1 database tests (pgTAP). Run: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(60);
+select plan(62);
 
 -- ------------------------------------------------------------------ helpers
 create function pg_temp.as_user(uid uuid) returns void language plpgsql as $$
@@ -35,7 +35,9 @@ insert into public.albums (id, title, artist_credit, release_year) values
 insert into public.tracks (id, title, artist_credit, album_id, duration_ms, popularity) values
   ('7a000000-0000-0000-0000-000000000001', 'Midnight Signal', 'Aurora Vale', 'ab000000-0000-0000-0000-000000000001', 200000, 12),
   ('7a000000-0000-0000-0000-000000000002', 'Midnight Signal', 'The Night Owls', null, 210000, 1),
-  ('7a000000-0000-0000-0000-000000000003', 'Paper Lanterns', 'Zoë Marlowe', null, 185000, 5);
+  ('7a000000-0000-0000-0000-000000000003', 'Paper Lanterns', 'Zoë Marlowe', null, 185000, 5),
+  ('7a000000-0000-0000-0000-000000000004', 'Bohemian Rhapsody', 'Queen', null, 354000, 1500),
+  ('7a000000-0000-0000-0000-000000000005', 'Bohemian Rapsody', 'Some Garage Band', null, 300000, 1);
 insert into public.artwork (entity_type, entity_id, provider, source_url, is_primary) values
   ('album', 'ab000000-0000-0000-0000-000000000001', 'coverartarchive', 'https://coverartarchive.org/release-group/x/front-500', true);
 
@@ -54,7 +56,7 @@ select is((select count(*)::int from public.user_preferences), 4, 'preferences r
 
 -- ------------------------------------------------------------------ catalog: public read, no client writes
 select pg_temp.as_anon();
-select is((select count(*)::int from public.tracks), 3, 'anon can read tracks');
+select is((select count(*)::int from public.tracks), 5, 'anon can read tracks');
 select throws_ok($$ insert into public.tracks (title, artist_credit) values ('x', 'y') $$, '42501', null, 'anon cannot insert tracks');
 select pg_temp.as_user('a0000000-0000-0000-0000-00000000000a');
 select throws_ok($$ insert into public.artists (name) values ('Fake') $$, '42501', null, 'users cannot insert artists');
@@ -67,6 +69,8 @@ select is((select title from public.search_tracks('zoe lantern') limit 1), 'Pape
 select is((select title from public.search_tracks('midnite signall') limit 1), 'Midnight Signal', 'typo fallback finds the song');
 select is((select artwork_url from public.search_tracks('midnight') limit 1), 'https://coverartarchive.org/release-group/x/front-500', 'search returns album artwork');
 select is((select count(*)::int from public.search_tracks('   ')), 0, 'empty query returns nothing');
+select is((select artist_credit from public.search_tracks('bohemian rapsody') limit 1), 'Queen', 'famous near-match beats an obscure exact typo-title');
+select is((select artist_credit from public.search_tracks('bohemian rhapsody') limit 1), 'Queen', 'exact query still ranks the original first');
 
 -- ------------------------------------------------------------------ playlists & favorites
 select lives_ok($$ insert into public.playlists (id, title) values ('91000000-0000-0000-0000-000000000001', 'Alice Private') $$, 'alice creates a playlist');

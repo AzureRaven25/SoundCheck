@@ -1,5 +1,7 @@
 # karaoke-catalog
 
+> **SoundCheck note:** local Postgres is now only a *staging area*. The live catalog is in Supabase, filled by `sync-supabase` below. Persistent app data never lives on the Mac.
+
 A searchable database of (nearly) every released song, built from the open **MusicBrainz** database and linked to the songs you've processed with [services/pipeline](../pipeline/README.md). The design is in §4.1 of [docs/PLAN.md](../../docs/PLAN.md).
 
 ## Setup (macOS)
@@ -78,3 +80,18 @@ Needs the local Postgres. Tests use a separate `karaoke_test` database and a tin
 ```bash
 uv run pytest
 ```
+
+## Sync to the SoundCheck cloud catalog
+
+1. Load the dump into staging. Run `import-musicbrainz` once; its raw `mb.*` tables are what's needed. If its slow legacy transform is still running, cancel it.
+2. Build the ranked song list. It takes about 6 minutes on an M5 for 26.5 M songs:
+   ```bash
+   psql -d karaoke -f src/karaoke_catalog/sql/ranked_subset.sql
+   ```
+   Popularity = 3 × release groups by *other* artists (compilations/soundtracks) + min(own groups, 5), excluding placeholder titles and special-purpose artists.
+3. Upsert the top N into Supabase. This needs `SUPABASE_URL` and `SUPABASE_SECRET_KEY` in the repo's `.env.local`:
+   ```bash
+   uv run karaoke-catalog sync-supabase --top 25000
+   uv run karaoke-catalog sync-supabase --start 25001 --top 75000   # extend later; idempotent
+   ```
+   Ids are MusicBrainz ids, so reruns and the on-demand `catalog-search` function never create duplicates.

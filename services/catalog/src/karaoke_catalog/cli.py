@@ -6,6 +6,7 @@
     karaoke-catalog search "bohemian rhaps"
     karaoke-catalog wishlist add <song-id> | list
     karaoke-catalog stats
+    karaoke-catalog sync-supabase --top 200000     # ranked subset -> SoundCheck cloud catalog
 
 Database: $KARAOKE_DATABASE_URL (default postgresql:///karaoke).
 """
@@ -13,6 +14,7 @@ Database: $KARAOKE_DATABASE_URL (default postgresql:///karaoke).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +107,41 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_sync_supabase(args) -> int:
+    from .supabase_sync import SupabaseRest, load_env, sync
+
+    load_env()
+    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SECRET_KEY")
+    if not url or not key:
+        print("SUPABASE_URL and SUPABASE_SECRET_KEY must be set (see .env.example)", file=sys.stderr)
+        return 1
+    with db.connect() as conn:
+        have = conn.execute("select to_regclass('mb.x_ranked') is not null").fetchone()[0]
+        if not have:
+            print("run sql/ranked_subset.sql first (builds mb.x_ranked)", file=sys.stderr)
+            return 1
+        rest = SupabaseRest(url, key)
+        totals = sync(conn, rest, args.start, args.start + args.top, window=args.window)
+    print("upserted:", ", ".join(f"{k}={v:,}" for k, v in totals.items()))
+    print(f"cloud catalog now has {rest.count('tracks'):,} tracks")
+    return 0
+
+
+def cmd_export_turso(args) -> int:
+    from .supabase_sync import load_env
+    from .turso_export import TursoHttp, export
+
+    load_env()
+    url, token = os.environ.get("TURSO_DATABASE_URL"), os.environ.get("TURSO_AUTH_TOKEN")
+    if not url or not token:
+        print("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local", file=sys.stderr)
+        return 1
+    with db.connect() as conn:
+        n = export(conn, TursoHttp(url, token), args.start, args.start + args.top, window=args.window)
+    print(f"exported {n:,} songs to Turso (ranks {args.start:,}-{args.start + args.top - 1:,})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="karaoke-catalog", description="Song catalog for KaraokeApp.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -133,6 +170,18 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_wishlist)
 
     sub.add_parser("stats", help="catalog and library counts").set_defaults(fn=cmd_stats)
+
+    p = sub.add_parser("sync-supabase", help="upsert the ranked song list into the SoundCheck Supabase catalog")
+    p.add_argument("--start", type=int, default=1, help="first rank to sync (1 = most-released song)")
+    p.add_argument("--top", type=int, default=200_000, help="how many ranks to sync")
+    p.add_argument("--window", type=int, default=5000, help="songs per batch window")
+    p.set_defaults(fn=cmd_sync_supabase)
+
+    p = sub.add_parser("export-turso", help="export the long tail (beyond the Supabase subset) to the Turso search tier")
+    p.add_argument("--start", type=int, default=100_001)
+    p.add_argument("--top", type=int, default=900_000, help="how many ranks (default stays under Turso Free's monthly write quota)")
+    p.add_argument("--window", type=int, default=20_000)
+    p.set_defaults(fn=cmd_export_turso)
 
     args = parser.parse_args(argv)
     if args.command == "wishlist" and args.action == "add" and args.song_id is None:
