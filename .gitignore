@@ -11,3 +11,9 @@ data/
 __pycache__/
 .venv/
 .pytest_cache/
+.reference/
+node_modules/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
