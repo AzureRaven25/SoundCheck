@@ -19,3 +19,12 @@ describe('providers', () => {
     expect(licenseLabel('https://creativecommons.org/publicdomain/mark/1.0/')).toBe('Public domain');
   });
 });
+
+import { youtubeId } from '../src/providers';
+describe('youtubeId', () => {
+  it('reads YouTube and YouTube Music links', () => {
+    for (const u of ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://youtu.be/dQw4w9WgXcQ?t=10', 'https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=x',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ', 'https://m.youtube.com/shorts/dQw4w9WgXcQ', 'dQw4w9WgXcQ']) expect(youtubeId(u)).toBe('dQw4w9WgXcQ');
+    for (const u of ['https://example.com/watch?v=dQw4w9WgXcQ', 'https://youtube.com/watch?v=short', 'not a link', 'javascript:alert(1)']) expect(youtubeId(u)).toBeNull();
+  });
+});

@@ -84,3 +84,20 @@ export function licenseLabel(licenseUrl: string | null | undefined): string | nu
   if (/publicdomain/i.test(licenseUrl)) return 'Public domain';
   return 'Open license';
 }
+
+
+/** Video id from any YouTube / YouTube Music link, or a bare 11-character id. */
+export function youtubeId(input: string): string | null {
+  const s = input.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  let u: URL;
+  try { u = new URL(s); } catch { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, '');
+  let id: string | null = null;
+  if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0] ?? null;
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    if (u.pathname === '/watch') id = u.searchParams.get('v');
+    else { const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/); id = m?.[1] ?? null; }
+  }
+  return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+}

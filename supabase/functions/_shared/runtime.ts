@@ -1,7 +1,7 @@
 /** Edge Function runtime helpers: admin client, CORS/JSON responses, throttled + cached provider fetches. */
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.119.0';
 
-export type Provider = 'musicbrainz' | 'coverartarchive' | 'itunes' | 'lrclib';
+export type Provider = 'musicbrainz' | 'coverartarchive' | 'itunes' | 'lrclib' | 'youtube';
 
 /** Identifies SoundCheck to providers (MusicBrainz requires a descriptive User-Agent). Contact is configurable. */
 export const USER_AGENT = `SoundCheck/0.2 ( ${Deno.env.get('PROVIDER_CONTACT') ?? 'soundcheck-app'} )`;

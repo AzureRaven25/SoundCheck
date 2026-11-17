@@ -442,3 +442,9 @@ verify_jwt = false
 
 [functions.open-music]
 verify_jwt = false
+
+[functions.youtube]
+verify_jwt = false
+
+[functions.apple-music]
+verify_jwt = false
