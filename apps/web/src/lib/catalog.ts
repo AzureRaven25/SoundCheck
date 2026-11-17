@@ -55,17 +55,19 @@ export async function getAlbum(id: string) {
 
 export async function getArtist(id: string) {
   const sb = await supabaseServer();
-  const [{ data: artist }, { data: top }, { data: albums }] = await Promise.all([
+  const [{ data: artist }, { data: top }, { data: albums }, { data: photo }] = await Promise.all([
     sb.from('artists').select('id, name, disambiguation, country').eq('id', id).maybeSingle(),
     sb.from('tracks').select(`${TRACK_SELECT}, credit:track_artists!inner(artist_id)`).eq('credit.artist_id', id)
       .order('popularity', { ascending: false }).limit(20),
     sb.from('albums').select('id, title, release_year, primary_type, credit:album_artists!inner(artist_id)').eq('credit.artist_id', id)
       .order('release_year', { ascending: false, nullsFirst: false }).limit(48),
+    sb.from('artwork').select('source_url').eq('entity_type', 'artist').eq('entity_id', id).eq('is_primary', true).maybeSingle(),
   ]);
   if (!artist) return null;
   const art = await albumArtwork([...(top ?? []).map((t) => t.album_id), ...(albums ?? []).map((a) => a.id)]);
   return {
     artist,
+    photo: photo?.source_url ?? null,
     topTracks: ((top ?? []) as unknown as Row[]).map((r) => toTrackItem(r, art)),
     albums: (albums ?? []).map((a) => ({ id: a.id, title: a.title, release_year: a.release_year, primary_type: a.primary_type, artwork_url: art.get(a.id) ?? null })),
   };

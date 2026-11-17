@@ -19,7 +19,8 @@ export default async function ArtistPage({ params }: PageProps<'/artist/[id]'>) 
   const data = await getArtist(id);
   if (!data) notFound();
   const { artist, topTracks, albums } = data;
-  const cover = topTracks.find((t) => t.artwork_url)?.artwork_url ?? albums.find((a) => a.artwork_url)?.artwork_url ?? null;
+  // the artist's own photo when we have it; otherwise it's resolved on the page (album cover as last resort)
+  const cover = data.photo ?? null;
   return (
     <div>
       <DetailHeader
@@ -27,6 +28,7 @@ export default async function ArtistPage({ params }: PageProps<'/artist/[id]'>) 
         title={artist.name}
         artwork={cover}
         albumId={topTracks[0]?.album_id ?? albums[0]?.id}
+        artistId={artist.id}
         round
         meta={<span>{[artist.disambiguation, artist.country].filter(Boolean).join(' · ')}</span>}
         actions={<PlayButton tracks={topTracks} size="lg" label={`Play ${artist.name}`} />}

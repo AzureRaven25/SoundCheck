@@ -15,3 +15,10 @@ test('YouTube plays through its official embed from a pasted link; Apple Music h
   await expect(page.getByTitle('YouTube video player')).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/hwZNL7QVJjE/);
   await expect(page.getByRole('button', { name: 'Play on Apple Music' })).toHaveCount(0);       // no MusicKit key locally
 });
+
+test('artist pages show the artist’s photo (Wikimedia Commons via Wikidata)', async ({ page }) => {
+  await page.goto('/search?q=Radiohead');
+  await page.getByRole('link', { name: /^Radiohead/ }).first().click();
+  await expect(page).toHaveURL(/\/artist\//);
+  await expect(page.locator('header img[src*="wikimedia"]').first()).toBeVisible({ timeout: 20_000 });
+});

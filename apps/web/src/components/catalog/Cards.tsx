@@ -57,13 +57,13 @@ export function TrackCard({ t, list }: { t: TrackItem; list?: TrackItem[] }) {
   );
 }
 
-export function EntityCard({ href, title, subtitle, artwork, albumId, round }: {
-  href: string; title: string; subtitle?: string; artwork?: string | null; albumId?: string | null; round?: boolean;
+export function EntityCard({ href, title, subtitle, artwork, albumId, artistId, round }: {
+  href: string; title: string; subtitle?: string; artwork?: string | null; albumId?: string | null; artistId?: string | null; round?: boolean;
 }) {
   return (
     <Link href={href} className="group block rounded-lg bg-ink-850 p-3 transition-colors hover:bg-ink-800">
       <div className="mb-3 shadow-lift">
-        <Artwork src={artwork} albumId={albumId} title={title} rounded={round ? 'rounded-full' : 'rounded-md'} />
+        <Artwork src={artwork} albumId={albumId} artistId={artistId} title={title} rounded={round ? 'rounded-full' : 'rounded-md'} />
       </div>
       <p className="truncate text-sm font-bold">{title}</p>
       {subtitle && <p className="truncate text-xs text-ink-300">{subtitle}</p>}

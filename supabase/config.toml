@@ -448,3 +448,6 @@ verify_jwt = false
 
 [functions.apple-music]
 verify_jwt = false
+
+[functions.resolve-artist-image]
+verify_jwt = false

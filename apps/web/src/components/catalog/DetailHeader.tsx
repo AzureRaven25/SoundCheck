@@ -22,9 +22,9 @@ export function ArtistLine({ artists, fallback }: { artists?: { id: string; name
 
 /** Hero header for track / album / artist / playlist pages. */
 export function DetailHeader({
-  kind, title, artwork, albumId, round, meta, actions,
+  kind, title, artwork, albumId, artistId, round, meta, actions,
 }: {
-  kind: string; title: string; artwork?: string | null; albumId?: string | null; round?: boolean; meta: ReactNode; actions?: ReactNode;
+  kind: string; title: string; artwork?: string | null; albumId?: string | null; artistId?: string | null; round?: boolean; meta: ReactNode; actions?: ReactNode;
 }) {
   return (
     <header className="relative -mx-4 mb-6 overflow-hidden px-4 pb-6 pt-6 md:-mx-8 md:px-8">
@@ -35,7 +35,7 @@ export function DetailHeader({
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-ink-900" aria-hidden />
       <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end">
         <div className="w-48 shrink-0 shadow-lift md:w-56">
-          <Artwork src={artwork} albumId={albumId} title={title} rounded={round ? 'rounded-full' : 'rounded-lg'} priority sizes="224px" />
+          <Artwork src={artwork} albumId={albumId} artistId={artistId} title={title} rounded={round ? 'rounded-full' : 'rounded-lg'} priority sizes="224px" />
         </div>
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-widest text-ink-300">{kind}</p>

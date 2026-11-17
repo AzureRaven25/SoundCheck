@@ -26,9 +26,17 @@ async function limited<T>(fn: () => Promise<T>): Promise<T> {
  * (provider busy/slow, reported as retry=true) are forgotten after 30 s so a later render retries.
  */
 function resolveAlbumArt(albumId: string): Promise<string | null> {
+  return resolveVia(albumId, 'resolve-artwork', { album_id: albumId });
+}
+/** Artist photo (Wikimedia Commons via Wikidata, Deezer fallback). */
+function resolveArtistImage(artistId: string): Promise<string | null> {
+  return resolveVia(`artist:${artistId}`, 'resolve-artist-image', { artist_id: artistId });
+}
+function resolveVia(key: string, fn: string, body: Record<string, string>): Promise<string | null> {
+  const albumId = key;
   if (!resolved.has(albumId)) {
     const p = limited(() =>
-      supabaseBrowser().functions.invoke<{ url: string | null; retry?: boolean }>('resolve-artwork', { body: { album_id: albumId } }),
+      supabaseBrowser().functions.invoke<{ url: string | null; retry?: boolean }>(fn, { body }),
     )
       .then(({ data, error }) => {
         if (error || data?.retry) setTimeout(() => resolved.delete(albumId), 30_000);
@@ -58,28 +66,33 @@ function hash(s: string) {
  * demand, otherwise shows a generated gradient with initials. Never blocks rendering.
  */
 /** Hosts configured in next.config.ts images.remotePatterns. */
-const OPTIMIZABLE = /^https:\/\/(?:[^/]*\.)?(?:coverartarchive\.org|archive\.org|mzstatic\.com|supabase\.co)\//i;
+const OPTIMIZABLE = /^https:\/\/(?:[^/]*\.)?(?:coverartarchive\.org|archive\.org|mzstatic\.com|supabase\.co|wikimedia\.org|dzcdn\.net)\//i;
 
 export function Artwork({
-  src, albumId, title, className, rounded = 'rounded-md', resolve = true, priority = false,
+  src, albumId, artistId, title, className, rounded = 'rounded-md', resolve = true, priority = false,
   sizes = '(max-width: 768px) 45vw, 220px',
 }: {
-  src?: string | null; albumId?: string | null; title: string; className?: string;
+  /** artistId: show the artist's photo, falling back to albumId's cover */
+  src?: string | null; albumId?: string | null; artistId?: string | null; title: string; className?: string;
   rounded?: string; resolve?: boolean; priority?: boolean; sizes?: string;
 }) {
   const [resolvedArt, setResolvedArt] = useState<{ albumId: string; url: string } | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (src || !albumId || !resolve) return;
+    if (src || (!albumId && !artistId) || !resolve) return;
     let live = true;
-    void resolveAlbumArt(albumId).then((u) => live && u && setResolvedArt({ albumId, url: u }));
+    const key = artistId ? `artist:${artistId}` : albumId!;
+    void (async () => {
+      const u = (artistId ? await resolveArtistImage(artistId) : null) ?? (albumId ? await resolveAlbumArt(albumId) : null);
+      if (live && u) setResolvedArt({ albumId: key, url: u });
+    })();
     return () => {
       live = false;
     };
-  }, [src, albumId, resolve]);
+  }, [src, albumId, artistId, resolve]);
 
-  const url = src ?? (resolvedArt && resolvedArt.albumId === albumId ? resolvedArt.url : null);
+  const url = src ?? (resolvedArt && resolvedArt.albumId === (artistId ? `artist:${artistId}` : albumId) ? resolvedArt.url : null);
   const failed = !!url && failedUrl === url;
 
   if (url && !failed) {

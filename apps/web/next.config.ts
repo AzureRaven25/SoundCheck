@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.archive.org' },
       { protocol: 'https', hostname: '**.mzstatic.com' },
       { protocol: 'https', hostname: '**.supabase.co' },
+      { protocol: 'https', hostname: '**.wikimedia.org' },     // artist photos (Wikimedia Commons)
+      { protocol: 'https', hostname: 'commons.wikimedia.org' },
+      { protocol: 'https', hostname: '**.dzcdn.net' },         // artist photos (Deezer fallback)
     ],
   },
 };

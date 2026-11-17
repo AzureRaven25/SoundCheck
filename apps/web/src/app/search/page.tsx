@@ -81,7 +81,7 @@ function Results() {
           <h2 className="mb-4 font-display text-2xl font-bold">Artists</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {artists.map((a) => (
-              <EntityCard key={a.id} href={`/artist/${a.id}`} title={a.name} subtitle={a.disambiguation ?? 'Artist'} round />
+              <EntityCard key={a.id} href={`/artist/${a.id}`} artistId={a.id} title={a.name} subtitle={a.disambiguation ?? 'Artist'} round />
             ))}
           </div>
         </section>
