@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Mic2, Upload } from 'lucide-react';
+import { licenseLabel } from '@soundcheck/contracts';
 import { useUser } from '@/lib/hooks/useUser';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
@@ -26,13 +27,21 @@ type State =
 export function UploadYourCopy({ trackId, title }: { trackId: string; title: string }) {
   const user = useUser();
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const [open, setOpen] = useState<{ license_url: string | null; karaoke_ok: boolean; url: string | null } | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
     if (!user) return;
     const sb = supabaseBrowser();
-    const { data: asset } = await sb.from('audio_assets').select('id').eq('track_id', trackId).eq('owner_id', user.id)
-      .eq('kind', 'original').order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const [{ data: own }, { data: shared }, { data: src }] = await Promise.all([
+      sb.from('audio_assets').select('id').eq('track_id', trackId).eq('owner_id', user.id)
+        .eq('kind', 'original').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      // an open-licensed recording made karaoke-ready once is shared with everyone
+      sb.from('audio_assets').select('id').eq('track_id', trackId).eq('kind', 'original').eq('provider', 'internet_archive').limit(1).maybeSingle(),
+      sb.from('track_sources').select('license_url, karaoke_ok, url').eq('track_id', trackId).eq('provider', 'internet_archive').maybeSingle(),
+    ]);
+    setOpen(src ?? null);
+    const asset = own ?? shared;
     if (!asset) return setState({ kind: 'none' });
     const [{ data: analysis }, { data: job }] = await Promise.all([
       sb.from('karaoke_analysis').select('id').eq('source_asset_id', asset.id).maybeSingle(),
@@ -73,6 +82,14 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
     await requestProcessing(asset.id);
   }
 
+  /** Open-licensed recording: the server checks the license, then queues the same pipeline as uploads. */
+  async function prepareOpen() {
+    setState({ kind: 'processing', stage: null, progress: 0 });
+    const { error } = await supabaseBrowser().functions.invoke('open-music', { body: { action: 'prepare', track_id: trackId } });
+    if (error) return setState({ kind: 'failed', error: 'Couldn’t start processing this recording.', assetId: '' });
+    await refresh();
+  }
+
   async function requestProcessing(assetId: string) {
     const { error } = await supabaseBrowser().rpc('request_processing', { p_asset_id: assetId });
     if (error) return setState({ kind: 'failed', error: error.message, assetId });
@@ -82,6 +99,24 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
   if (user === undefined || user === null || state.kind === 'loading') return null;
   return (
     <section aria-label="Your copy" className="mb-8 max-w-3xl rounded-xl border border-ink-800 bg-ink-850 p-5">
+      {state.kind === 'none' && open && (
+        <div className="mb-4 flex flex-wrap items-center gap-4 border-b border-ink-800 pb-4">
+          <Mic2 className="text-cyan-400" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Full song available under an open license</p>
+            <p className="text-sm text-ink-300">
+              From the <a href={open.url ?? 'https://archive.org'} target="_blank" rel="noreferrer" className="underline">Internet Archive</a>
+              {open.license_url && <> · <a href={open.license_url} target="_blank" rel="noreferrer" className="underline">{licenseLabel(open.license_url)}</a></>}.
+              {open.karaoke_ok ? ' Its license allows us to build karaoke tracks from it.' : ' Its license doesn’t allow derivatives, so it’s for listening only.'}
+            </p>
+          </div>
+          {open.karaoke_ok && (
+            <button type="button" onClick={() => void prepareOpen()} className="stage-gradient flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white hover:scale-105">
+              <Mic2 size={16} /> Make karaoke-ready
+            </button>
+          )}
+        </div>
+      )}
       {state.kind === 'none' && (
         <div className="flex flex-wrap items-center gap-4">
           <Mic2 className="text-pink-400" />
@@ -110,7 +145,7 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
       {state.kind === 'ready' && (
         <div className="flex flex-wrap items-center gap-4">
           <p className="flex flex-1 items-center gap-2 text-sm font-bold text-success-400" role="status">
-            <CheckCircle2 size={18} /> Your copy is ready: full-length playback and karaoke tracks are unlocked.
+            <CheckCircle2 size={18} /> Karaoke-ready: full-length playback and karaoke tracks are unlocked.
           </p>
           <Link href={`/stage/${trackId}`} className="stage-gradient flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-lift hover:scale-105">
             <Mic2 size={16} /> Sing on Stage

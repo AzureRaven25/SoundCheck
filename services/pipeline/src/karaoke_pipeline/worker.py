@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+from urllib.parse import urlparse
 import numpy as np
 
 from . import __version__
@@ -64,6 +65,20 @@ class Supabase:
                 for chunk in r.iter_bytes(1 << 20):
                     f.write(chunk)
 
+    def fetch_url(self, url: str, dest: Path) -> None:
+        """Download an open-licensed original. Only allow-listed hosts: never an arbitrary URL from the queue."""
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme != "https" or not (host == "archive.org" or host.endswith(".archive.org")):
+            raise ValueError(f"refusing to download from {host or url!r}")
+        with httpx.Client(follow_redirects=True, timeout=120) as c, c.stream("GET", url) as r:
+            r.raise_for_status()
+            final = urlparse(str(r.url)).hostname or ""
+            if not (final == "archive.org" or final.endswith(".archive.org")):
+                raise ValueError(f"redirected off the allow-list to {final!r}")
+            with dest.open("wb") as f:
+                for chunk in r.iter_bytes(1 << 20):
+                    f.write(chunk)
+
     def upload(self, bucket: str, path: str, data: bytes, content_type: str) -> None:
         r = self.http.post(f"{self.url}/storage/v1/object/{bucket}/{path}", content=data,
                            headers={"Content-Type": content_type, "x-upsert": "true"})
@@ -81,7 +96,8 @@ class Job:
     job_id: str
     asset_id: str
     track_id: str
-    storage_path: str
+    storage_path: str | None
+    external_url: str | None = None
 
 
 def _stage(sb: Supabase, job: Job, stage: str, progress: float) -> None:
@@ -113,17 +129,28 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
     from .separate import separate
     from .structure import phrases_from_gaps, phrases_from_lines, split_repeated_notes
 
-    asset = sb.select("audio_assets", {"id": f"eq.{job.asset_id}", "select": "id,owner_id,track_id"})[0]
+    asset = sb.select("audio_assets", {"id": f"eq.{job.asset_id}", "select": "id,owner_id,track_id,provider"})[0]
     owner_folder = asset["owner_id"] or "shared"
     base = f"{owner_folder}/{job.track_id}/{job.asset_id}"
 
     with tempfile.TemporaryDirectory(prefix="soundcheck-") as td:
         tmp = Path(td)
         _stage(sb, job, "download", 0.05)
-        src = tmp / ("original" + Path(job.storage_path).suffix)
-        sb.download("audio", job.storage_path, src)
+        if job.storage_path:
+            src = tmp / ("original" + Path(job.storage_path).suffix)
+            sb.download("audio", job.storage_path, src)
+        elif job.external_url:
+            src = tmp / ("original" + (Path(urlparse(job.external_url).path).suffix or ".mp3"))
+            sb.fetch_url(job.external_url, src)
+        else:
+            raise ValueError("job has neither a storage path nor a source URL")
         audio = load_audio(src, SAMPLE_RATE)
         duration_ms = int(audio.shape[1] / SAMPLE_RATE * 1000)
+        if asset.get("provider") == "internet_archive":
+            # archive metadata lengths can be seconds off (VBR MP3s); record the decoded duration
+            sb.update("tracks", {"id": job.track_id}, {"duration_ms": duration_ms})
+            sb.update("track_sources", {"track_id": job.track_id, "provider": "internet_archive"}, {"duration_ms": duration_ms})
+            sb.update("audio_assets", {"id": job.asset_id}, {"duration_ms": duration_ms})
 
         _stage(sb, job, "separate", 0.15)
         stems = separate(audio, SAMPLE_RATE, model_name=model)
@@ -191,7 +218,7 @@ def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, *
             continue
         msg = claimed[0]
         j = msg["job"]
-        job = Job(msg["msg_id"], j["job_id"], j["asset_id"], j["track_id"], j["storage_path"])
+        job = Job(msg["msg_id"], j["job_id"], j["asset_id"], j["track_id"], j.get("storage_path"), j.get("external_url"))
         t0 = time.perf_counter()
         print(f"job {job.job_id} (track {job.track_id}, attempt {msg['read_ct']})", flush=True)
         try:

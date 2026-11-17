@@ -90,5 +90,5 @@ test('upload your copy → processed into karaoke tracks', async ({ page }) => {
   await expect(page.getByText(/Make “Wild Thing” karaoke-ready/)).toBeVisible();
   await page.getByLabel('Audio file').setInputFiles(process.env.E2E_SONG!);
   await expect(page.getByRole('status')).toContainText(/Queued|Separating|Mapping|Finding|Timing|Detecting|Saving|Fetching/);
-  await expect(page.getByText(/Your copy is ready/)).toBeVisible({ timeout: 200_000 });
+  await expect(page.getByText(/Karaoke-ready: full-length playback/)).toBeVisible({ timeout: 200_000 });
 });

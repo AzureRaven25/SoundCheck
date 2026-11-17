@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30, // covers never change
     remotePatterns: [
       { protocol: 'https', hostname: 'coverartarchive.org' },
+      { protocol: 'https', hostname: 'archive.org' },        // Internet Archive item images (open music)
       { protocol: 'https', hostname: '**.archive.org' },
       { protocol: 'https', hostname: '**.mzstatic.com' },
       { protocol: 'https', hostname: '**.supabase.co' },

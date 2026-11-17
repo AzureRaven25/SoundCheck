@@ -1,7 +1,7 @@
 -- SoundCheck M8 database tests: party queue, friends, achievements, device sign-in codes.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(23);
 
 create function pg_temp.as_user(uid uuid) returns void language plpgsql as $$
 begin
@@ -52,6 +52,15 @@ select is((select earned_at is not null from public.my_achievements() where id =
 -- ---------------------------------------------------------------- device sign-in codes are server-only
 select throws_ok($$ select * from public.device_codes $$, '42501', null, 'apps cannot read device codes');
 select throws_ok($$ insert into public.device_codes (device_code, user_code, platform) values ('x', 'AAAAAA', 'tvos') $$, '42501', null, 'apps cannot create device codes');
+
+-- ---------------------------------------------------------------- music provider sources
+select pg_temp.as_admin();
+insert into public.track_sources (track_id, provider, external_id, stream_url, license_url, karaoke_ok)
+values ('7e000000-0000-0000-0000-000000000001', 'internet_archive', 'test/one.mp3', 'https://archive.org/download/test/one.mp3', 'http://creativecommons.org/licenses/by/4.0/', true);
+select pg_temp.as_user('e0000000-0000-0000-0000-0000000000e3');
+select is((select count(*)::int from public.track_sources where external_id = 'test/one.mp3'), 1, 'anyone can see where a song can be played from');
+select throws_ok($$ insert into public.track_sources (track_id, provider, external_id) values ('7e000000-0000-0000-0000-000000000002', 'youtube', 'x') $$, '42501', null, 'apps cannot add provider sources');
+select throws_ok($$ insert into public.audio_assets (track_id, owner_id, kind, provider, external_url) values ('7e000000-0000-0000-0000-000000000001', null, 'original', 'internet_archive', 'https://archive.org/x.mp3') $$, '42501', null, 'apps cannot register shared open-licensed audio');
 
 select * from finish();
 rollback;

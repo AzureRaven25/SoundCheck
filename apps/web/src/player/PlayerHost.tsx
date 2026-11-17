@@ -43,7 +43,7 @@ export function PlayerHost() {
     if (!track) {
       el.removeAttribute('src');
       el.load();
-      report({ load: 'idle', position: 0, duration: 0, sourceKind: null, attributionUrl: null });
+      report({ load: 'idle', position: 0, duration: 0, sourceKind: null, attributionUrl: null, sourceLabel: null });
       return;
     }
     let cancelled = false;
@@ -52,12 +52,12 @@ export function PlayerHost() {
       .then((src) => {
         if (cancelled) return;
         if (!src) {
-          report({ load: 'unavailable', sourceKind: null, attributionUrl: null, playing: false });
+          report({ load: 'unavailable', sourceKind: null, attributionUrl: null, sourceLabel: null, playing: false });
           return;
         }
         listened.current = { trackId: track.id, ms: 0, kind: src.kind };
         el.src = src.url;
-        report({ sourceKind: src.kind, attributionUrl: src.attributionUrl });
+        report({ sourceKind: src.kind, attributionUrl: src.attributionUrl, sourceLabel: src.sourceLabel });
         if (usePlayer.getState().playing) void el.play().catch(() => report({ playing: false }));
       })
       .catch(() => !cancelled && report({ load: 'error', playing: false }));

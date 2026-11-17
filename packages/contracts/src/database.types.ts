@@ -236,6 +236,7 @@ export type Database = {
           fingerprint: string | null
           id: string
           kind: string
+          license_url: string | null
           mime_type: string | null
           owner_id: string | null
           provider: string
@@ -252,6 +253,7 @@ export type Database = {
           fingerprint?: string | null
           id?: string
           kind: string
+          license_url?: string | null
           mime_type?: string | null
           owner_id?: string | null
           provider: string
@@ -268,6 +270,7 @@ export type Database = {
           fingerprint?: string | null
           id?: string
           kind?: string
+          license_url?: string | null
           mime_type?: string | null
           owner_id?: string | null
           provider?: string
@@ -291,6 +294,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      device_codes: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          device_code: string
+          expires_at: string
+          platform: string
+          user_code: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          device_code: string
+          expires_at?: string
+          platform: string
+          user_code: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          device_code?: string
+          expires_at?: string
+          platform?: string
+          user_code?: string
+        }
+        Relationships: []
       }
       favorites: {
         Row: {
@@ -973,6 +1006,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "track_recordings_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      track_sources: {
+        Row: {
+          attribution: string | null
+          created_at: string
+          duration_ms: number | null
+          external_id: string
+          id: string
+          karaoke_ok: boolean
+          license_url: string | null
+          provider: string
+          stream_url: string | null
+          track_id: string
+          url: string | null
+        }
+        Insert: {
+          attribution?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          external_id: string
+          id?: string
+          karaoke_ok?: boolean
+          license_url?: string | null
+          provider: string
+          stream_url?: string | null
+          track_id: string
+          url?: string | null
+        }
+        Update: {
+          attribution?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          external_id?: string
+          id?: string
+          karaoke_ok?: boolean
+          license_url?: string | null
+          provider?: string
+          stream_url?: string | null
+          track_id?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "track_sources_track_id_fkey"
             columns: ["track_id"]
             isOneToOne: false
             referencedRelation: "tracks"

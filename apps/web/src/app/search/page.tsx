@@ -3,6 +3,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { EntityCard } from '@/components/catalog/Cards';
 import { TrackList } from '@/components/catalog/TrackList';
+import { OpenMusicResults } from '@/components/catalog/OpenMusicResults';
 import { useUser } from '@/lib/hooks/useUser';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { TRACK_SELECT, withArtworkClient, type Row } from '@/lib/track-mapping';
@@ -93,6 +94,7 @@ function Results() {
           )}
         </section>
       )}
+      {q && <OpenMusicResults q={q} />}
     </div>
   );
 }

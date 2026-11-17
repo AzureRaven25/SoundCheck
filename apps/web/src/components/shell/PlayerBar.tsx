@@ -121,10 +121,16 @@ export function PlayerBar({ signedIn }: { signedIn: boolean }) {
         )}
         {track && p.sourceKind === 'preview' && p.load !== 'unavailable' && (
           <p className="text-[11px] text-ink-500">
-            30-second preview ·{' '}
+            <span data-testid="source-label">30-second preview</span> ·{' '}
             {p.attributionUrl && (
               <a href={p.attributionUrl} target="_blank" rel="noreferrer" className="underline hover:text-ink-300">Listen on Apple Music</a>
             )}
+          </p>
+        )}
+        {track && p.sourceKind === 'full' && p.load !== 'unavailable' && (
+          <p className="text-[11px] text-ink-500" data-testid="source-label">
+            Full track ·{' '}
+            {p.attributionUrl ? <a href={p.attributionUrl} target="_blank" rel="noreferrer" className="underline hover:text-ink-300">{p.sourceLabel}</a> : p.sourceLabel}
           </p>
         )}
       </div>

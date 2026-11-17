@@ -15,8 +15,9 @@ interface PlayerStore {
   duration: number;      // seconds
   volume: number;        // 0..1
   muted: boolean;
-  sourceKind: 'original' | 'preview' | null;
+  sourceKind: 'original' | 'full' | 'preview' | null;
   attributionUrl: string | null;
+  sourceLabel: string | null;
   queueOpen: boolean;
   /** Bumped when the current song should restart (Previous within 3 s, repeat-one). */
   restartToken: number;
@@ -40,7 +41,7 @@ interface PlayerStore {
   toggleMute: () => void;
   toggleQueue: () => void;
   retry: () => void;
-  _report: (p: Partial<Pick<PlayerStore, 'position' | 'duration' | 'load' | 'sourceKind' | 'attributionUrl' | 'playing'>>) => void;
+  _report: (p: Partial<Pick<PlayerStore, 'position' | 'duration' | 'load' | 'sourceKind' | 'attributionUrl' | 'sourceLabel' | 'playing'>>) => void;
 }
 
 export const usePlayer = create<PlayerStore>((set) => ({
@@ -53,6 +54,7 @@ export const usePlayer = create<PlayerStore>((set) => ({
   muted: false,
   sourceKind: null,
   attributionUrl: null,
+  sourceLabel: null,
   queueOpen: false,
   restartToken: 0,
   reloadToken: 0,
