@@ -208,6 +208,7 @@ export type Database = {
       }
       audio_assets: {
         Row: {
+          attribution_url: string | null
           bitrate_kbps: number | null
           created_at: string
           duration_ms: number | null
@@ -223,6 +224,7 @@ export type Database = {
           track_id: string
         }
         Insert: {
+          attribution_url?: string | null
           bitrate_kbps?: number | null
           created_at?: string
           duration_ms?: number | null
@@ -238,6 +240,7 @@ export type Database = {
           track_id: string
         }
         Update: {
+          attribution_url?: string | null
           bitrate_kbps?: number | null
           created_at?: string
           duration_ms?: number | null
@@ -1114,6 +1117,24 @@ export type Database = {
           tracks_sung: number
         }[]
       }
+      provider_cache_get: {
+        Args: { p_key: string; p_provider: string }
+        Returns: {
+          status: string
+          value: Json
+        }[]
+      }
+      provider_cache_put: {
+        Args: {
+          p_key: string
+          p_provider: string
+          p_status: string
+          p_ttl_seconds: number
+          p_value: Json
+        }
+        Returns: undefined
+      }
+      provider_reserve_slot: { Args: { p_provider: string }; Returns: number }
       request_processing: {
         Args: { p_asset_id: string }
         Returns: {

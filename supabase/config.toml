@@ -414,3 +414,6 @@ verify_jwt = false
 
 [functions.fetch-lyrics]
 verify_jwt = false
+
+[functions.resolve-preview]
+verify_jwt = false

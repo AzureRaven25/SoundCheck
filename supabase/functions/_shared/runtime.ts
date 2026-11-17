@@ -56,14 +56,21 @@ export async function handle(req: Request, fn: (body: Record<string, unknown>) =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export class ProviderBusyError extends Error {}
+
 /** Fetch from a provider, waiting for a globally reserved slot so rate limits hold across instances. */
-export async function providerFetch(provider: Provider, url: string, init: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
-  const { data: wait, error } = await adminClient().rpc('provider_reserve_slot', { p_provider: provider });
+
+/**
+ * maxWaitMs: how long this caller may wait for a slot. User-initiated lookups (a preview someone just
+ * clicked) can wait; background backfill (artwork for a grid) should give up fast and retry later.
+ */
+export async function providerFetch(
+  provider: Provider, url: string, init: RequestInit = {}, timeoutMs = 8000, maxWaitMs = 5000,
+): Promise<Response> {
+  const { data: wait, error } = await adminClient().rpc('provider_reserve_slot', { p_provider: provider, p_max_wait_ms: maxWaitMs });
   if (error) throw error;
-  if (typeof wait === 'number' && wait > 0) {
-    if (wait > 5000) throw new Error(`${provider} is busy, try again shortly`);
-    await sleep(wait);
-  }
+  if (wait === -1) throw new ProviderBusyError(`${provider} is busy, try again shortly`); // no slot reserved
+  if (typeof wait === 'number' && wait > 0) await sleep(wait);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {

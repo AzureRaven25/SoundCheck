@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/*
+ * SoundCheck design tokens. Dark, immersive, album-art-first. One accent (SoundCheck pink) for
+ * primary actions; the pink→violet gradient is reserved for SoundCheck Stage (karaoke) moments.
+ * TV and mobile apps mirror these values (docs/DESIGN.md).
+ */
+@theme {
+  --color-ink-950: #07060c;     /* app background */
+  --color-ink-900: #0e0c17;     /* sidebar, player bar */
+  --color-ink-850: #14121f;     /* cards */
+  --color-ink-800: #1c1929;     /* hover / raised */
+  --color-ink-700: #2a2638;     /* borders, inputs */
+  --color-ink-500: #6b6684;     /* dim text */
+  --color-ink-300: #a7a2bd;     /* secondary text */
+  --color-ink-50:  #f6f4ff;     /* primary text */
+
+  --color-pink-500: #ff3d9a;    /* brand accent */
+  --color-pink-400: #ff6bb3;
+  --color-violet-500: #8b5cff;
+  --color-cyan-400: #38e1ff;
+  --color-gold-400: #ffc94d;
+  --color-success-400: #3ddc97;
+  --color-danger-400: #ff6b7d;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-lift: 0 12px 32px rgb(0 0 0 / 0.55);
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html { color-scheme: dark; }
+  body {
+    @apply bg-ink-950 text-ink-50 font-sans antialiased;
+  }
+  ::selection { background: rgb(255 61 154 / 0.35); }
+  :focus-visible { outline: 2px solid var(--color-pink-500); outline-offset: 2px; border-radius: 4px; }
+  input[type='range'] { accent-color: var(--color-pink-500); }
+}
+
+@utility stage-gradient {
+  background-image: linear-gradient(135deg, var(--color-pink-500), var(--color-violet-500));
+}
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}

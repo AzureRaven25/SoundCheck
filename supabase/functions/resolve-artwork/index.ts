@@ -9,25 +9,32 @@
 import { pickAlbum, upscaleArtwork, type ItunesAlbum } from '../_shared/itunes.ts';
 import { adminClient, cacheGet, cachePut, DAY, handle, json, providerFetch } from '../_shared/runtime.ts';
 
+/** A provider answered definitively that it has nothing (vs. a timeout/busy/5xx). */
+class NotFound extends Error {}
+
 interface Album { id: string; mbid: string | null; title: string; artist_credit: string; release_year: number | null }
 
 async function fromCoverArtArchive(mbid: string): Promise<string | null> {
-  const res = await providerFetch('coverartarchive', `https://coverartarchive.org/release-group/${mbid}`);
-  if (res.status === 404) return null;
+  // CAA answers via an archive.org redirect that can be slow: generous timeout.
+  const res = await providerFetch('coverartarchive', `https://coverartarchive.org/release-group/${mbid}`, {}, 15000, 4000);
+  if (res.status === 404) throw new NotFound();
   if (!res.ok) throw new Error(`coverartarchive ${res.status}`);
   const body = (await res.json()) as { images?: { front?: boolean; image?: string; thumbnails?: Record<string, string> }[] };
   const front = body.images?.find((i) => i.front) ?? body.images?.[0];
   const url = front?.thumbnails?.['1200'] ?? front?.thumbnails?.large ?? front?.image ?? null;
-  return url ? url.replace(/^http:/, 'https:') : null;
+  if (!url) throw new NotFound();
+  return url.replace(/^http:/, 'https:');
 }
 
 async function fromItunes(album: Album): Promise<string | null> {
   const term = `${album.artist_credit} ${album.title}`.slice(0, 120);
-  const res = await providerFetch('itunes', `https://itunes.apple.com/search?entity=album&limit=15&term=${encodeURIComponent(term)}`);
+  // Background backfill: don't queue behind user-initiated preview lookups for long.
+  const res = await providerFetch('itunes', `https://itunes.apple.com/search?entity=album&limit=15&term=${encodeURIComponent(term)}`, {}, 8000, 2000);
   if (!res.ok) throw new Error(`itunes ${res.status}`);
   const body = (await res.json()) as { results?: ItunesAlbum[] };
   const pick = pickAlbum(body.results ?? [], album.title, album.artist_credit, album.release_year);
-  return pick?.artworkUrl100 ? upscaleArtwork(pick.artworkUrl100) : null;
+  if (!pick?.artworkUrl100) throw new NotFound();
+  return upscaleArtwork(pick.artworkUrl100);
 }
 
 /** Validate that the URL really serves an image before we store it. */
@@ -64,12 +71,19 @@ Deno.serve((req) =>
     if (album.mbid) attempts.push(['coverartarchive', () => fromCoverArtArchive(album.mbid!)]);
     attempts.push(['itunes', () => fromItunes(album)]);
 
+    // Only a definitive "nothing" from every provider is cached as a miss. Timeouts, 5xx and
+    // "busy" are transient: return retry=true so the client tries again later.
+    let transient = false;
     for (const [provider, find] of attempts) {
       let url: string | null = null;
       try {
         url = await find();
       } catch (e) {
-        console.warn(provider, e);
+        if (!(e instanceof NotFound)) {
+          transient = true;
+          console.warn(provider, e instanceof Error ? e.message : e);
+          if (provider === 'coverartarchive') break; // CAA hiccup: retry later rather than spend iTunes quota
+        }
         continue;
       }
       if (url && (await isImage(url))) {
@@ -80,6 +94,7 @@ Deno.serve((req) =>
         return json({ url, provider });
       }
     }
+    if (transient) return json({ url: null, provider: null, retry: true });
     await cachePut('coverartarchive', `album:${albumId}`, 'miss', null, 14 * DAY);
     return json({ url: null, provider: null });
   })

@@ -21,6 +21,8 @@ begin
 end $$;
 
 -- ------------------------------------------------------------------ fixtures (as postgres)
+-- Start from an empty catalog even if the local stack is seeded with real songs (rolled back at the end).
+truncate public.tracks, public.albums, public.artists, public.artwork, public.audio_assets cascade;
 insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, is_anonymous) values
   ('a0000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alice@test.dev', '{"display_name":"Alice"}', false),
   ('b0000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'bob@test.dev', '{}', false),
