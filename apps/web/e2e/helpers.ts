@@ -49,3 +49,6 @@ export async function signUp(page: Page, name: string) {
   await page.getByRole('button', { name: 'Sign up' }).click();
   await page.getByRole('button', { name: 'Account menu' }).waitFor();
 }
+
+/** Local-stack-only account used when driving the native TV apps against a web phone (see e2e/tv-host.mjs). */
+export const TV_TEST_USER = { email: 'tv-host@soundcheck.test', password: 'tv-host-local-only', name: 'TV Host' };

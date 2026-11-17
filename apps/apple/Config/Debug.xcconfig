@@ -1,0 +1,3 @@
+#include "Shared.xcconfig"
+// Local overrides (gitignored): point Debug builds at the local stack. See Local.xcconfig.example.
+#include? "Local.xcconfig"

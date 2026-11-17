@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (gitignored). Debug builds then talk to `supabase start` + `npm run dev`.
+SC_SUPABASE_URL = http:/$()/127.0.0.1:54321
+SC_SITE_URL = http:/$()/localhost:3000
+SC_SUPABASE_KEY = <PUBLISHABLE_KEY from `supabase status`>

@@ -1,0 +1,5 @@
+// Client configuration for the Apple apps. Only the Supabase *publishable* key belongs here; the secret
+// key never ships in an app. ("//" starts a comment in xcconfig, hence the $() in URLs.)
+SC_SUPABASE_URL = https:/$()/ppmzqjrfcbemzzbwicrd.supabase.co
+SC_SITE_URL = https:/$()/soundcheck.app
+SC_SUPABASE_KEY =

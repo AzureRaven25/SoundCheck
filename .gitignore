@@ -17,3 +17,11 @@ node_modules/
 .env
 .env.*
 !.env.example
+
+# Apple apps: generated project, build output, local config
+apps/apple/*.xcodeproj/
+apps/apple/**/.build/
+apps/apple/**/.swiftpm/
+apps/apple/Config/Local.xcconfig
+apps/apple/Config/Release.local.xcconfig
+DerivedData/
