@@ -62,8 +62,8 @@ export function Results({ scores, trackId, onAgain, error }: { scores: ScoreView
         <p className="text-center text-ink-300">Scoring your performance…</p>
       ) : (
         <div className={clsx('grid gap-6', scores.length > 1 ? 'md:grid-cols-2' : 'mx-auto max-w-md')}>
-          {scores.map((s) => (
-            <div key={s.name} className="rounded-2xl bg-ink-850/90 p-6 shadow-lift ring-1 ring-ink-700">
+          {scores.map((s, i) => (
+            <div key={`${s.name}-${i}`} className="rounded-2xl bg-ink-850/90 p-6 shadow-lift ring-1 ring-ink-700">
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-lg font-bold" style={{ color: s.color }}>{s.name}</p>
                 <span className={clsx('rounded-xl bg-gradient-to-br px-4 py-1 font-display text-3xl font-black text-ink-950', GRADE_COLOR[s.grade])}>{s.grade}</span>

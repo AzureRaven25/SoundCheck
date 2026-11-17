@@ -16,7 +16,14 @@ Ordered by dependency: the shared foundation comes first, then the platforms. Mi
 | **M9** | Hardening & launch readiness | all | all | Sentry monitoring, CI (GitHub Actions; you push), performance budgets, accessibility, physical-device verification checklist, licensed-content provider integration | Device matrix sign-off |
 
 ## Current focus
-M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ website → **M4 ✅ processing worker (2026-11-17)** → **M5 next** (SoundCheck Stage on web).
+M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ website → **M4 ✅ processing worker (2026-11-17)** → **M5 ✅ SoundCheck Stage + Party on web (2026-11-17)** → **M6 next** (Apple TV + iOS).
+
+M5 delivered:
+- Solo Stage: stems, guide-vocal slider, key shift, word wipe, live pitch HUD, official score. E2E score: 66 on a partial take.
+- Party mode: the TV opens a session with a QR code and pairing code. Phones join at `/join/<code>` as anonymous users and stream pitch over a private Realtime channel. The TV shows a live trail and on-pitch chip per singer and broadcasts live scores and final results to each phone.
+- Playwright multi-context test: TV + 2 phones with fake mics. Phone clock drift measured at 1 ms; both singers scored 84 over the full song.
+- Phones follow the TV's audio clock: the 2 s transport heartbeat is re-anchored to the real playback position.
+- Singer colours are race-free: the session row is locked and each singer gets the first unused palette colour.
 
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);
@@ -33,6 +40,7 @@ M2 leftovers:
 - Search latency for very short words (~1.5 s) needs tuning.
 
 ## Blocked on you (independent work continues)
+- Turn on **anonymous sign-ins** in the cloud project (Dashboard → Authentication → Sign In / Providers → "Allow anonymous sign-ins"). Phones need this to join a party on the hosted site; it is already on in the local stack. I did not run `supabase config push`, because it would also overwrite the cloud Site URL with local values.
 - GPU host account (Modal or RunPod) for cloud processing: M4 deploy step.
 - Supabase Pro, once processed audio exceeds about 1 GB.
 - Apple Developer account, for physical Apple TV/iPhone testing.

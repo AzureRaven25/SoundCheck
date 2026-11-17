@@ -2,10 +2,14 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2, Mic, MicOff, Minus, Pause, Play, Plus, RotateCcw, Square } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { ArrowLeft, Loader2, Mic, MicOff, Minus, Pause, Play, Plus, RotateCcw, Smartphone, Square, Users } from 'lucide-react';
+import clsx from 'clsx';
+import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { liveHit } from '@soundcheck/scoring';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { useHostSession } from '@/session/useHostSession';
 import { StageEngine } from '@/stage/engine';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
@@ -14,6 +18,7 @@ import { StageLyrics } from '@/stage/StageLyrics';
 import { useStageData, type StageData } from '@/stage/useStageData';
 
 type Phase = 'intro' | 'loading' | 'calibrating' | 'singing' | 'scoring' | 'results';
+type Mode = 'solo' | 'party';
 const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 const transposeKey = (k: string | null, n: number) => {
   if (!k) return null;
@@ -22,13 +27,16 @@ const transposeKey = (k: string | null, n: number) => {
   const i = plain.indexOf(tonic ?? '');
   return i < 0 ? k : `${NOTE_NAMES[(((i + n) % 12) + 12) % 12]} ${mode ?? ''}`;
 };
+const SOLO_COLOR = '#ffc94d';
+const midiOf = (f0: number) => 69 + 12 * Math.log2(f0 / 440);
 
 function Stage({ data }: { data: StageData }) {
   const engine = useRef<StageEngine | null>(null);
   const mic = useRef<MicHandle | null>(null);
-  const frames = useRef<number[]>([]);
+  const frames = useRef<number[]>([]);               // solo singer's frames
   const trail = useRef<[number, number | null][]>([]);
   const hits = useRef({ hit: 0, total: 0 });
+  const [mode, setMode] = useState<Mode>('solo');
   const [phase, setPhase] = useState<Phase>('intro');
   const [loadPct, setLoadPct] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -37,10 +45,16 @@ function Stage({ data }: { data: StageData }) {
   const [useMic, setUseMic] = useState(true);
   const [micError, setMicError] = useState<string | null>(null);
   const [hitRate, setHitRate] = useState<number | null>(null);
+  const [partyRates, setPartyRates] = useState<Record<string, number>>({});
   const [scores, setScores] = useState<ScoreView[] | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const noiseFloor = useRef<number | null>(null);
   const noteAt = useRef<(t: number) => number | null>(() => null);
+  const keyShiftRef = useRef(0);
+  const host = useHostSession(data.track.id);
+  const hostRef = useRef(host);
+  useEffect(() => { hostRef.current = host; });
+  const singerIds = () => hostRef.current.singers().filter((s) => s.mic === 'ready' || s.mic === 'live').map((s) => s.memberId);
 
   useEffect(() => {
     const notes = data.notes;
@@ -57,12 +71,31 @@ function Stage({ data }: { data: StageData }) {
   useEffect(() => () => { engine.current?.dispose(); mic.current?.stop(); }, []);
 
   const getTime = useCallback(() => engine.current?.position() ?? 0, []);
+  const { setPositionSource } = host;
+  useEffect(() => { setPositionSource(getTime); }, [setPositionSource, getTime]);
   // Test hook (development builds only): lets E2E tests sync a simulated singer to the song clock.
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
     (window as unknown as { __soundcheckStage?: unknown }).__soundcheckStage = { position: getTime, playing: () => engine.current?.isPlaying() ?? false };
   }, [getTime]);
-  const getTrails = useCallback((): SingerTrail[] => [{ id: 'me', color: '#ffc94d', points: trail.current }], []);
+
+  // Live trails: the solo singer, or every phone in the party (last ~3 s of frames each).
+  const getTrails = useCallback((): SingerTrail[] => {
+    if (mode === 'solo') return [{ id: 'me', color: SOLO_COLOR, points: trail.current }];
+    return hostRef.current.singers().map((s) => {
+      const f = hostRef.current.framesOf(s.memberId);
+      const pts: [number, number | null][] = [];
+      for (let i = Math.max(0, f.length - 4 * 300); i < f.length; i += 4) {
+        const voiced = f[i + 1]! > 0 && f[i + 2]! >= 0.6 && (s.noiseFloorDb == null || f[i + 3]! >= s.noiseFloorDb + 10);
+        pts.push([f[i]!, voiced ? midiOf(f[i + 1]!) : null]);
+      }
+      return { id: s.memberId, color: s.color, points: pts };
+    });
+  }, [mode]);
+
+  const publish = useCallback((state: 'playing' | 'paused' | 'ended', pos: number) => {
+    if (mode === 'party') hostRef.current.publishTransport(state, pos, keyShiftRef.current, singerIds());
+  }, [mode]);
 
   async function start() {
     // Everything that needs the click's user activation happens synchronously, first: create and
@@ -75,7 +108,8 @@ function Stage({ data }: { data: StageData }) {
       frames.current = [];
       trail.current = [];
       hits.current = { hit: 0, total: 0 };
-      if (useMic && !mic.current) {
+      host.resetTake();
+      if (mode === 'solo' && useMic && !mic.current) {
         try {
           mic.current = await startMic((f) => {
             const eng = engine.current;
@@ -84,8 +118,7 @@ function Stage({ data }: { data: StageData }) {
             const t = eng.position() - (mic.current?.inputLatencyMs ?? 0) / 1000;
             frames.current.push(+t.toFixed(3), f.f0, +f.conf.toFixed(3), +f.rmsDb.toFixed(1));
             const voiced = f.f0 > 0 && f.conf >= 0.6 && (noiseFloor.current == null || f.rmsDb >= noiseFloor.current + 10);
-            const midi = voiced ? 69 + 12 * Math.log2(f.f0 / 440) : null;
-            trail.current.push([t, midi]);
+            trail.current.push([t, voiced ? midiOf(f.f0) : null]);
             if (trail.current.length > 400) trail.current.splice(0, trail.current.length - 400);
             const ref = noteAt.current(t);
             if (ref != null && voiced) {
@@ -104,12 +137,13 @@ function Stage({ data }: { data: StageData }) {
       }
       e.setKey(keyShift);
       e.setGuide(guide);
-      if (mic.current) {
+      if (mode === 'solo' && mic.current) {
         setPhase('calibrating');
         noiseFloor.current = await mic.current.calibrate(1500);
       }
       setPhase('singing');
       await e.play(0);
+      publish('playing', 0);
       setPlaying(true);
     } catch (err) {
       setScoreError(err instanceof Error ? err.message : String(err));
@@ -117,22 +151,78 @@ function Stage({ data }: { data: StageData }) {
     }
   }
 
-  const keyShiftRef = useRef(0);
-  useEffect(() => { keyShiftRef.current = keyShift; engine.current?.setKey(keyShift); }, [keyShift]);
+  useEffect(() => {
+    keyShiftRef.current = keyShift;
+    engine.current?.setKey(keyShift);
+    if (engine.current?.isPlaying()) publish('playing', engine.current.position());
+  }, [keyShift, publish]);
   useEffect(() => { engine.current?.setGuide(guide); }, [guide]);
 
+  // live accuracy: solo HUD, or per-singer chips + live_score broadcast to the phones (~2 Hz)
   useEffect(() => {
     if (phase !== 'singing') return;
     const iv = setInterval(() => {
-      const { hit, total } = hits.current;
-      setHitRate(total > 20 ? hit / total : null);
+      if (mode === 'solo') {
+        const { hit, total } = hits.current;
+        setHitRate(total > 20 ? hit / total : null);
+        return;
+      }
+      const rates: Record<string, number> = {};
+      for (const s of hostRef.current.singers()) {
+        const f = hostRef.current.framesOf(s.memberId);
+        let hit = 0, total = 0;
+        for (let i = 0; i < f.length; i += 4) {
+          const voiced = f[i + 1]! > 0 && f[i + 2]! >= 0.6 && (s.noiseFloorDb == null || f[i + 3]! >= s.noiseFloorDb + 10);
+          const ref = noteAt.current(f[i]!);
+          if (!voiced || ref == null) continue;
+          total++;
+          if (liveHit(f[i + 1]!, ref, keyShiftRef.current)) hit++;
+        }
+        if (total > 20) rates[s.memberId] = hit / total;
+      }
+      setPartyRates(rates);
+      hostRef.current.send({ type: 'live_score', v: PROTOCOL_VERSION, scores: Object.entries(rates).map(([memberId, hitRate]) => ({ memberId, hitRate, combo: 0 })) });
     }, 500);
     return () => clearInterval(iv);
-  }, [phase]);
+  }, [phase, mode]);
 
   async function finish() {
-    engine.current?.pause();
+    const e = engine.current;
+    e?.pause();
     setPlaying(false);
+    publish('ended', e?.position() ?? 0);
+    const sb = supabaseBrowser();
+    if (mode === 'party') {
+      const singers = hostRef.current.singers().filter((s) => hostRef.current.framesOf(s.memberId).length >= 400);
+      if (!singers.length) {
+        setScores(null);
+        setScoreError('We didn’t hear any phones. Check that each singer turned their mic on.');
+        setPhase('results');
+        return;
+      }
+      setPhase('scoring');
+      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[] }>('score-performance', {
+        body: {
+          track_id: data.track.id, session_id: hostRef.current.session!.id, key_shift: keyShift,
+          singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb })),
+        },
+      });
+      if (error || !res) {
+        setScoreError('Scoring failed. Please try again.');
+      } else {
+        const byId = new Map(singers.map((s) => [s.memberId, s]));
+        setScores(res.results.map((r) => ({ ...r, name: byId.get(r.member_id)?.name ?? 'Singer', color: byId.get(r.member_id)?.color ?? '#fff' })));
+        hostRef.current.sendResults({
+          type: 'results', v: PROTOCOL_VERSION, trackId: data.track.id,
+          performances: res.results.map((r) => ({
+            memberId: r.member_id, performanceId: r.performance_id, score: r.score, grade: r.grade,
+            pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, feedback: r.feedback,
+          })),
+        });
+      }
+      setPhase('results');
+      return;
+    }
     if (!useMic || frames.current.length < 100) {
       setScores(null);
       setScoreError(useMic ? 'We didn’t capture enough singing to score.' : null);
@@ -140,19 +230,23 @@ function Stage({ data }: { data: StageData }) {
       return;
     }
     setPhase('scoring');
-    const { data: res, error } = await supabaseBrowser().functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'>)[] }>('score-performance', {
+    const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'>)[] }>('score-performance', {
       body: { track_id: data.track.id, key_shift: keyShift, singers: [{ frames: frames.current, latency_ms: 0, noise_floor_db: noiseFloor.current }] },
     });
     if (error || !res) setScoreError('Scoring failed. Please try again.');
-    else setScores(res.results.map((r) => ({ ...r, name: 'You', color: '#ffc94d' })));
+    else setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR })));
     setPhase('results');
   }
 
   const toggle = async () => {
     const e = engine.current;
     if (!e) return;
-    if (e.isPlaying()) { e.pause(); setPlaying(false); } else { await e.play(); setPlaying(true); }
+    if (e.isPlaying()) { e.pause(); setPlaying(false); publish('paused', e.position()); }
+    else { await e.play(); setPlaying(true); publish('playing', e.position()); }
   };
+
+  const joinUrl = host.session ? `${process.env.NEXT_PUBLIC_SITE_URL ?? (typeof window !== 'undefined' ? window.location.origin : '')}/join/${host.session.code}` : '';
+  const partySingers = host.singers();
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -169,10 +263,16 @@ function Stage({ data }: { data: StageData }) {
           <p className="truncate font-display text-lg font-bold">{data.track.title}</p>
           <p className="truncate text-sm text-ink-300">{data.track.artist}</p>
         </div>
-        <div className="ml-auto flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
-          <span className="stage-gradient rounded-md px-3 py-1.5 text-white">SoundCheck Stage</span>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-widest">
+          <span className="stage-gradient rounded-md px-3 py-1.5 text-white">{mode === 'party' ? 'SoundCheck Party' : 'SoundCheck Stage'}</span>
+          {host.session && <span className="rounded-md bg-ink-800 px-3 py-1.5">Code {host.session.code}</span>}
           {data.musicalKey && <span className="rounded-md bg-ink-800 px-3 py-1.5">Key {transposeKey(data.musicalKey, keyShift)}</span>}
-          {hitRate != null && <span className="rounded-md bg-ink-800 px-3 py-1.5 text-gold-400">On pitch {Math.round(hitRate * 100)}%</span>}
+          {mode === 'solo' && hitRate != null && <span className="rounded-md bg-ink-800 px-3 py-1.5 text-gold-400">On pitch {Math.round(hitRate * 100)}%</span>}
+          {mode === 'party' && phase === 'singing' && partySingers.map((s) => (
+            <span key={s.memberId} className="rounded-md bg-ink-800 px-3 py-1.5" style={{ color: s.color }}>
+              {s.name}{partyRates[s.memberId] != null ? ` ${Math.round(partyRates[s.memberId]! * 100)}%` : ''}
+            </span>
+          ))}
         </div>
       </header>
 
@@ -187,19 +287,57 @@ function Stage({ data }: { data: StageData }) {
           </div>
           <div className="relative flex flex-1 items-center justify-center px-8">
             {phase === 'intro' ? (
-              <div className="max-w-xl text-center">
+              <div className="w-full max-w-3xl text-center">
                 <h1 className="font-display text-5xl font-extrabold tracking-tight">Ready to sing?</h1>
-                <p className="mt-4 text-ink-300">
-                  {data.lyricsGranularity === 'word' ? 'Word-by-word lyrics' : data.lines.length ? 'Synced lyrics' : 'Melody guide'}, vocals removed,
-                  and a live pitch guide. Your score appears at the end.
-                </p>
-                <label className="mt-6 flex items-center justify-center gap-3 text-sm">
-                  <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />
-                  Score me with this device’s microphone
-                </label>
+                <div role="radiogroup" aria-label="Microphones" className="mx-auto mt-6 inline-flex rounded-full bg-ink-850 p-1">
+                  {(['solo', 'party'] as const).map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
+                      className={clsx('flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold', mode === m ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
+                      {m === 'solo' ? <><Mic size={16} /> This device’s mic</> : <><Smartphone size={16} /> Phones as mics</>}
+                    </button>
+                  ))}
+                </div>
+                {mode === 'solo' ? (
+                  <>
+                    <p className="mt-4 text-ink-300">
+                      {data.lyricsGranularity === 'word' ? 'Word-by-word lyrics' : data.lines.length ? 'Synced lyrics' : 'Melody guide'}, vocals removed, and a live pitch guide.
+                    </p>
+                    <label className="mt-4 flex items-center justify-center gap-3 text-sm">
+                      <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />
+                      Score me with this device’s microphone
+                    </label>
+                  </>
+                ) : !host.session ? (
+                  <div className="mt-6">
+                    <p className="text-ink-300">Everyone scans a code and their phone becomes a wireless mic. No app needed.</p>
+                    <button type="button" onClick={() => void host.open()} className="mt-4 flex items-center gap-2 rounded-full bg-ink-50 px-6 py-3 font-bold text-ink-950 mx-auto">
+                      <Users size={18} /> Open the party
+                    </button>
+                    {host.error && <p role="alert" className="mt-3 text-sm text-danger-400">{host.error}</p>}
+                  </div>
+                ) : (
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-8 text-left">
+                    <div className="rounded-2xl bg-white p-3"><QRCodeSVG value={joinUrl} size={168} aria-label={`QR code to join ${host.session.code}`} /></div>
+                    <div>
+                      <p className="text-sm text-ink-300">Scan, or open <b className="text-ink-50">{joinUrl.replace(/^https?:\/\//, '').replace(/\/join\/.*/, '/join')}</b> and enter</p>
+                      <p className="font-display text-6xl font-black tracking-[0.25em]" data-testid="pairing-code">{host.session.code}</p>
+                      <ul className="mt-4 space-y-1" aria-label="Singers">
+                        {partySingers.length === 0 && <li className="text-sm text-ink-500">Waiting for singers…</li>}
+                        {partySingers.map((s) => (
+                          <li key={s.memberId} className="flex items-center gap-2 text-sm">
+                            <span className="h-3 w-3 rounded-full" style={{ background: s.color }} />
+                            <b>{s.name}</b>
+                            <span className={clsx('text-xs', s.mic === 'ready' ? 'text-success-400' : 'text-ink-500')}>{s.mic === 'ready' ? 'mic ready' : 'mic off'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
                 {scoreError && <p role="alert" className="mt-3 text-sm text-danger-400">{scoreError}</p>}
-                <button type="button" onClick={() => void start()} className="stage-gradient mt-8 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105">
+                <button type="button" onClick={() => void start()} disabled={mode === 'party' && !partySingers.some((s) => s.mic === 'ready')}
+                  className="stage-gradient mt-8 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
               </div>
@@ -216,7 +354,8 @@ function Stage({ data }: { data: StageData }) {
               className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50 text-ink-950 disabled:opacity-30">
               {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="translate-x-0.5" />}
             </button>
-            <button type="button" aria-label="Restart" disabled={phase !== 'singing'} onClick={() => { frames.current = []; trail.current = []; hits.current = { hit: 0, total: 0 }; void engine.current?.play(0); setPlaying(true); }}
+            <button type="button" aria-label="Restart" disabled={phase !== 'singing'}
+              onClick={() => { frames.current = []; trail.current = []; hits.current = { hit: 0, total: 0 }; host.resetTake(); void engine.current?.play(0); setPlaying(true); publish('playing', 0); }}
               className="rounded-full bg-ink-800 p-3 disabled:opacity-30"><RotateCcw size={18} /></button>
             <button type="button" aria-label="Finish and score" disabled={phase !== 'singing'} onClick={() => void finish()}
               className="flex items-center gap-2 rounded-full bg-ink-800 px-4 py-3 text-sm font-bold disabled:opacity-30"><Square size={14} fill="currentColor" /> Finish</button>
@@ -230,7 +369,7 @@ function Stage({ data }: { data: StageData }) {
               Guide vocal
               <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-28" />
             </label>
-            {phase === 'singing' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
+            {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
           </footer>
         </>
       )}

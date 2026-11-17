@@ -1,7 +1,7 @@
 -- SoundCheck M1 database tests (pgTAP). Run: supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(64);
 
 -- ------------------------------------------------------------------ helpers
 create function pg_temp.as_user(uid uuid) returns void language plpgsql as $$
@@ -127,6 +127,7 @@ select ok(private.is_session_member((select session_id from s)), 'bob is authori
 select throws_ok($$ select public.join_session('ZZZZZZ', 'Bob', 'ios') $$, 'P0002', null, 'invalid code is rejected');
 select pg_temp.as_user('d0000000-0000-0000-0000-00000000000d');
 select lives_ok($$ select public.join_session(lower((select pairing_code from s)), 'Guest', 'android') $$, 'anonymous guest joins (code is case-insensitive)');
+select is((select count(distinct color)::int from public.session_members where role = 'singer'), 2, 'each singer gets their own colour');
 select pg_temp.as_user('c0000000-0000-0000-0000-00000000000c');
 select ok(not private.is_session_member((select session_id from s)), 'carol is not authorised for the channel');
 select pg_temp.as_user('a0000000-0000-0000-0000-00000000000a');
