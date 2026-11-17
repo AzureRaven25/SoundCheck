@@ -7,31 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       achievements: {
@@ -60,6 +35,50 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      acquisition_log: {
+        Row: {
+          action: string
+          created_at: string
+          error: string | null
+          external_id: string | null
+          id: number
+          ok: boolean
+          provider: string
+          track_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          error?: string | null
+          external_id?: string | null
+          id?: never
+          ok: boolean
+          provider: string
+          track_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          error?: string | null
+          external_id?: string | null
+          id?: never
+          ok?: boolean
+          provider?: string
+          track_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acquisition_log_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       album_artists: {
         Row: {
@@ -182,6 +201,7 @@ export type Database = {
         Row: {
           checked_at: string | null
           created_at: string
+          credit: string | null
           entity_id: string
           entity_type: string
           height: number | null
@@ -197,6 +217,7 @@ export type Database = {
         Insert: {
           checked_at?: string | null
           created_at?: string
+          credit?: string | null
           entity_id: string
           entity_type: string
           height?: number | null
@@ -212,6 +233,7 @@ export type Database = {
         Update: {
           checked_at?: string | null
           created_at?: string
+          credit?: string | null
           entity_id?: string
           entity_type?: string
           height?: number | null
@@ -230,6 +252,7 @@ export type Database = {
         Row: {
           attribution_url: string | null
           bitrate_kbps: number | null
+          content_sha256: string | null
           created_at: string
           duration_ms: number | null
           external_url: string | null
@@ -241,12 +264,14 @@ export type Database = {
           owner_id: string | null
           provider: string
           source_asset_id: string | null
+          source_label: string | null
           storage_path: string | null
           track_id: string
         }
         Insert: {
           attribution_url?: string | null
           bitrate_kbps?: number | null
+          content_sha256?: string | null
           created_at?: string
           duration_ms?: number | null
           external_url?: string | null
@@ -258,12 +283,14 @@ export type Database = {
           owner_id?: string | null
           provider: string
           source_asset_id?: string | null
+          source_label?: string | null
           storage_path?: string | null
           track_id: string
         }
         Update: {
           attribution_url?: string | null
           bitrate_kbps?: number | null
+          content_sha256?: string | null
           created_at?: string
           duration_ms?: number | null
           external_url?: string | null
@@ -275,6 +302,7 @@ export type Database = {
           owner_id?: string | null
           provider?: string
           source_asset_id?: string | null
+          source_label?: string | null
           storage_path?: string | null
           track_id?: string
         }
@@ -1087,10 +1115,13 @@ export type Database = {
       track_sources: {
         Row: {
           attribution: string | null
+          bitrate_kbps: number | null
           created_at: string
           duration_ms: number | null
           external_id: string
+          format: string | null
           id: string
+          imported_by: string | null
           karaoke_ok: boolean
           license_url: string | null
           provider: string
@@ -1100,10 +1131,13 @@ export type Database = {
         }
         Insert: {
           attribution?: string | null
+          bitrate_kbps?: number | null
           created_at?: string
           duration_ms?: number | null
           external_id: string
+          format?: string | null
           id?: string
+          imported_by?: string | null
           karaoke_ok?: boolean
           license_url?: string | null
           provider: string
@@ -1113,10 +1147,13 @@ export type Database = {
         }
         Update: {
           attribution?: string | null
+          bitrate_kbps?: number | null
           created_at?: string
           duration_ms?: number | null
           external_id?: string
+          format?: string | null
           id?: string
+          imported_by?: string | null
           karaoke_ok?: boolean
           license_url?: string | null
           provider?: string
@@ -1139,6 +1176,7 @@ export type Database = {
           album_id: string | null
           artist_credit: string
           created_at: string
+          created_by: string | null
           duration_ms: number | null
           id: string
           isrcs: string[]
@@ -1155,6 +1193,7 @@ export type Database = {
           album_id?: string | null
           artist_credit: string
           created_at?: string
+          created_by?: string | null
           duration_ms?: number | null
           id?: string
           isrcs?: string[]
@@ -1171,6 +1210,7 @@ export type Database = {
           album_id?: string | null
           artist_credit?: string
           created_at?: string
+          created_by?: string | null
           duration_ms?: number | null
           id?: string
           isrcs?: string[]
@@ -1287,6 +1327,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_match_track: {
+        Args: { p_artist: string; p_duration_ms: number; p_title: string }
+        Returns: string
+      }
       advance_queue: {
         Args: { p_session_id: string; p_skip?: boolean }
         Returns: {
@@ -1319,6 +1363,19 @@ export type Database = {
           rank: number
           tracks_sung: number
           user_id: string
+        }[]
+      }
+      import_owned_track: {
+        Args: {
+          p_album?: string
+          p_artist: string
+          p_duration_ms?: number
+          p_title: string
+          p_year?: number
+        }
+        Returns: {
+          created: boolean
+          track_id: string
         }[]
       }
       join_session: {
@@ -1461,6 +1518,17 @@ export type Database = {
           singer_member_ids: string[]
           status: string
           title: string
+          track_id: string
+        }[]
+      }
+      track_availability: {
+        Args: { p_ids: string[] }
+        Returns: {
+          full_sources: string[]
+          has_preview: boolean
+          karaoke_ok: boolean
+          karaoke_ready: boolean
+          level: string
           track_id: string
         }[]
       }
@@ -1630,9 +1698,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

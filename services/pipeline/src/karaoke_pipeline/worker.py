@@ -29,6 +29,53 @@ from . import __version__
 PIPELINE_VERSION = f"karaoke-pipeline/{__version__}"
 
 
+# Hosts the worker may download open-licensed originals from (acquire / open-music Edge Functions).
+ALLOWED_HOSTS = ("archive.org", "api.audius.co", "storage.jamendo.com", "upload.wikimedia.org")
+
+
+def _host_ok(host: str) -> bool:
+    return any(host == h or host.endswith("." + h) for h in ALLOWED_HOSTS)
+
+
+def _public_host(host: str) -> bool:
+    """False for literal private/loopback/link-local addresses and localhost names."""
+    import ipaddress
+
+    if not host or host == "localhost" or host.endswith(".localhost") or host.endswith(".internal"):
+        return False
+    try:
+        ip = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return True
+    return ip.is_global
+
+
+def _positive(x: object) -> float | None:
+    """Tempo/other measurements the database requires to be > 0: drums-free or beatless audio gives 0 or NaN."""
+    try:
+        v = float(x)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 and v == v and v != float("inf") else None
+
+
+def url_allowed(url: str) -> bool:
+    u = urlparse(url)
+    return u.scheme == "https" and _host_ok(u.hostname or "")
+
+
+def redirect_allowed(start_host: str, final_url: str) -> bool:
+    """Most sources must stay on the allow-list. Audius's API redirects to whichever content node holds the file,
+    so from api.audius.co any public https host is accepted."""
+    u = urlparse(final_url)
+    if u.scheme != "https":
+        return False
+    host = u.hostname or ""
+    if _host_ok(host):
+        return True
+    return start_host == "api.audius.co" and _public_host(host)
+
+
 class Supabase:
     """Minimal service-role client (REST, RPC, Storage) over httpx."""
 
@@ -51,7 +98,8 @@ class Supabase:
         prefer = "return=representation" + (",resolution=merge-duplicates" if upsert_on else "")
         params = {"on_conflict": upsert_on} if upsert_on else {}
         r = self.http.post(f"{self.url}/rest/v1/{table}", params=params, json=rows, headers={"Prefer": prefer})
-        r.raise_for_status()
+        if r.is_error:  # keep PostgREST's reason (constraint name, bad value) in the job's error
+            raise RuntimeError(f"insert into {table} failed ({r.status_code}): {r.text[:300]}")
         return r.json()
 
     def update(self, table: str, match: dict, values: dict) -> None:
@@ -67,14 +115,14 @@ class Supabase:
 
     def fetch_url(self, url: str, dest: Path) -> None:
         """Download an open-licensed original. Only allow-listed hosts: never an arbitrary URL from the queue."""
-        host = urlparse(url).hostname or ""
-        if urlparse(url).scheme != "https" or not (host == "archive.org" or host.endswith(".archive.org")):
-            raise ValueError(f"refusing to download from {host or url!r}")
+        if not url_allowed(url):
+            raise ValueError(f"refusing to download from {urlparse(url).hostname or url!r}")
+        start = urlparse(url).hostname or ""
         with httpx.Client(follow_redirects=True, timeout=120) as c, c.stream("GET", url) as r:
             r.raise_for_status()
-            final = urlparse(str(r.url)).hostname or ""
-            if not (final == "archive.org" or final.endswith(".archive.org")):
-                raise ValueError(f"redirected off the allow-list to {final!r}")
+            final = str(r.url)
+            if not redirect_allowed(start, final):
+                raise ValueError(f"redirected off the allow-list to {urlparse(final).hostname!r}")
             with dest.open("wb") as f:
                 for chunk in r.iter_bytes(1 << 20):
                     f.write(chunk)
@@ -192,7 +240,7 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
         analysis = sb.insert("karaoke_analysis", {
             "track_id": job.track_id, "source_asset_id": job.asset_id, "pipeline_version": PIPELINE_VERSION,
             "separation_model": stems.model, "pitch_model": f"crepe-{crepe_model}",
-            "musical_key": info["key"]["name"], "tempo_bpm": info["tempo_bpm"], "vocal_range": melody["range"],
+            "musical_key": info["key"]["name"], "tempo_bpm": _positive(info["tempo_bpm"]), "vocal_range": melody["range"],
             "notes": [{**n, "conf": 1.0} for n in notes], "phrases": phrases, "contour_path": f"{base}/contour.json",
             # word timing is specific to this upload's audio, so it lives on the analysis (not the shared lyrics)
             "word_lyrics": {"lines": lines} if lines and word_stats and word_stats["aligned"] else None,

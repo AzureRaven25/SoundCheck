@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { EntityCard } from '@/components/catalog/Cards';
 import { TrackList } from '@/components/catalog/TrackList';
 import { OpenMusicResults } from '@/components/catalog/OpenMusicResults';
+import { MoreSources } from '@/components/catalog/MoreSources';
 import { ServerResults } from '@/components/personal/ServerResults';
 import { useUser } from '@/lib/hooks/useUser';
 import { supabaseBrowser } from '@/lib/supabase/client';
@@ -96,6 +97,7 @@ function Results() {
         </section>
       )}
       {q && <ServerResults q={q} />}
+      {q && <MoreSources key={q} q={q} />}
       {q && <OpenMusicResults q={q} />}
     </div>
   );

@@ -5,6 +5,7 @@ import { PlayButton } from '@/components/catalog/Cards';
 import { ArtistLine, DetailHeader, FavoriteButton } from '@/components/catalog/DetailHeader';
 import { Lyrics } from '@/components/catalog/Lyrics';
 import { UploadYourCopy } from '@/components/catalog/UploadYourCopy';
+import { SourceAvailability } from '@/components/catalog/SourceAvailability';
 import { ListenElsewhere } from '@/components/catalog/ListenElsewhere';
 import { getTrack } from '@/lib/catalog';
 import { formatDuration } from '@/lib/format';
@@ -39,6 +40,7 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
         }
         actions={<><PlayButton tracks={[t]} size="lg" label={`Play ${t.title}`} /><FavoriteButton trackId={t.id} title={t.title} /></>}
       />
+      <SourceAvailability trackId={t.id} />
       <UploadYourCopy trackId={t.id} title={t.title} />
       <ListenElsewhere trackId={t.id} title={t.title} artist={t.artist_credit} isrcs={(t as { isrcs?: string[] }).isrcs ?? []} />
       <section aria-labelledby="lyrics-h" className="max-w-3xl">

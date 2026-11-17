@@ -9,7 +9,12 @@ export type ProviderId =
   | 'apple_music'       // MusicKit, subscribers only, DRM
   | 'youtube'           // official embedded player
   | 'itunes_preview'    // 30 s previews
-  | 'spotify';          // metadata and links only
+  | 'spotify'           // metadata and links only
+  | 'audius'            // independent artists' full-length streams (public API)
+  | 'openverse'         // Jamendo + Wikimedia Commons recordings via Openverse
+  | 'jamendo'           // Creative Commons catalog (needs a free client_id)
+  | 'ccmixter'          // CC remixes: discovery and links only
+  | 'deezer';           // public metadata API (ISRCs, artwork)
 
 export type PlaybackKind = 'full' | 'preview' | 'none';
 
@@ -64,6 +69,31 @@ export const PROVIDERS: Record<ProviderId, ProviderCapabilities> = {
     label: 'Spotify', search: false, metadata: true, artwork: true, playback: 'none', needsUserAuth: false,
     needsAppCredentials: [], karaoke: false, ownPlayer: true,
     note: 'Links only: Spotify’s developer terms prohibit syncing its audio with lyrics or altering it.',
+  },
+  audius: {
+    label: 'Audius', search: true, metadata: true, artwork: true, playback: 'full', needsUserAuth: false,
+    needsAppCredentials: [], karaoke: 'license', ownPlayer: false,
+    note: 'Full songs uploaded by the artists. Karaoke only for tracks the artist released under a Creative Commons license.',
+  },
+  openverse: {
+    label: 'Openverse', search: true, metadata: true, artwork: true, playback: 'full', needsUserAuth: false,
+    needsAppCredentials: [], karaoke: 'license', ownPlayer: false,
+    note: 'Openly licensed recordings from Jamendo and Wikimedia Commons. Karaoke when the license allows derivatives.',
+  },
+  jamendo: {
+    label: 'Jamendo', search: true, metadata: true, artwork: true, playback: 'full', needsUserAuth: false,
+    needsAppCredentials: ['JAMENDO_CLIENT_ID'], karaoke: 'license', ownPlayer: false,
+    note: 'Creative Commons music. Karaoke when downloads are allowed and the license allows derivatives.',
+  },
+  ccmixter: {
+    label: 'ccMixter', search: true, metadata: true, artwork: false, playback: 'none', needsUserAuth: false,
+    needsAppCredentials: [], karaoke: false, ownPlayer: true,
+    note: 'Creative Commons remixes. Its file server refuses other sites, so SoundCheck links to ccMixter.',
+  },
+  deezer: {
+    label: 'Deezer', search: true, metadata: true, artwork: true, playback: 'none', needsUserAuth: false,
+    needsAppCredentials: [], karaoke: false, ownPlayer: true,
+    note: 'Song details, ISRCs and artwork only. Deezer audio is DRM-protected.',
   },
 };
 

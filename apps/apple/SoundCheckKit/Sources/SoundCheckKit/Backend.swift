@@ -175,15 +175,20 @@ public final class SoundCheckBackend: Sendable {
         return !(a ?? []).isEmpty
     }
 
-    /// Best way to *listen* to a song on this device: a full-length open recording (Internet Archive) when one
+    /// Full-length sources the apps stream directly, in order of preference (mirrors apps/web/src/lib/acquire.ts).
+    public static let fullSourceOrder = ["internet_archive", "jamendo", "openverse", "audius"]
+    public static let providerLabel = ["internet_archive": "Internet Archive", "jamendo": "Jamendo", "openverse": "Openverse", "audius": "Audius"]
+
+    /// Best way to *listen* to a song on this device: a full-length open recording (Internet Archive, Jamendo, Wikimedia Commons, Audius) when one
     /// exists, otherwise a clearly labelled 30 s preview. (Uploads play through Stage; DRM services use their own players.)
     public struct ListenSource: Sendable { public let url: URL; public let full: Bool; public let label: String; public let credit: URL? }
     public func listenSource(trackId: String) async -> ListenSource? {
-        struct S: Decodable { let stream_url: String?; let url: String?; let license_url: String? }
-        if let rows: [S] = try? await client.from("track_sources").select("stream_url, url, license_url").eq("track_id", value: trackId)
-            .eq("provider", value: "internet_archive").limit(1).execute().value,
-           let r = rows.first, let u = r.stream_url.flatMap(URL.init(string:)) {
-            return ListenSource(url: u, full: true, label: ["Internet Archive", licenseLabel(r.license_url)].compactMap { $0 }.joined(separator: " · "),
+        struct S: Decodable { let provider: String; let stream_url: String?; let url: String?; let license_url: String? }
+        if let rows: [S] = try? await client.from("track_sources").select("provider, stream_url, url, license_url").eq("track_id", value: trackId)
+            .in("provider", values: Self.fullSourceOrder).not("stream_url", operator: .is, value: "null").execute().value,
+           let r = rows.sorted(by: { (Self.fullSourceOrder.firstIndex(of: $0.provider) ?? 99) < (Self.fullSourceOrder.firstIndex(of: $1.provider) ?? 99) }).first,
+           let u = r.stream_url.flatMap(URL.init(string:)) {
+            return ListenSource(url: u, full: true, label: [Self.providerLabel[r.provider] ?? r.provider, licenseLabel(r.license_url)].compactMap { $0 }.joined(separator: " · "),
                                 credit: r.url.flatMap(URL.init(string:)))
         }
         guard let pv = await preview(trackId: trackId) else { return nil }

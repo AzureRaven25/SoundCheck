@@ -25,7 +25,9 @@ async function search(q: string, limit: number) {
   const words = q.replace(/[^\p{L}\p{N}\s'-]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 8);
   if (!words.length) return [];
   const terms = words.map((w) => `"${w}"`).join(' AND ');
-  const query = `(title:(${terms}) OR creator:(${terms})) AND mediatype:audio AND collection:netlabels AND licenseurl:*`;
+  // netlabel releases (curated) plus community uploads tagged as music, always with an explicit open license:
+  // 62k + 186k items (counted 2026-11-17)
+  const query = `(title:(${terms}) OR creator:(${terms})) AND mediatype:audio AND licenseurl:* AND (collection:netlabels OR (collection:opensource_audio AND subject:music) OR collection:audio_music)`;
   const params = new URLSearchParams({ q: query, rows: String(limit), output: 'json', 'sort[]': 'downloads desc' });
   for (const f of ['identifier', 'title', 'creator', 'year', 'licenseurl', 'downloads']) params.append('fl[]', f);
   const d = await iaJson(`${IA}/advancedsearch.php?${params}`);

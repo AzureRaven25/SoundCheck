@@ -6,6 +6,7 @@ import { licenseLabel } from '@soundcheck/contracts';
 import { useUser } from '@/lib/hooks/useUser';
 import { loadServers, searchAllServers, type ServerTrack } from '@/lib/personal/servers';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { FULL_SOURCE_ORDER, PROVIDER_LABEL } from '@/lib/acquire';
 
 const STAGES: Record<string, string> = {
   download: 'Fetching your upload', separate: 'Separating vocals from the band', melody: 'Mapping the melody',
@@ -28,7 +29,7 @@ type State =
 export function UploadYourCopy({ trackId, title }: { trackId: string; title: string }) {
   const user = useUser();
   const [state, setState] = useState<State>({ kind: 'loading' });
-  const [open, setOpen] = useState<{ license_url: string | null; karaoke_ok: boolean; url: string | null } | null>(null);
+  const [open, setOpen] = useState<{ provider: string; license_url: string | null; karaoke_ok: boolean; url: string | null } | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   const [serverHits, setServerHits] = useState<ServerTrack[] | null>(null);
   const [hasServer, setHasServer] = useState(false);
@@ -61,8 +62,10 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
       sb.from('audio_assets').select('id').eq('track_id', trackId).eq('owner_id', user.id)
         .eq('kind', 'original').order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // an open-licensed recording made karaoke-ready once is shared with everyone
-      sb.from('audio_assets').select('id').eq('track_id', trackId).eq('kind', 'original').eq('provider', 'internet_archive').limit(1).maybeSingle(),
-      sb.from('track_sources').select('license_url, karaoke_ok, url').eq('track_id', trackId).eq('provider', 'internet_archive').maybeSingle(),
+      sb.from('audio_assets').select('id').eq('track_id', trackId).eq('kind', 'original').is('owner_id', null)
+        .in('provider', FULL_SOURCE_ORDER).limit(1).maybeSingle(),
+      sb.from('track_sources').select('provider, license_url, karaoke_ok, url').eq('track_id', trackId).in('provider', FULL_SOURCE_ORDER)
+        .not('stream_url', 'is', null).order('karaoke_ok', { ascending: false }).limit(1).maybeSingle(),
     ]);
     setOpen(src ?? null);
     const asset = own ?? shared;
@@ -109,7 +112,7 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
   /** Open-licensed recording: the server checks the license, then queues the same pipeline as uploads. */
   async function prepareOpen() {
     setState({ kind: 'processing', stage: null, progress: 0 });
-    const { error } = await supabaseBrowser().functions.invoke('open-music', { body: { action: 'prepare', track_id: trackId } });
+    const { error } = await supabaseBrowser().functions.invoke('acquire', { body: { action: 'prepare', track_id: trackId } });
     if (error) return setState({ kind: 'failed', error: 'Couldn’t start processing this recording.', assetId: '' });
     await refresh();
   }
@@ -127,11 +130,13 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
         <div className="mb-4 flex flex-wrap items-center gap-4 border-b border-ink-800 pb-4">
           <Mic2 className="text-cyan-400" />
           <div className="min-w-0 flex-1">
-            <p className="font-bold">Full song available under an open license</p>
+            <p className="font-bold">{open.license_url ? 'Full song available under an open license' : 'Full song available to stream'}</p>
             <p className="text-sm text-ink-300">
-              From the <a href={open.url ?? 'https://archive.org'} target="_blank" rel="noreferrer" className="underline">Internet Archive</a>
+              From <a href={open.url ?? '#'} target="_blank" rel="noreferrer" className="underline">{PROVIDER_LABEL[open.provider] ?? open.provider}</a>
               {open.license_url && <> · <a href={open.license_url} target="_blank" rel="noreferrer" className="underline">{licenseLabel(open.license_url)}</a></>}.
-              {open.karaoke_ok ? ' Its license allows us to build karaoke tracks from it.' : ' Its license doesn’t allow derivatives, so it’s for listening only.'}
+              {open.karaoke_ok ? ' Its license allows us to build karaoke tracks from it.'
+                : open.license_url ? ' Its license doesn’t allow derivatives, so it’s for listening only.'
+                : ' The artist hasn’t given an open license, so it’s for listening only.'}
             </p>
           </div>
           {open.karaoke_ok && (

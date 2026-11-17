@@ -187,13 +187,13 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
     /** Best way to listen on this device: a full-length open recording when one exists, else a labelled 30 s preview. */
     data class ListenSource(val url: String, val full: Boolean, val label: String, val credit: String?)
     suspend fun listenSource(trackId: String): ListenSource? {
-        @Serializable data class S(@SerialName("stream_url") val streamUrl: String? = null, val url: String? = null, @SerialName("license_url") val licenseUrl: String? = null)
+        @Serializable data class S(val provider: String, @SerialName("stream_url") val streamUrl: String? = null, val url: String? = null, @SerialName("license_url") val licenseUrl: String? = null)
         val open = runCatching {
-            client.from("track_sources").select(Columns.raw("stream_url, url, license_url")) {
-                filter { eq("track_id", trackId); eq("provider", "internet_archive") }; limit(1)
-            }.decodeList<S>().firstOrNull()
+            client.from("track_sources").select(Columns.raw("provider, stream_url, url, license_url")) {
+                filter { eq("track_id", trackId); isIn("provider", FULL_SOURCE_ORDER) }
+            }.decodeList<S>().filter { it.streamUrl != null }.minByOrNull { FULL_SOURCE_ORDER.indexOf(it.provider).let { i -> if (i < 0) 99 else i } }
         }.getOrNull()
-        if (open?.streamUrl != null) return ListenSource(open.streamUrl, true, listOfNotNull("Internet Archive", licenseLabel(open.licenseUrl)).joinToString(" · "), open.url)
+        if (open?.streamUrl != null) return ListenSource(open.streamUrl, true, listOfNotNull(PROVIDER_LABEL[open.provider] ?: open.provider, licenseLabel(open.licenseUrl)).joinToString(" · "), open.url)
         val pv = preview(trackId) ?: return null
         return ListenSource(pv.first, false, "Preview · 30 s", pv.second)
     }
@@ -304,6 +304,10 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
 }
 
 /** "CC BY-NC-SA 3.0" from a Creative Commons deed URL (mirror of contracts/providers.ts). */
+/** Full-length sources the apps stream directly, in order of preference (mirrors apps/web/src/lib/acquire.ts). */
+val FULL_SOURCE_ORDER = listOf("internet_archive", "jamendo", "openverse", "audius")
+val PROVIDER_LABEL = mapOf("internet_archive" to "Internet Archive", "jamendo" to "Jamendo", "openverse" to "Openverse", "audius" to "Audius")
+
 fun licenseLabel(url: String?): String? {
     if (url == null) return null
     Regex("licenses/([a-z-]+)/([\\d.]+)", RegexOption.IGNORE_CASE).find(url)?.let { return "CC ${it.groupValues[1].uppercase()} ${it.groupValues[2]}" }

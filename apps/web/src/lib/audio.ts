@@ -2,6 +2,7 @@
 import { licenseLabel } from '@soundcheck/contracts';
 import { supabaseBrowser } from './supabase/client';
 import { rememberedVideo } from '@/player/youtube';
+import { FULL_SOURCE_ORDER, PROVIDER_LABEL } from './acquire';
 
 /** Thrown when audio couldn't be resolved right now (provider busy, network): try again later. */
 export class AudioTemporarilyUnavailable extends Error {}
@@ -24,8 +25,9 @@ const cache = new Map<string, ResolvedAudio | null>();
 /**
  * Pick the best playable source a user may access for a track (AudioSourceProvider, docs/ARCHITECTURE.md):
  *   1. the user's own uploaded original (private Storage, short-lived signed URL)
- *   2. a shared licensed original (future licensed provider, `shared/` Storage prefix)
- *   3. a 30 s store preview (resolved on demand by the resolve-preview Edge Function)
+ *   2. a complete open recording (Internet Archive, Jamendo, Wikimedia Commons, Audius)
+ *   3. the full song in YouTube's own player
+ *   4. a 30 s store preview (resolved on demand by the resolve-preview Edge Function)
  */
 export async function resolveAudio(trackId: string): Promise<ResolvedAudio | null> {
   if (cache.has(trackId)) return cache.get(trackId)!;
@@ -45,13 +47,14 @@ export async function resolveAudio(trackId: string): Promise<ResolvedAudio | nul
       return r;
     }
   }
-  // full-length open-licensed recording (Internet Archive), played straight from the archive
-  const { data: open } = await sb.from('track_sources').select('stream_url, url, license_url')
-    .eq('track_id', trackId).eq('provider', 'internet_archive').not('stream_url', 'is', null).limit(1).maybeSingle();
-  if (open?.stream_url) {
+  // a complete recording from an open source (Internet Archive, Jamendo, Wikimedia Commons, Audius), streamed directly
+  const { data: open } = await sb.from('track_sources').select('provider, stream_url, url, license_url')
+    .eq('track_id', trackId).in('provider', FULL_SOURCE_ORDER).not('stream_url', 'is', null);
+  const best = (open ?? []).sort((a, b) => FULL_SOURCE_ORDER.indexOf(a.provider) - FULL_SOURCE_ORDER.indexOf(b.provider))[0];
+  if (best?.stream_url) {
     const r: ResolvedAudio = {
-      url: open.stream_url, kind: 'full', attributionUrl: open.url,
-      sourceLabel: ['Internet Archive', licenseLabel(open.license_url)].filter(Boolean).join(' · '),
+      url: best.stream_url, kind: 'full', attributionUrl: best.url,
+      sourceLabel: [PROVIDER_LABEL[best.provider] ?? best.provider, licenseLabel(best.license_url)].filter(Boolean).join(' · '),
     };
     cache.set(trackId, r);
     return r;

@@ -451,3 +451,6 @@ verify_jwt = false
 
 [functions.resolve-artist-image]
 verify_jwt = false
+
+[functions.acquire]
+verify_jwt = false

@@ -87,3 +87,72 @@ that it reaches the real end. Previews must report themselves as previews. Resul
 
 Scoring never depends on this audio: phones still compute pitch locally and send compact pitch frames, so
 scores stay accurate even on poor Wi-Fi. The voice stream is only for hearing yourself in the room.
+
+## 8. Acquisition ecosystem: FMHY "Group C" audit and the sources we built (2026-11-17)
+
+FMHY's audio page (fmhy.net/audio, fetched 2026-11-17) lists "Audio Ripping Sites" and "Audio Ripping Tools".
+Each tool was checked individually against its own code or docs. Categories used below:
+**M** metadata/catalog · **P** official playback · **A** authorized file acquisition (purchase, artist-offered
+download, open license) · **U** user-provided media · **X** protected-stream extraction (decrypting DRM, scraped app
+secrets, or shared/pooled subscription accounts).
+
+### 8.1 Per-tool findings
+
+| Tool (FMHY note) | What it actually does (evidence) | Category | Reusable part | Decision |
+|---|---|---|---|---|
+| **lucida** ("Amazon Music / Soundcloud / FLAC") | Web service that returns files from streaming services through accounts it operates | X | none (closed service) | ❌ |
+| **Monochrome** ("Multi-Site / FLAC…") | Open-source client streaming/downloading via third-party "Tidal HiFi API" instances; downstream projects describe "download as FLAC" via Monochrome/Tidal (GitHub search, 2026-11-17) | X | none: the metadata comes from Tidal's private API | ❌ |
+| **Antra Web / Antra** ("Requires Sign-Up"; Qobuz/Tidal/Amazon/Soulseek) | Paste-a-link downloader with Patreon "supporter keys" (site, 2026-11-17) | X | none | ❌ |
+| **DoubleDouble** (Amazon / SoundCloud / FLAC) | Same model as lucida | X | none | ❌ |
+| **Jumo-DL, ARCOD** (Qobuz) | Qobuz downloaders via operated accounts | X | none | ❌ |
+| **Rhythmax TIDAL / JioSaavn, cyan-dl, squid.wtf, Lossless Music Download (Kuwo)** | Service-specific rippers | X | none | ❌ |
+| **Rip Anything From Anywhere, vdwn.cloud, CYBROX, AMP3, AudioFetcher, Spotisaver, Riplet** | Convert links to 320 kbps MP3 by pulling YouTube audio (Spotisaver: "accepts Spotify links but uses YouTube") | X (YouTube ToS forbids downloading) | Spotify-link → song matching (we already resolve songs by title/artist/ISRC) | ❌ download; ✅ matching exists |
+| **YTiz, cobalt (AGPL-3.0), you-get** | Save SoundCloud/Bandcamp/YouTube streams regardless of the uploader's download setting | X | none | ❌. Legit SoundCloud route: tracks the uploader made downloadable, imported as files (§8.3) |
+| **Mornye, Firehawk52** (Deezer/Qobuz/Tidal, "Requires Sign-Up") | Share/issue streaming-service credentials for the rippers below | X | none | ❌ |
+| **streamrip** (GPL-3.0, active) | Qobuz/Tidal/Deezer/SoundCloud downloader. `streamrip/client/qobuz.py` has a `QobuzSpoofer` that scrapes `bundle.js` from Qobuz's web player for `appId`/`appSecret` | X | Its tagging/folder layout ideas; nothing that needs the services | ❌ |
+| **qobuz-dl / QobuzDownloaderX(-MOD)** (GPL-3.0) | Same Qobuz bundle scraping (`qobuz_dl/bundle.py`: `appId:"…",appSecret:"…"` regex) | X | none | ❌ |
+| **OrpheusDL** (modular, last push 2023-12) | Module framework; modules for Qobuz/Tidal/Deezer etc. use service credentials ("Use Firehawk52") | X | The *module* idea (one adapter per source) is the same design as our `Adapter` interface | ❌ modules; ✅ design |
+| **Deemix / DeemixFix / Deemix Revival / SaturnMusic** | Deezer downloader; `deemix/decryption.py` derives a per-track Blowfish key (`generateBlowfishKey`) and decrypts the protected stream | X (decryption) | Deezer's **public** API (search, ISRCs, artwork) is separate and permitted | ❌ downloads; ✅ Deezer metadata adapter |
+| **OnTheSpot** (Apple Music/Bandcamp/Deezer/Qobuz/Spotify/Tidal) | Multi-service downloader using account sessions (repo moved, 2026-11-17) | X | none | ❌ |
+| **Votify** (MIT, archived) | Spotify downloader; README requires exported Spotify cookies and a `.wvd` Widevine device file for AAC | X (Widevine) | none | ❌ |
+| **Murglar** (Deezer/SoundCloud/VK) | Player/downloader for those services | X | none | ❌ |
+| **MusicDL** (Chinese platforms) | Scraper/downloader | X | none | ❌ |
+| **NullBeat** ("TorBox-based") | Fetches via a debrid/torrent service | X | none | ❌ |
+| **Nicotine+ / Soulseek** (GPL-3.0) | P2P client; files are whatever peers share | U for your *own* library, otherwise unlicensed | none needed: your own files come in through the importer | ❌ as a source |
+| **BandCamp-DL** (Unlicense, "Free Only") | Reads `trackinfo[].file["mp3-128"]` from the album page (`bandcamp_dl/bandcamp.py` l.310): the 128 kbps *stream* file, present for any streamable track, not only free ones | X when used on paid tracks | Bandcamp's own downloads (purchases and free/name-your-price, via the official download page) are authorized | ✅ via **Import** (Bandcamp ZIP names parsed) |
+| **Exact Audio Copy, whipper** (GPL-3.0) | CD rippers that verify against AccurateRip and write logs | U (discs you own) | Rip logs: per-track AccurateRip result | ✅ **Import** reads EAC/XLD/whipper logs and records "AccurateRip verified (confidence N)" |
+| **AccurateRip** | Checksum database for verifying rips | U | verification | ✅ (via the logs above) |
+
+### 8.2 Sources we tested for complete recordings
+
+"Full" means a file we downloaded and **decoded** (`scripts/verify_full_length.py`, ffprobe) is > 60 s and within 5 % of
+the listed length; previews and metadata never count.
+
+| Source | Access | Catalog | Full-length (decoded) | Karaoke | Status |
+|---|---|---|---|---|---|
+| **Openverse → Jamendo** | Openverse API, no key | 644,709 Jamendo tracks (Openverse stats) | ✅ 6/6 (e.g. "Let's Fall In Love", FOXAPET: listed 255.0 s, decoded 254.8 s); CORS-enabled MP3 | ✅ when CC without ND (worker allow-list: `storage.jamendo.com`) | ✅ Integrated |
+| **Openverse → Wikimedia Commons** | same | 3.99 M audio files, mostly not songs; filtered to ≥ 45 s | ✅ "Beethoven Symphony 7 Allegretto" listed 659.6 s, decoded 659.6 s (Commons MP3 transcode) | ✅ when CC/PD without ND | ✅ Integrated |
+| **Audius** | public API (`app_name`), no key | independent artists' uploads | ✅ 5/5 (e.g. "Must B Love": 320.0 s listed, 320.2 s decoded); CORS-enabled | Only for CC-licensed tracks (most are "All rights reserved" → listen only); gated tracks skipped | ✅ Integrated |
+| **Internet Archive** | advancedsearch + metadata, no key | widened from netlabels (62k items) to + community music uploads (186k) with an explicit license | ✅ (verified earlier) | ✅ license permitting | ✅ Integrated (wider search) |
+| **Jamendo API (direct)** | free `client_id` | ~600k | expected same files as Openverse | ✅ when `audiodownload_allowed` and not ND | ⚙️ Built; needs `JAMENDO_CLIENT_ID` (free sign-up at devportal.jamendo.com, which only you can do) |
+| **ccMixter** | API, no key | CC remixes, many a cappellas | ❌ `ccmixter.org/content/…` answers **403** to non-site requests (2026-11-17) | — | ✅ Discovery + links only (we don't work around the 403) |
+| **Deezer** | public API, no key | large commercial catalog | ❌ metadata only (audio is DRM) | ❌ | ✅ Metadata adapter (ISRC, artwork) |
+| **Bandcamp** | no public fan API | — | ✅ the files you download from Bandcamp | ✅ your copy | ✅ via Import (ZIP + name parsing) |
+| **SoundCloud** | API access requires an approved app ⚠️ | — | uploader-enabled downloads, as files | ✅ your copy | ✅ via Import; API adapter ⏸ until credentials exist |
+| **Your files / CD rips** | — | your library | ✅ (E2E) | ✅ (E2E: processed to karaoke) | ✅ Import page |
+
+### 8.3 Architecture
+
+- `supabase/functions/_shared/acquisition.ts`: one `Adapter` per source (`search`, `get`, `missing()` credentials).
+  Each result says `availability` (`full` | `preview` | `metadata`), `karaoke_ok`, license, format and quality.
+  A new source is one object added to `ADAPTERS`.
+- `acquire` Edge Function: `search` (all sources in parallel, per-source status incl. "not configured"), `import` /
+  `import_many` (idempotent on provider + id; de-duplicated against the catalog by normalized title + artist and
+  duration within 4 s), `prepare` (queues the normal karaoke pipeline for an eligible open recording).
+  Every outcome is written to `acquisition_log`.
+- `track_availability(ids)` RPC: one scale per song: catalog → preview → full → karaoke-eligible → karaoke-ready.
+- Import (`/import`): folders (drag-and-drop or picker), ZIPs, M3U/M3U8/PLS → playlists, EAC/XLD/whipper logs →
+  AccurateRip provenance, tags (music-metadata) with filename fallbacks, SHA-256 duplicate detection per user,
+  3 files in parallel, pause/resume and "retry failed" (all steps idempotent), optional karaoke for every file.
+- The worker downloads open originals only from an allow-list (archive.org, api.audius.co → Audius content
+  nodes on public hosts, storage.jamendo.com, upload.wikimedia.org).
