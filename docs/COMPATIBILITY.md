@@ -2,7 +2,7 @@
 
 Status key: ✅ done & tested · 🧪 implemented, partially verified · 🚧 in progress · ⬜ not started · — not applicable
 
-*Last updated: M3 complete (2026-11-17).*
+*Last updated: M4 complete (2026-11-17).*
 
 | Feature | Website | Apple TV | Fire TV | iOS | Android |
 |---|---|---|---|---|---|
@@ -17,11 +17,11 @@ Status key: ✅ done & tested · 🧪 implemented, partially verified · 🚧 in
 | Queue / shuffle / repeat | ✅ (unit + E2E) | ⬜ | ⬜ | ⬜ | ⬜ |
 | Playlists & favorites | ✅ (E2E) | ⬜ | ⬜ | ⬜ | ⬜ |
 | Listening history | ✅ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Upload own audio | ⬜ | — | — | ⬜ | ⬜ |
-| Vocal separation (via cloud pipeline) | ⬜ | ⬜ | ⬜ | — | — |
+| Upload own audio | ✅ (E2E with worker) | — | — | ⬜ | ⬜ |
+| Vocal separation (worker: HTDemucs, SI-SDR 21.8 dB on test song) | ✅ | ✅ backend | ✅ backend | — | — |
 | Karaoke playback (stems + guide vocal) | ⬜ | ⬜ | ⬜ | — | — |
 | Line-synced lyrics | ✅ (sync with full-length audio) | ⬜ | ⬜ | ⬜ | ⬜ |
-| Word-level highlighting | ⬜ | ⬜ | ⬜ | — | — |
+| Word-level highlighting (timing: MMS forced alignment ✅) | ⬜ UI | ⬜ | ⬜ | — | — |
 | Key transposition | ⬜ | ⬜ | ⬜ | — | — |
 | Host session + QR / pairing code | ⬜ | ⬜ | ⬜ | — | — |
 | Join session (scan / code) | ⬜ (browser /join) | — | — | ⬜ | ⬜ |

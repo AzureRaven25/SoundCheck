@@ -73,3 +73,22 @@ test('player queues an album-style list and controls work', async ({ page }) => 
   await page.getByRole('button', { name: /Repeat off/ }).click();
   await expect(page.getByRole('button', { name: 'Repeat all' })).toBeVisible();
 });
+
+// Needs a running worker (karaoke-pipeline worker) and E2E_SONG pointing at a sung test track
+// (services/pipeline/tests/fixtures/make_song.py). Skipped otherwise.
+test('upload your copy → processed into karaoke tracks', async ({ page }) => {
+  test.skip(!process.env.E2E_SONG, 'set E2E_SONG to a test audio file and run the worker');
+  test.setTimeout(240_000);
+  await page.goto('/signup');
+  await page.getByLabel('Display name').fill('Uploader');
+  await page.getByLabel('Email').fill(`up-${Date.now()}@soundcheck.test`);
+  await page.getByLabel('Password').fill('correct-horse-battery');
+  await page.getByRole('button', { name: 'Sign up' }).click();
+  await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible();
+  await page.goto('/search?q=wild%20thing%20troggs');
+  await page.getByRole('row').filter({ hasText: 'The Troggs' }).first().getByRole('link', { name: 'Wild Thing' }).first().click();
+  await expect(page.getByText(/Make “Wild Thing” karaoke-ready/)).toBeVisible();
+  await page.getByLabel('Audio file').setInputFiles(process.env.E2E_SONG!);
+  await expect(page.getByRole('status')).toContainText(/Queued|Separating|Mapping|Finding|Timing|Detecting|Saving|Fetching/);
+  await expect(page.getByText(/Your copy is ready/)).toBeVisible({ timeout: 200_000 });
+});

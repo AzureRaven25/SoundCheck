@@ -50,3 +50,27 @@ On a 9-second synthetic test clip: separation took about 6 s and pitch tracking 
 ```bash
 uv run pytest
 ```
+
+## Cloud worker (SoundCheck M4)
+
+`karaoke-pipeline worker` consumes the Supabase `audio_processing` queue. For each upload it:
+1. downloads the original from Storage;
+2. separates the stems (HTDemucs);
+3. extracts the melody (CREPE), then splits repeated notes at vocal onsets;
+4. word-aligns the lyrics (torchaudio MMS forced aligner on the vocal stem, line by line);
+5. detects key and tempo;
+6. uploads the stems and pitch contour to `audio/<owner>/<track>/<asset>/`;
+7. writes the `audio_assets` stems, `karaoke_analysis` and word-timed `lyrics` rows.
+
+It needs only `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (service-role RPCs, no DB password). A 27 s song processes in about 19 s on an M5.
+
+```bash
+SUPABASE_URL=... SUPABASE_SECRET_KEY=... uv run karaoke-pipeline worker      # loop
+uv run karaoke-pipeline worker --once                                        # one job
+```
+
+Deploy on a GPU host with the `Dockerfile`, or to Modal with `modal_app.py`, which scales to zero.
+
+Tests:
+- `uv run pytest`: unit tests, plus a macOS-only end-to-end run on a sung TTS test song with separation SI-SDR > 12 dB and word alignment.
+- `tests/test_worker_e2e.py`: upload → worker → assets, against the local Supabase stack.

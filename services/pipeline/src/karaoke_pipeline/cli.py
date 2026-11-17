@@ -128,7 +128,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--crepe-model", default="full", choices=["full", "tiny"], help="pitch tracker size")
     p.add_argument("--skip-lyrics", action="store_true", help="don't look up lyrics online")
     p.add_argument("--force", action="store_true", help="reprocess songs that already have a bundle")
+    w = sub.add_parser("worker", help="process uploads from the SoundCheck cloud queue (needs SUPABASE_URL + SUPABASE_SECRET_KEY)")
+    w.add_argument("--once", action="store_true", help="process at most one job, then exit")
+    w.add_argument("--model", default="htdemucs", choices=["htdemucs", "htdemucs_ft", "htdemucs_6s"])
+    w.add_argument("--crepe-model", default="full", choices=["full", "tiny"])
     args = parser.parse_args(argv)
+
+    if args.command == "worker":
+        from .worker import run
+        n = run(once=args.once, model=args.model, crepe_model=args.crepe_model)
+        print(f"processed {n} job(s)")
+        return 0
 
     inputs = find_inputs(args.input)
     if not inputs:

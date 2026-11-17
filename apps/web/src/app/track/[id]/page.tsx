@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { PlayButton } from '@/components/catalog/Cards';
 import { ArtistLine, DetailHeader, FavoriteButton } from '@/components/catalog/DetailHeader';
 import { Lyrics } from '@/components/catalog/Lyrics';
+import { UploadYourCopy } from '@/components/catalog/UploadYourCopy';
 import { getTrack } from '@/lib/catalog';
 import { formatDuration } from '@/lib/format';
 
@@ -37,6 +38,7 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
         }
         actions={<><PlayButton tracks={[t]} size="lg" label={`Play ${t.title}`} /><FavoriteButton trackId={t.id} title={t.title} /></>}
       />
+      <UploadYourCopy trackId={t.id} title={t.title} />
       <section aria-labelledby="lyrics-h" className="max-w-3xl">
         <h2 id="lyrics-h" className="mb-4 font-display text-2xl font-bold">Lyrics</h2>
         <Lyrics trackId={t.id} />

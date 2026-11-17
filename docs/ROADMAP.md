@@ -16,7 +16,7 @@ Ordered by dependency: the shared foundation comes first, then the platforms. Mi
 | **M9** | Hardening & launch readiness | all | all | Sentry monitoring, CI (GitHub Actions; you push), performance budgets, accessibility, physical-device verification checklist, licensed-content provider integration | Device matrix sign-off |
 
 ## Current focus
-M0 ✅ → M1 ✅ → M2 ✅ → **M3 ✅ website (2026-11-17)** → **M4 next** (pipeline worker), then M5 Stage.
+M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ website → **M4 ✅ processing worker (2026-11-17)** → **M5 next** (SoundCheck Stage on web).
 
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);
