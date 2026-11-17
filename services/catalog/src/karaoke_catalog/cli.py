@@ -142,6 +142,22 @@ def cmd_export_turso(args) -> int:
     return 0
 
 
+def cmd_backfill_artwork(args) -> int:
+    from .artwork_backfill import backfill, load_staging
+    from .supabase_sync import SupabaseRest, load_env
+
+    load_env()
+    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SECRET_KEY")
+    if not url or not key:
+        print("SUPABASE_URL and SUPABASE_SECRET_KEY must be set", file=sys.stderr)
+        return 1
+    with db.connect() as conn:
+        if args.archive:
+            load_staging(conn, args.archive, args.archive.parent / "caa")
+        backfill(conn, SupabaseRest(url, key), args.max_rank)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="karaoke-catalog", description="Song catalog for KaraokeApp.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -182,6 +198,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--top", type=int, default=900_000, help="how many ranks (default stays under Turso Free's monthly write quota)")
     p.add_argument("--window", type=int, default=20_000)
     p.set_defaults(fn=cmd_export_turso)
+
+    p = sub.add_parser("backfill-artwork", help="register Cover Art Archive covers for synced albums from the CAA dump")
+    p.add_argument("--archive", type=Path, help="mbdump-cover-art-archive.tar.bz2 (loads staging; omit to reuse)")
+    p.add_argument("--max-rank", type=int, default=100_001, help="albums of songs ranked below this")
+    p.set_defaults(fn=cmd_backfill_artwork)
 
     args = parser.parse_args(argv)
     if args.command == "wishlist" and args.action == "add" and args.song_id is None:

@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60 * 60 * 24 * 30, // covers never change
     remotePatterns: [
       { protocol: 'https', hostname: 'coverartarchive.org' },
       { protocol: 'https', hostname: '**.archive.org' },

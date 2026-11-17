@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+import Image from 'next/image';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
 const resolved = new Map<string, Promise<string | null>>();
@@ -58,9 +59,10 @@ function hash(s: string) {
  */
 export function Artwork({
   src, albumId, title, className, rounded = 'rounded-md', resolve = true, priority = false,
+  sizes = '(max-width: 768px) 45vw, 220px',
 }: {
   src?: string | null; albumId?: string | null; title: string; className?: string;
-  rounded?: string; resolve?: boolean; priority?: boolean;
+  rounded?: string; resolve?: boolean; priority?: boolean; sizes?: string;
 }) {
   const [resolvedArt, setResolvedArt] = useState<{ albumId: string; url: string } | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
@@ -78,16 +80,20 @@ export function Artwork({
   const failed = !!url && failedUrl === url;
 
   if (url && !failed) {
+    // next/image: fetched once through the Next image optimizer (follows the CAA → archive.org
+    // redirect server-side), cached, and served as a right-sized WebP/AVIF.
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- artwork comes from several CDNs; next/image adds little here
-      <img
-        src={url}
-        alt=""
-        loading={priority ? 'eager' : 'lazy'}
-        decoding="async"
-        onError={() => setFailedUrl(url)}
-        className={clsx('aspect-square w-full bg-ink-800 object-cover', rounded, className)}
-      />
+      <div className={clsx('relative aspect-square w-full overflow-hidden bg-ink-800', rounded, className)}>
+        <Image
+          src={url}
+          alt=""
+          fill
+          sizes={sizes}
+          priority={priority}
+          onError={() => setFailedUrl(url)}
+          className="object-cover"
+        />
+      </div>
     );
   }
   const [a, b] = PALETTES[hash(title) % PALETTES.length]!;

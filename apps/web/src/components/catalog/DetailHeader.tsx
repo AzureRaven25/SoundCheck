@@ -35,7 +35,7 @@ export function DetailHeader({
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-ink-900" aria-hidden />
       <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end">
         <div className="w-48 shrink-0 shadow-lift md:w-56">
-          <Artwork src={artwork} albumId={albumId} title={title} rounded={round ? 'rounded-full' : 'rounded-lg'} priority />
+          <Artwork src={artwork} albumId={albumId} title={title} rounded={round ? 'rounded-full' : 'rounded-lg'} priority sizes="224px" />
         </div>
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-widest text-ink-300">{kind}</p>
