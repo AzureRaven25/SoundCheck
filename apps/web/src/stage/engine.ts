@@ -24,7 +24,12 @@ export class StageEngine {
   private startedAt = 0;      // ctx time when play() last started
   private startedFrom = 0;    // song seconds at that moment
   duration = 0;
-  onEnded: (() => void) | null = null;
+  private onEnded: (() => void) | null = null;
+
+  /** Called once when playback reaches the end of the song. */
+  setOnEnded(cb: (() => void) | null) {
+    this.onEnded = cb;
+  }
 
   async load(instrumentalUrl: string, vocalsUrl: string, onProgress?: (f: number) => void) {
     // Loaded unbundled from /public (see scripts/vendor-stretch.mjs): the library ships its worklet as

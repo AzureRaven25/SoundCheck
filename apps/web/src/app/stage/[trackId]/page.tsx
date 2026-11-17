@@ -100,7 +100,7 @@ function Stage({ data }: { data: StageData }) {
       }
       if (!e.duration) {
         await e.load(data.instrumentalUrl, data.vocalsUrl, setLoadPct);
-        e.onEnded = () => void finish();
+        e.setOnEnded(() => void finish());
       }
       e.setKey(keyShift);
       e.setGuide(guide);
