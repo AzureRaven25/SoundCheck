@@ -60,6 +60,7 @@ struct SoloHome: View {
             .background(SC.ink950)
         }
         .task {
+            await backend.validateSession()
             #if DEBUG
             // DEBUG only: SC_DEV_EMAIL / SC_DEV_PASSWORD sign in a local-stack test account; SC_DEV_SOLO=<trackId> opens it
             let env = ProcessInfo.processInfo.environment

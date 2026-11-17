@@ -58,7 +58,10 @@ export default function JoinSessionPage() {
   const onEvent = useCallback((e: SessionEvent) => {
     const me = memberRef.current;
     if (e.type === 'transport') {
-      if (e.trackId !== transport.current?.trackId && e.state === 'playing') setResult(null);
+      // a new song (or the same song again) starting: the previous score card goes away
+      if (e.state === 'playing' && transport.current?.state !== 'playing') setResult(null);
+      // frames still waiting in a partial batch belong to the previous take (or song): never send them late
+      if (e.state !== 'playing' || transport.current?.state !== 'playing') batch.current = [];
       transport.current = e;
       setTransportState(e.state);
       if (e.trackId && lyricsFor.current !== e.trackId) {

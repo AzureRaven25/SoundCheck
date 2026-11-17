@@ -19,6 +19,7 @@ public final class PartyHost {
     public private(set) var session: SessionInfo?
     public private(set) var members: [PresenceState] = []
     public private(set) var error: String?
+    public private(set) var queue: [QueueItem] = []
     private var status: [String: MicStatusEvent] = [:]
     @ObservationIgnored private var channel: SessionChannel?
     @ObservationIgnored private var frames: [String: [Double]] = [:]
@@ -43,6 +44,37 @@ public final class PartyHost {
         error = nil
         do {
             let s = try await backend.createSession(platform: platform, trackId: trackId)
+            try await attach(s)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Move the party on to another song: same session and channel, phones stay joined.
+    public func switchTrack(_ trackId: String) async {
+        guard let s = session else { return }
+        _ = await backend.resumeSession(id: s.id, trackId: trackId)
+        transport = nil
+        resetTake()
+        await reloadQueue()
+    }
+
+    public func reloadQueue() async {
+        guard let s = session else { return }
+        queue = await backend.sessionQueue(sessionId: s.id)
+    }
+
+    /// Host: start the next requested song; returns its track id. Tells the phones the queue moved.
+    public func advance(skip: Bool = false) async -> String? {
+        guard let s = session else { return nil }
+        let next = try? await backend.advanceQueue(sessionId: s.id, skip: skip)
+        send(.queueChanged)
+        await reloadQueue()
+        return next ?? nil
+    }
+
+    private func attach(_ s: SessionInfo) async throws {
+        do {
             let uid = backend.currentUser?.id.uuidString.lowercased() ?? UUID().uuidString
             channel = try await SessionChannel.open(backend: backend, sessionId: s.id, presenceKey: "host-\(uid)",
                 onEvent: { [weak self] in self?.handle($0) },
@@ -50,8 +82,7 @@ public final class PartyHost {
             await channel?.track(PresenceState(memberId: "host", displayName: backend.displayName, role: "host", platform: platform, color: "#FFFFFF", mic: .off))
             session = s
             startHeartbeat()
-        } catch {
-            self.error = error.localizedDescription
+            await reloadQueue()
         }
     }
 
@@ -66,6 +97,8 @@ public final class PartyHost {
             Task { await channel?.send(.clockPong(ClockPongEvent(memberId: p.memberId, id: p.id, t0: p.t0, t1: t1, t2: Clock.nowMs))) }
         case .micStatus(let s):
             status[s.memberId] = s
+        case .queueChanged:
+            Task { await reloadQueue() }
         default: break
         }
     }

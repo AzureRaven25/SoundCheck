@@ -31,6 +31,8 @@ final class AppModel {
     /// DEBUG builds only: SC_DEV_EMAIL / SC_DEV_PASSWORD sign in with a local-stack test account and
     /// SC_DEV_STAGE=<trackId> opens Stage, so simulator tests needn't type on the TV keyboard.
     func devAutostart() async {
+        await backend.validateSession()
+        refreshAuth()
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
         if let e = env["SC_DEV_EMAIL"], let p = env["SC_DEV_PASSWORD"], backend.currentUser == nil {

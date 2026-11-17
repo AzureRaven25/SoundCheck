@@ -8,7 +8,9 @@ import SoundCheckUI
 struct StageView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    let trackId: String
+    @State private var currentTrack: String
+    @State private var songNumber = 0        // bumps per song, so the same song can be queued again
+    init(trackId: String) { _currentTrack = State(initialValue: trackId) }
 
     enum Phase { case loading, lobby, warming, singing, scoring, results }
     @State private var phase: Phase = .loading
@@ -30,7 +32,7 @@ struct StageView: View {
             }
             content
         }
-        .task { await load() }
+        .task(id: "\(currentTrack)#\(songNumber)") { await load() }
         .onDisappear { engine.stop(); if let host { Task { await host.close() } } }
         .onExitCommand { dismiss() }
     }
@@ -38,7 +40,13 @@ struct StageView: View {
     @ViewBuilder private var content: some View {
         switch phase {
         case .loading:
-            ProgressView(message ?? "Setting the stage…")
+            VStack(spacing: 30) {
+                if let message { Text(message).foregroundStyle(SC.ink300).multilineTextAlignment(.center) } else { ProgressView("Setting the stage…") }
+                // a requested song that isn't karaoke-ready: move past it without losing the party
+                if message != nil, let host, host.session != nil, host.queue.contains(where: { $0.status == "queued" }) {
+                    Button { Task { await singNext(skip: true) } } label: { Label("Skip to the next request", systemImage: "forward.fill") }
+                }
+            }
         case .lobby:
             if let host, let d = data { lobby(host, d) }
         case .warming:
@@ -79,16 +87,24 @@ struct StageView: View {
                     }
                 }
                 if let err = host.error ?? message { Text(err).foregroundStyle(SC.danger) }
+                let upNext = host.queue.filter { $0.status == "queued" }
+                if upNext.isEmpty {
+                    Text("Singers can request songs from their phones.").font(.callout).foregroundStyle(SC.ink500)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("UP NEXT").font(.caption.bold()).foregroundStyle(SC.ink300)
+                        ForEach(Array(upNext.prefix(4).enumerated()), id: \.element.id) { i, q in
+                            Text("\(i + 1). \(q.title) · \(q.artist_credit)\(q.requester_name.map { " — \($0)" } ?? "")").lineLimit(1)
+                        }
+                    }.accessibilityElement(children: .combine).accessibilityLabel("Up next")
+                }
                 Button { Task { await start() } } label: { Label("Start singing", systemImage: "play.fill").font(.title3.bold()) }
                     .disabled(host.readySingers.isEmpty)
                     .focused($startFocused)
                     // the button is disabled (unfocusable) until a phone's mic is ready: hand focus to it then
-                    .onChange(of: host.readySingers.count) { _, n in
-                        if n > 0 { startFocused = true }
-                        #if DEBUG
-                        if n > 0, ProcessInfo.processInfo.environment["SC_DEV_AUTOSTART"] != nil, phase == .lobby { Task { await start() } }
-                        #endif
-                    }
+                    .onChange(of: host.readySingers.count) { _, n in lobbyReady(n) }
+                    // on the next song the phones are already ready, so check when the lobby appears too
+                    .onAppear { lobbyReady(host.readySingers.count) }
             }
         }
         .padding(80)
@@ -149,8 +165,18 @@ struct StageView: View {
                 ForEach(results, id: \.0.memberId) { s, r in ScoreCard(name: s.name, color: Color(hex: s.color), result: r).frame(maxWidth: 520) }
             }
             HStack(spacing: 40) {
+                if let next = host?.queue.first(where: { $0.status == "queued" }) {
+                    Button { Task { await singNext() } } label: { Label("Sing next: \(next.title)", systemImage: "forward.fill") }
+                }
                 Button { Task { await again() } } label: { Label("Sing again", systemImage: "arrow.counterclockwise") }
                 Button("Done") { dismiss() }
+            }
+            .task(id: host?.queue.count) {
+                #if DEBUG   // simulator tests: also take the next request automatically
+                if ProcessInfo.processInfo.environment["SC_DEV_AUTOSTART"] != nil, host?.queue.contains(where: { $0.status == "queued" }) == true {
+                    try? await Task.sleep(for: .seconds(3)); await singNext()
+                }
+                #endif
             }
         }
         .padding(60)
@@ -158,19 +184,42 @@ struct StageView: View {
 
     // MARK: Flow
     private func load() async {
+        phase = .loading; data = nil; message = nil; results = []; keyShift = 0
         do {
-            switch try await model.backend.stageData(trackId: trackId) {
+            switch try await model.backend.stageData(trackId: currentTrack) {
             case .ready(let d):
                 data = d
-                let h = PartyHost(backend: model.backend, platform: .tvos)
-                h.position = { [engine] in engine.position() }
-                host = h
-                await h.open(trackId: trackId)
+                if let h = host {
+                    await h.switchTrack(currentTrack)          // same party: phones stay joined
+                } else {
+                    let h = PartyHost(backend: model.backend, platform: .tvos)
+                    host = h
+                    await h.open(trackId: currentTrack)
+                }
+                host?.position = { [engine] in engine.position() }
                 phase = .lobby
-            case .notReady(let title): message = "“\(title)” isn’t karaoke-ready yet."
+            case .notReady(let title): message = "“\(title)” isn’t karaoke-ready yet. Upload your copy on the SoundCheck website."
             case .signedOut: message = "Sign in on the Account tab to sing."
             }
         } catch { message = "Couldn’t open Stage: \(error.localizedDescription)" }
+    }
+
+    /// Focus Start as soon as a mic is ready (and, in DEBUG simulator tests, start automatically).
+    private func lobbyReady(_ n: Int) {
+        guard n > 0 else { return }
+        startFocused = true
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SC_DEV_AUTOSTART"] != nil, phase == .lobby { Task { await start() } }
+        #endif
+    }
+
+    /// Next requested song: same session, fresh players.
+    private func singNext(skip: Bool = false) async {
+        guard let host, let next = await host.advance(skip: skip) else { return }
+        engine.stop()
+        engine = StageEngine()
+        currentTrack = next
+        songNumber += 1
     }
 
     private func start() async {
@@ -189,27 +238,27 @@ struct StageView: View {
         } catch { message = "Couldn’t load the karaoke tracks."; phase = .lobby }
     }
 
-    private func pause() { engine.pause(); host?.publishTransport(.paused, songPos: engine.position(), keyShift: keyShift, trackId: trackId) }
-    private func resume() { engine.play(); host?.publishTransport(.playing, songPos: engine.position(), keyShift: keyShift, trackId: trackId) }
+    private func pause() { engine.pause(); host?.publishTransport(.paused, songPos: engine.position(), keyShift: keyShift, trackId: currentTrack) }
+    private func resume() { engine.play(); host?.publishTransport(.playing, songPos: engine.position(), keyShift: keyShift, trackId: currentTrack) }
     private func setKey(_ k: Int) {
         keyShift = max(-6, min(6, k)); engine.setKey(keyShift)
-        if engine.isPlaying { host?.publishTransport(.playing, songPos: engine.position(), keyShift: keyShift, trackId: trackId) }
+        if engine.isPlaying { host?.publishTransport(.playing, songPos: engine.position(), keyShift: keyShift, trackId: currentTrack) }
     }
 
     private func finish() async {
         guard phase == .singing, let host, let session = host.session else { return }
         engine.pause()
-        host.publishTransport(.ended, songPos: engine.position(), keyShift: keyShift, trackId: trackId)
+        host.publishTransport(.ended, songPos: engine.position(), keyShift: keyShift, trackId: currentTrack)
         let singers = host.singers.filter { host.framesOf($0.memberId).count >= 400 }
         guard !singers.isEmpty else { message = "We didn’t hear any phones. Check that each singer turned their mic on."; results = []; phase = .results; return }
         phase = .scoring
         do {
-            let scored = try await model.backend.score(trackId: trackId, sessionId: session.id, keyShift: keyShift, singers: singers.map {
+            let scored = try await model.backend.score(trackId: currentTrack, sessionId: session.id, keyShift: keyShift, singers: singers.map {
                 ScoreSinger(memberId: $0.memberId, frames: host.framesOf($0.memberId), latencyMs: nil, noiseFloorDb: $0.noiseFloorDb)
             })
             let byId = Dictionary(uniqueKeysWithValues: singers.map { ($0.memberId, $0) })
             results = scored.compactMap { r in byId[r.member_id ?? ""].map { ($0, r.asResult) } }
-            host.send(.results(ResultsEvent(trackId: trackId, performances: scored.map(\.asResult))))
+            host.send(.results(ResultsEvent(trackId: currentTrack, performances: scored.map(\.asResult))))
             message = nil
         } catch { message = "Scoring failed. Please try again." }
         phase = .results

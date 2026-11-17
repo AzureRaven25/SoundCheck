@@ -64,6 +64,7 @@ class PartyHost(private val backend: SoundCheckBackend, private val scope: Corou
     private val _status = MutableStateFlow<Map<String, MicStatusEvent>>(emptyMap())
     private val _singers = MutableStateFlow<List<PartySinger>>(emptyList()); val singers: StateFlow<List<PartySinger>> = _singers
     private val _error = MutableStateFlow<String?>(null); val error: StateFlow<String?> = _error
+    private val _queue = MutableStateFlow<List<QueueItem>>(emptyList()); val queue: StateFlow<List<QueueItem>> = _queue
     private var channel: SessionChannel? = null
     private val frames = ConcurrentHashMap<String, MutableList<Double>>()
     private val lastSeq = ConcurrentHashMap<String, Int>()
@@ -89,6 +90,7 @@ class PartyHost(private val backend: SoundCheckBackend, private val scope: Corou
             channel = ch
             ch.track(PresenceState("host", backend.displayName, "host", platform, "#FFFFFF", MicState.off))
             _session.value = s
+            reloadQueue()
             heartbeat?.cancel()
             heartbeat = scope.launch {
                 while (isActive) {
@@ -121,6 +123,7 @@ class PartyHost(private val backend: SoundCheckBackend, private val scope: Corou
                 scope.launch { channel?.send(SessionEvent.ClockPong(ClockPongEvent(e.e.memberId, e.e.id, e.e.t0, t1, Clock.nowMs()))) }
             }
             is SessionEvent.MicStatus -> { _status.value = _status.value + (e.e.memberId to e.e); recompute() }
+            SessionEvent.QueueChanged -> scope.launch { reloadQueue() }
             else -> Unit
         }
     }
@@ -133,6 +136,26 @@ class PartyHost(private val backend: SoundCheckBackend, private val scope: Corou
 
     fun resetTake() { frames.clear(); lastSeq.clear() }
     fun framesOf(memberId: String): List<Double> = frames[memberId]?.let { synchronized(it) { it.toList() } } ?: emptyList()
+
+    suspend fun reloadQueue() { _session.value?.let { _queue.value = backend.sessionQueue(it.id) } }
+
+    /** Move the party on to another song: same session and channel, phones stay joined. */
+    suspend fun switchTrack(trackId: String) {
+        val s = _session.value ?: return
+        backend.resumeSession(s.id, trackId)
+        transport = null
+        resetTake()
+        reloadQueue()
+    }
+
+    /** Host: start the next requested song; returns its track id. Tells the phones the queue moved. */
+    suspend fun advance(skip: Boolean = false): String? {
+        val s = _session.value ?: return null
+        val next = runCatching { backend.advanceQueue(s.id, skip) }.getOrNull()
+        send(SessionEvent.QueueChanged)
+        reloadQueue()
+        return next
+    }
     fun send(e: SessionEvent) { scope.launch { runCatching { channel?.send(e) } } }
 
     /** Live hit rate per singer over the take (needs > 20 voiced frames on reference notes). */
@@ -211,6 +234,8 @@ class PartyGuest(private val backend: SoundCheckBackend, private val scope: Coro
         val me = _state.value.joined?.memberId
         when (e) {
             is SessionEvent.Transport -> {
+                // frames still waiting in a partial batch belong to the previous take (or song): never send them late
+                if (e.e.state != TransportState.playing || transport?.state != TransportState.playing) synchronized(batch) { batch.clear() }
                 transport = e.e
                 _state.value = _state.value.copy(transport = e.e.state)
                 val id = e.e.trackId

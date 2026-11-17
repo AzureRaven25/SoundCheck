@@ -91,7 +91,7 @@ export function TopBar({ user }: { user: User | null }) {
                   type="button"
                   className="flex w-full items-center gap-2 border-t border-ink-700 px-3 py-2 text-left text-sm hover:bg-ink-700"
                   onClick={async () => {
-                    await supabaseBrowser().auth.signOut();
+                    await supabaseBrowser().auth.signOut({ scope: 'local' }); // this device only: your TV and phone stay signed in
                     setMenu(false);
                     router.push('/');
                     router.refresh();

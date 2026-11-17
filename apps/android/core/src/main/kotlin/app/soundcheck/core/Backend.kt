@@ -44,6 +44,13 @@ data class SessionInfo(val id: String, val code: String)
 data class JoinInfo(val sessionId: String, val memberId: String, val color: String)
 data class ScoreSinger(val memberId: String?, val frames: List<Double>, val latencyMs: Double?, val noiseFloorDb: Double?)
 
+/** A song request in a party's queue. */
+@Serializable
+data class QueueItem(
+    val id: String, @SerialName("track_id") val trackId: String, val title: String,
+    @SerialName("artist_credit") val artistCredit: String, @SerialName("requester_name") val requesterName: String? = null, val status: String,
+)
+
 @Serializable
 data class ScoredSinger(
     @SerialName("member_id") val memberId: String? = null,
@@ -79,7 +86,22 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
     suspend fun ensureSignedIn(displayName: String) {
         if (!isSignedIn) client.auth.signInAnonymously(data = buildJsonObject { put("display_name", displayName) })
     }
-    suspend fun signOut() = client.auth.signOut()
+    /** Signs out this device only (a global sign-out would also sign out your TV or phone). */
+    suspend fun signOut() = client.auth.signOut(io.github.jan.supabase.auth.SignOutScope.LOCAL)
+
+    /**
+     * Confirms the stored session is still live on the server (it can be revoked elsewhere). Database reads only
+     * check the token's signature, so a revoked session would otherwise surface later as failed scoring.
+     * Returns false — and clears the stale session — when it was revoked.
+     */
+    suspend fun validateSession(): Boolean {
+        if (!isSignedIn) return false
+        return runCatching { client.auth.retrieveUserForCurrentSession(updateSession = true); true }.getOrElse { e ->
+            if (e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException) return true   // offline: keep it
+            runCatching { client.auth.signOut(io.github.jan.supabase.auth.SignOutScope.LOCAL) }
+            false
+        }
+    }
 
     /** TV sign-in with a phone (device-auth Edge Function): show userCode, then poll until approved. */
     @Serializable
@@ -239,6 +261,26 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
         val r = client.postgrest.rpc("join_session", buildJsonObject { put("p_code", code); put("p_display_name", displayName); put("p_platform", platform.name) })
             .decodeList<R>().first()
         return JoinInfo(r.sessionId, r.memberId, r.color)
+    }
+
+    /** Re-open a session this user hosts (next song in the same party); null if it's gone or not theirs. */
+    suspend fun resumeSession(id: String, trackId: String?): SessionInfo? = runCatching {
+        @Serializable data class S(val id: String, @SerialName("pairing_code") val code: String, @SerialName("host_id") val hostId: String, val status: String)
+        val s = client.from("karaoke_sessions").select(Columns.raw("id, pairing_code, host_id, status")) { filter { eq("id", id) } }.decodeList<S>().firstOrNull()
+        if (s == null || s.hostId != userId || s.status == "ended") return null
+        client.from("karaoke_sessions").update(buildJsonObject { put("current_track_id", trackId) }) { filter { eq("id", id) } }
+        SessionInfo(s.id, s.code)
+    }.getOrNull()
+
+    /** The party's song queue (queued + playing), oldest request first. */
+    suspend fun sessionQueue(sessionId: String): List<QueueItem> = runCatching {
+        client.postgrest.rpc("session_queue_list", buildJsonObject { put("p_session_id", sessionId) }).decodeList<QueueItem>()
+    }.getOrDefault(emptyList())
+
+    /** Host: finish the current song and start the next request; returns its track id (null when empty). */
+    suspend fun advanceQueue(sessionId: String, skip: Boolean = false): String? {
+        @Serializable data class R(@SerialName("track_id") val trackId: String)
+        return client.postgrest.rpc("advance_queue", buildJsonObject { put("p_session_id", sessionId); put("p_skip", skip) }).decodeList<R>().firstOrNull()?.trackId
     }
 
     fun joinUrl(code: String) = "${config.siteUrl.trimEnd('/')}/join/$code"

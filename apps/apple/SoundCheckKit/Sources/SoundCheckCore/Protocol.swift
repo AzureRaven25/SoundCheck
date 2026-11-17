@@ -134,6 +134,8 @@ public enum SessionEvent: Equatable, Sendable {
     case liveScore(LiveScoreEvent)
     case results(ResultsEvent)
     case hostCommand(HostCommandEvent)
+    /// The session's song queue changed; re-read it (session_queue_list). Carries no data.
+    case queueChanged
 
     private struct Head: Decodable { let type: String; let v: Int }
 
@@ -149,6 +151,7 @@ public enum SessionEvent: Equatable, Sendable {
         case "live_score": return (try? d.decode(LiveScoreEvent.self, from: data)).map(SessionEvent.liveScore)
         case "results": return (try? d.decode(ResultsEvent.self, from: data)).map(SessionEvent.results)
         case "host_command": return (try? d.decode(HostCommandEvent.self, from: data)).map(SessionEvent.hostCommand)
+        case "queue_changed": return .queueChanged
         default: return nil
         }
     }
@@ -164,6 +167,7 @@ public enum SessionEvent: Equatable, Sendable {
         case .liveScore(let x): return try e.encode(x)
         case .results(let x): return try e.encode(x)
         case .hostCommand(let x): return try e.encode(x)
+        case .queueChanged: return Data(#"{"type":"queue_changed","v":\#(SCProtocol.version)}"#.utf8)
         }
     }
 }

@@ -165,3 +165,20 @@ describe('server copy', () => {
     expect(copy.split('\n').slice(1).join('\n')).toBe(src);
   });
 });
+
+describe('frame order', () => {
+  it('scores the same whether frames arrive in time order or not', () => {
+    const notes = [{ start: 1, end: 2, pitch: 69 }, { start: 2.2, end: 3.2, pitch: 71 }];
+    const flat: number[] = [];
+    for (let t = 0.9; t < 3.3; t += 0.01) {
+      const ref = t < 2.1 ? 69 : 71;
+      flat.push(+t.toFixed(3), 440 * 2 ** ((ref - 69) / 12), 0.95, -20);
+    }
+    const sorted = scorePerformance({ notes, frames: flat, keyShift: 0 });
+    // a stale batch from the end of an earlier song arriving first must not wreck the take
+    const shuffled = [...flat.slice(-40), ...flat.slice(0, -40)];
+    const out = scorePerformance({ notes, frames: shuffled, keyShift: 0 });
+    expect(out.score).toBe(sorted.score);
+    expect(out.score).toBeGreaterThan(70);
+  });
+});

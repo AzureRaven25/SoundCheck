@@ -93,14 +93,17 @@ interface Frames { t: Float64Array; c: Float64Array; voiced: Uint8Array; n: numb
 
 function parseFrames(flat: number[], floorDb: number | null | undefined): Frames {
   const n = Math.floor(flat.length / 4);
+  // Frames arrive in network order; everything below scans in song time, so sort first (stable).
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => flat[a * 4]! - flat[b * 4]! || a - b);
   const t = new Float64Array(n), c = new Float64Array(n), voiced = new Uint8Array(n);
   const gate = floorDb == null ? -Infinity : floorDb + 10;
-  for (let i = 0; i < n; i++) {
+  for (let k = 0; k < n; k++) {
+    const i = order[k]!;
     const f0 = flat[i * 4 + 1]!, conf = flat[i * 4 + 2]!, rms = flat[i * 4 + 3]!;
-    t[i] = flat[i * 4]!;
+    t[k] = flat[i * 4]!;
     if (f0 > 0 && conf >= 0.6 && rms >= gate) {
-      voiced[i] = 1;
-      c[i] = hzToCents(f0);
+      voiced[k] = 1;
+      c[k] = hzToCents(f0);
     }
   }
   return { t, c, voiced, n };

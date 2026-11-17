@@ -88,12 +88,15 @@ private enum class Phase { Loading, Lobby, Warming, Singing, Scoring, Results }
  * lobby (QR + code) → band warms up → sing (lyric wipe, melody guide, per-singer trails) → scores.
  */
 @Composable
-fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
+fun StageScreen(initialTrack: String, autostart: Boolean, onExit: () -> Unit) {
+    var trackId by remember { mutableStateOf(initialTrack) }
+    var songNumber by remember { mutableIntStateOf(0) }    // bumps per song, so the same song can be queued again
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val backend = Services.backend
-    val engine = remember { StageEngine(ctx) }
+    var engine by remember { mutableStateOf(StageEngine(ctx)) }
     val host = remember { PartyHost(backend, scope, Platform.firetv).also { h -> h.position = { engine.position() } } }
+    val queue by host.queue.collectAsState()
     var phase by remember { mutableStateOf(Phase.Loading) }
     var data by remember { mutableStateOf<StageData?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -117,6 +120,11 @@ fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
         val voiced = singers.filter { host.framesOf(it.memberId).size >= 400 }
         if (voiced.isEmpty()) { message = "We didn’t hear any phones. Check that each singer turned their mic on."; results = emptyList(); phase = Phase.Results; return }
         phase = Phase.Scoring
+        if (BuildConfig.DEBUG) voiced.forEach { s ->
+            val f = host.framesOf(s.memberId)
+            val voicedN = (f.indices step 4).count { f[it + 1] > 0 && f[it + 2] >= 0.6 }
+            println("[soundcheck] scoring ${s.name}: ${f.size / 4} frames, t ${f.firstOrNull()}..${f.getOrNull(f.size - 4)}, voiced $voicedN, floor ${s.noiseFloorDb}, enginePos ${engine.position()}")
+        }
         runCatching {
             backend.score(d.track.id, sid, keyShift, voiced.map { ScoreSinger(it.memberId, host.framesOf(it.memberId), null, it.noiseFloorDb) })
         }.onSuccess { scored ->
@@ -124,7 +132,7 @@ fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
             results = scored.mapNotNull { r -> byId[r.memberId]?.let { it to r.asResult() } }
             host.send(SessionEvent.Results(ResultsEvent(trackId, scored.map { it.asResult() })))
             message = null
-        }.onFailure { message = "Scoring failed. Please try again." }
+        }.onFailure { println("[soundcheck] scoring failed: ${it.message}"); message = "Scoring failed. Please try again." }
         phase = Phase.Results
     }
 
@@ -141,14 +149,31 @@ fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
         }.onFailure { message = "Couldn’t load the karaoke tracks."; phase = Phase.Lobby }
     }
 
-    LaunchedEffect(trackId) {
+    LaunchedEffect(trackId, songNumber) {
+        phase = Phase.Loading; data = null; message = null; results = emptyList(); keyShift = 0
         runCatching { backend.stageData(trackId) }.onSuccess { r ->
             when (r) {
-                is StageLoad.Ready -> { data = r.data; host.open(trackId); phase = Phase.Lobby }
-                is StageLoad.NotReady -> message = "“${r.title}” isn’t karaoke-ready yet."
+                is StageLoad.Ready -> {
+                    data = r.data
+                    if (session == null) host.open(trackId) else host.switchTrack(trackId)   // same party, phones stay joined
+                    phase = Phase.Lobby
+                }
+                is StageLoad.NotReady -> message = "“${r.title}” isn’t karaoke-ready yet. Upload your copy on the SoundCheck website."
                 StageLoad.SignedOut -> message = "Sign in on the Account tab to sing."
             }
         }.onFailure { message = "Couldn’t open Stage: ${it.message}" }
+    }
+
+    // next requested song: same session, fresh players
+    suspend fun singNext(skip: Boolean = false) {
+        val next = host.advance(skip) ?: return
+        engine.release(); engine = StageEngine(ctx)
+        trackId = next
+        songNumber++
+    }
+    // debug-only: also take the next request automatically after the results
+    LaunchedEffect(phase, queue) {
+        if (autostart && phase == Phase.Results && queue.any { it.status == "queued" }) { delay(3000); singNext() }
     }
     // debug-only autostart (see MainActivity) once a phone's mic is ready
     LaunchedEffect(singers, phase) {
@@ -167,8 +192,12 @@ fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
     Box(Modifier.fillMaxSize().background(SC.ink950), contentAlignment = Alignment.Center) {
         val d = data
         when {
-            phase == Phase.Loading || d == null -> Text(message ?: "Setting the stage…", color = SC.ink300, fontSize = 22.sp)
-            phase == Phase.Lobby -> Lobby(d, session?.code, singers, hostError ?: message, onStart = { scope.launch { start() } })
+            phase == Phase.Loading || d == null -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(message ?: "Setting the stage…", color = SC.ink300, fontSize = 22.sp, textAlign = TextAlign.Center)
+                // a requested song that isn't karaoke-ready: move past it without losing the party
+                if (message != null && session != null && queue.any { it.status == "queued" }) Button(onClick = { scope.launch { singNext(skip = true) } }) { Text("Skip to the next request") }
+            }
+            phase == Phase.Lobby -> Lobby(d, session?.code, singers, hostError ?: message, queue.filter { it.status == "queued" }, onStart = { scope.launch { start() } })
             phase == Phase.Warming -> Text("Warming up the band…", color = SC.ink300, fontSize = 22.sp)
             phase == Phase.Singing -> Singing(d, engine, host, singers, rates, keyShift, guide,
                 onToggle = {
@@ -182,13 +211,14 @@ fun StageScreen(trackId: String, autostart: Boolean, onExit: () -> Unit) {
                 },
                 onGuide = { guide = if (guide > 0f) 0f else 0.6f; engine.setGuide(guide) })
             phase == Phase.Scoring -> Text("Scoring everyone…", color = SC.ink300, fontSize = 22.sp)
-            else -> ResultsView(results, message, onAgain = { results = emptyList(); message = null; phase = Phase.Lobby }, onDone = onExit)
+            else -> ResultsView(results, message, queue.firstOrNull { it.status == "queued" },
+                onAgain = { results = emptyList(); message = null; phase = Phase.Lobby }, onNext = { scope.launch { singNext() } }, onDone = onExit)
         }
     }
 }
 
 @Composable
-private fun Lobby(d: StageData, code: String?, singers: List<PartySinger>, error: String?, onStart: () -> Unit) {
+private fun Lobby(d: StageData, code: String?, singers: List<PartySinger>, error: String?, upNext: List<app.soundcheck.core.QueueItem>, onStart: () -> Unit) {
     val focus = remember { FocusRequester() }
     val anyReady = singers.any { it.mic == MicState.ready || it.mic == MicState.live }
     // the Start button is disabled (unfocusable) until a phone's mic is ready: hand focus to it then
@@ -216,6 +246,13 @@ private fun Lobby(d: StageData, code: String?, singers: List<PartySinger>, error
                 }
             }
             error?.let { Text(it, color = SC.danger) }
+            if (upNext.isEmpty()) Text("Singers can request songs from their phones.", color = SC.ink500, fontSize = 15.sp)
+            else Column(Modifier.semantics { contentDescription = "Up next" }) {
+                Text("UP NEXT", color = SC.ink300, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                upNext.take(4).forEachIndexed { i, q ->
+                    Text("${i + 1}. ${q.title} · ${q.artistCredit}" + (q.requesterName?.let { " — $it" } ?: ""), color = SC.ink50, fontSize = 16.sp, maxLines = 1)
+                }
+            }
             Button(onClick = onStart, enabled = anyReady, modifier = Modifier.focusRequester(focus)) { Text("Start singing", fontSize = 20.sp) }
         }
     }
@@ -307,15 +344,19 @@ private fun PitchHud(notes: List<RefNote>, keyShift: Int, time: Double, trails: 
 }
 
 @Composable
-private fun ResultsView(results: List<Pair<PartySinger, PerformanceResult>>, message: String?, onAgain: () -> Unit, onDone: () -> Unit) {
+private fun ResultsView(
+    results: List<Pair<PartySinger, PerformanceResult>>, message: String?, next: app.soundcheck.core.QueueItem?,
+    onAgain: () -> Unit, onNext: () -> Unit, onDone: () -> Unit,
+) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
         Title("SoundCheck Score", 52)
         message?.let { Text(it, color = SC.danger, fontSize = 18.sp) }
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) { results.forEach { (s, r) -> ScoreCard(s.name, SC.hex(s.color), r) } }
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Button(onClick = onAgain, modifier = Modifier.focusRequester(focus)) { Text("Sing again") }
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (next != null) Button(onClick = onNext, modifier = Modifier.focusRequester(focus)) { Text("Sing next: ${next.title}") }
+            if (next == null) Button(onClick = onAgain, modifier = Modifier.focusRequester(focus)) { Text("Sing again") } else OutlinedButton(onClick = onAgain) { Text("Sing again") }
             OutlinedButton(onClick = onDone) { Text("Done") }
         }
     }

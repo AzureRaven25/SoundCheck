@@ -72,7 +72,12 @@ M8 + polish (2026-11-17):
   - iOS code field didn't clean what you typed.
   - The "ABC123" placeholder wasn't a valid code (codes never use 0, 1, I or O).
   - Android solo crashed because the mic thread touched the player; it now reads a snapshot.
-- **Not yet:** native TV apps don't show the party queue yet (web host only).
+- **Party queue on the native TVs (Apple TV + Fire TV):** "Up next" in the lobby; "Sing next" or "Skip" after each song, in the same session. Two-song parties verified on both simulators/emulators: Apple TV 83/83, Fire TV 81/82.
+- **Bugs found by those runs and fixed:**
+  - Sign-out ended every session for the account (the SDK default). It now signs out this device only, and apps check their stored session on launch.
+  - A partial pitch batch from the end of one song was sent with the next, and the scorer assumed time order. Phones now drop it, and the scorer sorts frames.
+  - Queuing the song that just played did nothing.
+  - On Apple TV, the second song's "Start singing" never got focus.
 
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);

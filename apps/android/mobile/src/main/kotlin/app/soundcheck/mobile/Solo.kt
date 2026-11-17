@@ -96,6 +96,7 @@ fun SoloHome(devEmail: String?, devPassword: String?, devTrack: String?) {
     }
     LaunchedEffect(Unit) {
         backend.awaitSession()
+        backend.validateSession()
         if (BuildConfig.DEBUG && devEmail != null && devPassword != null && !backend.hasAccount)
             runCatching { backend.signIn(devEmail, devPassword) }
         refresh()

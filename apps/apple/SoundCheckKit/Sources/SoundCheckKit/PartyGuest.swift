@@ -57,6 +57,8 @@ public final class PartyGuest {
         let me = joined?.memberId
         switch e {
         case .transport(let t):
+            // frames still waiting in a partial batch belong to the previous take (or song): never send them late
+            if t.state != .playing || transport?.state != .playing { batch = [] }
             transport = t
             transportState = t.state
             if let id = t.trackId, id != lyricsFor {

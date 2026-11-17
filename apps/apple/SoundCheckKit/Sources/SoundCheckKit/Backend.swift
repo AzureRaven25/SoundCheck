@@ -62,7 +62,22 @@ public final class SoundCheckBackend: Sendable {
             _ = try await client.auth.signInAnonymously(data: ["display_name": .string(displayName)])
         }
     }
-    public func signOut() async throws { try await client.auth.signOut() }
+    /// Signs out this device only (a global sign-out would also sign out your TV or phone).
+    public func signOut() async throws { try await client.auth.signOut(scope: .local) }
+
+    /// Confirms the stored session is still live on the server (it can be revoked elsewhere). Database reads
+    /// only check the token's signature, so a revoked session would otherwise surface later as failed
+    /// scoring. Returns false — and clears the stale session — when it was revoked.
+    @discardableResult
+    public func validateSession() async -> Bool {
+        guard client.auth.currentUser != nil else { return false }
+        do { _ = try await client.auth.user(); return true }
+        catch {
+            if (error as? URLError) != nil { return true }      // offline: keep the session, retry later
+            try? await client.auth.signOut(scope: .local)
+            return false
+        }
+    }
 
     /// TV sign-in with a phone (device-auth Edge Function): show `userCode`, then poll until approved.
     public struct DeviceSignIn: Decodable, Sendable {
@@ -235,7 +250,41 @@ public final class SoundCheckBackend: Sendable {
         return JoinInfo(sessionId: j.session_id, memberId: j.member_id, color: j.color)
     }
 
+    /// Re-open a session this user hosts (next song in the same party); nil if it's gone or not theirs.
+    public func resumeSession(id: String, trackId: String?) async -> SessionInfo? {
+        struct S: Decodable { let id: String; let pairing_code: String; let host_id: String; let status: String }
+        guard let rows: [S] = try? await client.from("karaoke_sessions").select("id, pairing_code, host_id, status").eq("id", value: id).execute().value,
+              let s = rows.first, s.host_id.lowercased() == currentUser?.id.uuidString.lowercased(), s.status != "ended" else { return nil }
+        struct U: Encodable { let current_track_id: String? }
+        _ = try? await client.from("karaoke_sessions").update(U(current_track_id: trackId)).eq("id", value: id).execute()
+        return SessionInfo(id: s.id, code: s.pairing_code)
+    }
+
+    /// The party's song queue (queued + playing), oldest request first.
+    public func sessionQueue(sessionId: String) async -> [QueueItem] {
+        struct P: Encodable { let p_session_id: String }
+        return (try? await client.rpc("session_queue_list", params: P(p_session_id: sessionId)).execute().value) ?? []
+    }
+
+    /// Host: finish the current song and start the next request; returns its track id (nil when the queue is empty).
+    public func advanceQueue(sessionId: String, skip: Bool = false) async throws -> String? {
+        struct P: Encodable { let p_session_id: String; let p_skip: Bool }
+        struct R: Decodable { let track_id: String }
+        let r: [R] = try await client.rpc("advance_queue", params: P(p_session_id: sessionId, p_skip: skip)).execute().value
+        return r.first?.track_id
+    }
+
     public func joinURL(code: String) -> URL { config.siteURL.appendingPathComponent("join").appendingPathComponent(code) }
+}
+
+/// A song request in a party's queue.
+public struct QueueItem: Decodable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let track_id: String
+    public let title: String
+    public let artist_credit: String
+    public let requester_name: String?
+    public let status: String          // queued | playing
 }
 
 /// One singer's official result as returned by score-performance.

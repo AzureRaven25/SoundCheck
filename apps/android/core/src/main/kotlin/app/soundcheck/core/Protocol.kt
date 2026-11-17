@@ -89,6 +89,8 @@ sealed interface SessionEvent {
     data class LiveScore(val e: LiveScoreEvent) : SessionEvent
     data class Results(val e: ResultsEvent) : SessionEvent
     data class HostCommand(val e: HostCommandEvent) : SessionEvent
+    /** The session's song queue changed; re-read it (session_queue_list). Carries no data. */
+    data object QueueChanged : SessionEvent
 
     fun toJson(): JsonObject = with(SCProtocol.json) {
         when (this@SessionEvent) {
@@ -96,6 +98,9 @@ sealed interface SessionEvent {
             is ClockPing -> encodeToJsonElement(e); is ClockPong -> encodeToJsonElement(e)
             is MicStatus -> encodeToJsonElement(e); is LiveScore -> encodeToJsonElement(e)
             is Results -> encodeToJsonElement(e); is HostCommand -> encodeToJsonElement(e)
+            QueueChanged -> kotlinx.serialization.json.buildJsonObject {
+                put("type", kotlinx.serialization.json.JsonPrimitive("queue_changed")); put("v", kotlinx.serialization.json.JsonPrimitive(SCProtocol.VERSION))
+            }
         } as JsonObject
     }
 
@@ -114,6 +119,7 @@ sealed interface SessionEvent {
                 "live_score" -> LiveScore(j.decodeFromJsonElement(o))
                 "results" -> Results(j.decodeFromJsonElement(o))
                 "host_command" -> HostCommand(j.decodeFromJsonElement(o))
+                "queue_changed" -> QueueChanged
                 else -> null
             }
         }.getOrNull()

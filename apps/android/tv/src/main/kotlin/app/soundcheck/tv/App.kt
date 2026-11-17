@@ -72,6 +72,7 @@ fun SoundCheckTv(dev: DevLaunch) {
     var stage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         backend.awaitSession()
+        backend.validateSession()
         if (dev.email != null && dev.password != null && !backend.isSignedIn) runCatching { backend.signIn(dev.email, dev.password) }
         signedIn = backend.isSignedIn
         if (dev.stage != null && signedIn) stage = dev.stage
