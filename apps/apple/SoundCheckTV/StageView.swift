@@ -20,6 +20,7 @@ struct StageView: View {
     @State private var guide: Float = 0
     @State private var rates: [String: Double] = [:]
     @State private var results: [(PartySinger, PerformanceResult)] = []
+    @FocusState private var startFocused: Bool
 
     var body: some View {
         ZStack {
@@ -64,7 +65,7 @@ struct StageView: View {
                 Text(d.track.title).font(SC.display(52, .black)).lineLimit(2)
                 Text(d.track.artistCredit).font(.title3).foregroundStyle(SC.ink300)
                 if let code = host.session?.code {
-                    Text("Scan with your phone, or open \(model.backend.config.siteURL.host() ?? "")/join and enter").foregroundStyle(SC.ink300)
+                    Text("Scan with your phone, or open \(joinHost)/join and enter").foregroundStyle(SC.ink300)
                     Text(code).font(SC.display(110, .black)).kerning(18).accessibilityLabel("Pairing code \(code.map(String.init).joined(separator: " "))")
                 }
                 VStack(alignment: .leading, spacing: 10) {
@@ -80,9 +81,22 @@ struct StageView: View {
                 if let err = host.error ?? message { Text(err).foregroundStyle(SC.danger) }
                 Button { Task { await start() } } label: { Label("Start singing", systemImage: "play.fill").font(.title3.bold()) }
                     .disabled(host.readySingers.isEmpty)
+                    .focused($startFocused)
+                    // the button is disabled (unfocusable) until a phone's mic is ready: hand focus to it then
+                    .onChange(of: host.readySingers.count) { _, n in
+                        if n > 0 { startFocused = true }
+                        #if DEBUG
+                        if n > 0, ProcessInfo.processInfo.environment["SC_DEV_AUTOSTART"] != nil, phase == .lobby { Task { await start() } }
+                        #endif
+                    }
             }
         }
         .padding(80)
+    }
+
+    private var joinHost: String {
+        let u = model.backend.config.siteURL
+        return (u.host() ?? "") + (u.port.map { ":\($0)" } ?? "")
     }
 
     // MARK: Singing

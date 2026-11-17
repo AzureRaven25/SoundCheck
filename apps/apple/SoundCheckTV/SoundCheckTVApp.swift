@@ -12,6 +12,8 @@ struct SoundCheckTVApp: App {
             RootView()
                 .environment(model)
                 .preferredColorScheme(.dark)
+                .task { await model.devAutostart() }
+                .fullScreenCover(item: Binding(get: { model.devStage }, set: { model.devStage = $0 })) { StageView(trackId: $0.id).environment(model) }
         }
     }
 }
@@ -23,6 +25,22 @@ final class AppModel {
     var signedIn: Bool
     init() { signedIn = backend.currentUser != nil }
     func refreshAuth() { signedIn = backend.currentUser != nil }
+
+    struct DevStage: Identifiable { let id: String }
+    var devStage: DevStage?
+    /// DEBUG builds only: SC_DEV_EMAIL / SC_DEV_PASSWORD sign in with a local-stack test account and
+    /// SC_DEV_STAGE=<trackId> opens Stage, so simulator tests needn't type on the TV keyboard.
+    func devAutostart() async {
+        #if DEBUG
+        let env = ProcessInfo.processInfo.environment
+        if let e = env["SC_DEV_EMAIL"], let p = env["SC_DEV_PASSWORD"], backend.currentUser == nil {
+            do { try await backend.signIn(email: e, password: p) } catch { NSLog("[soundcheck] dev sign-in failed: \(error)") }
+            refreshAuth()
+            NSLog("[soundcheck] dev sign-in: signedIn=\(signedIn)")
+        }
+        if let t = env["SC_DEV_STAGE"], signedIn { devStage = DevStage(id: t) }
+        #endif
+    }
 }
 
 extension View {
