@@ -42,7 +42,22 @@ if (cmd === 'prepare') {
       const ac = new AudioContext();
       const buf = await ac.decodeAudioData(await (await fetch('/__e2e/fake-mic.wav')).arrayBuffer());
       const dest = ac.createMediaStreamDestination();
-      window.__fakeMicSing = (from) => { void ac.resume(); const s = ac.createBufferSource(); s.buffer = buf; s.connect(dest); s.start(0, Math.max(0, from)); };
+      // Like a person listening to the TV, the simulated singer follows the shared song clock: if the
+      // recording drifts from it by > 60 ms (e.g. a TV whose audio runs slightly slow), it re-cues.
+      let src = null, startedAt = 0, startedFrom = 0;
+      const cue = (from) => {
+        if (src) { try { src.stop(); } catch {} }
+        src = ac.createBufferSource(); src.buffer = buf; src.connect(dest);
+        startedAt = ac.currentTime; startedFrom = Math.max(0, from); src.start(0, startedFrom);
+      };
+      window.__fakeMicSing = (from) => {
+        void ac.resume(); cue(from);
+        setInterval(() => {
+          const j = window.__soundcheckJoin; if (!j?.playing()) return;
+          const want = j.position(), have = startedFrom + (ac.currentTime - startedAt);
+          if (Math.abs(want - have) > 0.06) { window.__recues = (window.__recues ?? 0) + 1; cue(want); }
+        }, 250);
+      };
       return dest.stream;
     };
   });
@@ -57,6 +72,7 @@ if (cmd === 'prepare') {
   console.log('singing from', await page.evaluate(() => window.__soundcheckJoin.position().toFixed(2)));
   const live = await page.getByText(/On pitch \d+%/).textContent({ timeout: 30_000 }).catch(() => 'no live score');
   console.log('live:', live);
+  console.log('re-cues so far:', await page.evaluate(() => window.__recues ?? 0));
   const card = page.getByRole('dialog', { name: 'Your score' });
   await card.waitFor({ timeout: 120_000 });
   console.log('SCORE', await card.locator('.text-8xl').textContent());

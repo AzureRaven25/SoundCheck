@@ -37,6 +37,21 @@ M6 so far (2026-11-17):
   - XCUITests.
   - Physical-device runs; these need your Apple Developer account.
 
+M7 so far (2026-11-17):
+- `apps/android` (Gradle; build with `./gradlew :tv:assembleDebug :mobile:assembleDebug`).
+  - `:core` is plain Kotlin: protocol, clock sync, timing, YIN, a smoothed playback clock, supabase-kt backend and Realtime party host/guest. 10 JVM tests, run against the same golden fixtures as the other clients.
+  - `:tv` (Fire TV / Android TV, Compose for TV + Media3): browse, search, preview, account, and Stage party host with QR code.
+  - `:mobile` (Android phone): join by code or `soundcheck://join/CODE` link; AudioRecord mic with echo cancellation.
+- Verified on emulators:
+  - Fire TV hosting a web phone scored 83, the same as Apple TV.
+  - Native Android phone with Fire TV: deep link, mic, lyric sync, and the score card delivered to the phone.
+- Found on the emulator: ExoPlayer's playback position jitters ±150 ms, and the audio runs about 3% slow. A smoothed clock plus a 40 ms re-anchor threshold keeps phones steady.
+- Still to do:
+  - Real Fire TV run (needs ADB debugging on).
+  - Google Play / Amazon Appstore packaging.
+  - Solo singing on the phone.
+  - UI tests.
+
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);
 - tiered `catalog-search` (Supabase → Turso → MusicBrainz live);

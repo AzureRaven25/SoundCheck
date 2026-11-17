@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SoundCheck" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/ink950</item>
+        <item name="android:statusBarColor">@color/ink950</item>
+        <item name="android:navigationBarColor">@color/ink950</item>
+    </style>
+    <color name="ink950">#FF07070B</color>
+    <string name="app_name">SoundCheck</string>
+</resources>
