@@ -33,3 +33,16 @@ def test_export_and_search_long_tail(conn, fake_dump):
     assert search(ex, "zoe lantern")[0][2] == "Paper Lanterns"              # diacritics removed
     assert export(conn, ex, 1, 100, log=lambda *_: None) == 4               # re-export is idempotent
     assert ex.execute_many([("select count(*) from songs", ())])[0][0][0] == 4
+
+
+def test_apostrophes_are_ignored(conn, fake_dump):
+    from karaoke_catalog.turso_export import rebuild_index
+    load_staging(conn, fake_dump)
+    run_ranked_subset(conn)
+    ex = SqliteExecutor()
+    export(conn, ex, 1, 100, log=lambda *_: None)
+    ex.execute_many([("update songs set title = ? where id = ?", ("Don’t Signal", gid(108)))])
+    rebuild_index(ex, log=lambda *_: None)
+    assert match_query("Don’t Stop") == match_query("dont stop") == '"dont" "stop"*'
+    for q in ("dont signal", "don't signal", "don’t sig"):
+        assert [h[2] for h in search(ex, q)] == ["Don’t Signal"], q

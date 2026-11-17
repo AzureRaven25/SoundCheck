@@ -6,6 +6,8 @@ Deno.test('matchQuery quotes words and prefixes the last', () => {
   assertEquals(matchQuery('a" OR title:x'), '"a" "or" "title" "x"');
   assertEquals(matchQuery('Beyoncé halo'), '"beyoncé" "halo"*');
   assertEquals(matchQuery('???'), '');
+  assertEquals(matchQuery('Don\u2019t Stop'), '"dont" "stop"*');
+  assertEquals(matchQuery("don't stop"), '"dont" "stop"*');
 });
 
 Deno.test('searchTurso parses a Hrana pipeline response', async () => {

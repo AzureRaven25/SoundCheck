@@ -112,11 +112,17 @@ class TursoHttp(Executor):
         reqs = [{"type": "execute", "stmt": {"sql": "BEGIN"}}]
         reqs += [{"type": "execute", "stmt": {"sql": sql, "args": [_hrana_value(a) for a in args]}} for sql, args in statements]
         reqs += [{"type": "execute", "stmt": {"sql": "COMMIT"}}, {"type": "close"}]
-        for attempt in range(4):
-            r = self.client.post("/v2/pipeline", json={"requests": reqs})
+        for attempt in range(6):
+            try:
+                r = self.client.post("/v2/pipeline", json={"requests": reqs})
+            except httpx.TransportError:  # dropped connection / timeout: the batch is idempotent, so retry
+                if attempt == 5:
+                    raise
+                time.sleep(2 ** attempt)
+                continue
             if r.status_code < 300:
                 break
-            if r.status_code in (429, 500, 502, 503, 504) and attempt < 3:
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < 5:
                 time.sleep(2 ** attempt)
                 continue
             raise RuntimeError(f"turso pipeline failed ({r.status_code}): {r.text[:500]}")
@@ -141,8 +147,27 @@ def export_window(conn: psycopg.Connection, ex: Executor, start: int, end: int, 
     return len(rows)
 
 
-def rebuild_index(ex: Executor) -> None:
-    ex.execute_many([("insert into songs_fts(songs_fts) values ('rebuild')", ())])
+APOSTROPHES = ("'", "’", "‘")
+
+
+def strip_apostrophes_sql(column: str) -> str:
+    expr = column
+    for a in APOSTROPHES:
+        expr = f"replace({expr}, '{a.replace(chr(39), chr(39) * 2)}', '')"
+    return expr
+
+
+def rebuild_index(ex: Executor, chunk: int = 20000, log=print) -> None:
+    """(Re)build the FTS index in chunks: one 'rebuild' over ~1M rows is too big for a single HTTP request."""
+    lo, hi = ex.execute_many([("select coalesce(min(rank), 0), coalesce(max(rank), -1) from songs", ())])[0][0]
+    lo, hi = int(lo), int(hi)
+    ex.execute_many([("insert into songs_fts(songs_fts) values ('delete-all')", ())])
+    for s in range(lo, hi + 1, chunk):
+        # apostrophes removed so "dont" / "don't" / "don’t" all match (see match_query)
+        ex.execute_many([("insert into songs_fts(rowid, title, artist_credit) "
+                          f"select rank, {strip_apostrophes_sql('title')}, {strip_apostrophes_sql('artist_credit')} "
+                          "from songs where rank >= ? and rank < ?", (s, s + chunk))])
+    log(f"  search index rebuilt for ranks {lo:,}-{hi:,}")
 
 
 def export(conn: psycopg.Connection, ex: Executor, start: int, end: int, window: int = 20000, log=print) -> int:
@@ -154,14 +179,18 @@ def export(conn: psycopg.Connection, ex: Executor, start: int, end: int, window:
         n = export_window(conn, ex, s, e)
         total += n
         log(f"  ranks {s:,}-{e - 1:,}: {n:,} songs ({time.perf_counter() - t0:.0f}s)")
-    rebuild_index(ex)
-    ex.execute_many([("insert or replace into meta (key, value) values ('ranks', ?)", (json.dumps([start, end - 1]),))])
+    rebuild_index(ex, log=log)
+    lo, hi = ex.execute_many([("select min(rank), max(rank) from songs", ())])[0][0]
+    ex.execute_many([("insert or replace into meta (key, value) values ('ranks', ?)", (json.dumps([lo, hi]),))])
     return total
 
 
 def match_query(q: str) -> str:
     """FTS5 query: every word must match, the last one as a prefix; words are quoted so input can't inject syntax."""
-    words = [w for w in "".join(c if c.isalnum() else " " for c in q.lower()).split() if w][:8]
+    q = q.lower()
+    for a in APOSTROPHES:  # the index strips apostrophes too
+        q = q.replace(a, "")
+    words = [w for w in "".join(c if c.isalnum() else " " for c in q).split() if w][:8]
     if not words:
         return ""
     parts = [f'"{w}"' for w in words]

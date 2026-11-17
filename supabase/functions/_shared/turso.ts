@@ -14,7 +14,8 @@ export interface TursoSong {
 
 /** Same rules as turso_export.match_query: quoted words (no FTS syntax injection), last word as prefix. */
 export function matchQuery(q: string): string {
-  const words = q.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(Boolean).slice(0, 8);
+  // apostrophes removed (the index strips them too) so "dont" / "don't" / "don’t" all match
+  const words = q.toLowerCase().replace(/['‘’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(Boolean).slice(0, 8);
   if (!words.length) return '';
   const parts = words.map((w) => `"${w}"`);
   if (words[words.length - 1]!.length >= 2) parts[parts.length - 1] += '*';

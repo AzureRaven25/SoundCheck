@@ -27,7 +27,7 @@ M2 delivered:
 - provider cache + global throttle.
 
 M2 leftovers:
-- Turso export runs once `TURSO_AUTH_TOKEN` is set.
+- ~~Turso export~~ ✅ live: ranks 100,001–1,000,000 in Turso. Function secrets are set and cloud promotion is verified.
 - Copying artwork into Storage (resized WebP + perceptual hash) is deferred to M3, when the web image pipeline exists. Provider URLs are stable CDN links meanwhile.
 - MusicBrainz contact string for the User-Agent (`PROVIDER_CONTACT` function secret).
 - Search latency for very short words (~1.5 s) needs tuning.
