@@ -11,7 +11,9 @@ Goal: scores that are **fair across voices** (any octave, any key), **consistent
 
 ## 0. Preparation
 1. **Voicing gate:** a frame is *voiced* if `f0 > 0`, `conf ≥ 0.6` and `rms ≥ noiseFloor + 10 dB` (the floor comes from calibration).
-2. **Latency alignment:** choose the global offset `δ ∈ [−400 ms, +400 ms]` (10 ms steps) that maximises the number of voiced frames within ±100 cents (octave-folded) of the active reference note. Apply `t ← t − δ`. This absorbs device and network latency automatically, and it's stored in the details.
+2. **Latency alignment:** choose the global offset `δ` (10 ms steps) that maximises the number of voiced frames within ±100 cents (octave-folded) of the active reference note. Apply `t ← t − δ`, and store it in the details.
+   - **Latency unknown:** search `δ ∈ [−400, +400] ms`. This absorbs device and network latency, but it would also forgive a singer who is consistently late.
+   - **Latency calibrated** (the phone measured it): search only ±80 ms around the measured value, so real lateness is still scored.
 3. **Octave choice per phrase:** for each phrase, pick the octave offset `o ∈ {−24, −12, 0, +12, +24}` semitones that minimises the median absolute cents error. A baritone singing a soprano line an octave down loses nothing. The choice is reported.
 4. **Excluded material:**
    - Reference notes with `conf < 0.5` (unreliable detection, e.g. spoken or breathy sections) get weight 0.5.
@@ -31,20 +33,22 @@ For each voiced frame inside a reference note, `e = |cents(f0) − 100·(pitch +
 - Also reported: a mean `Δ` ("you tend to come in 120 ms late").
 
 ## 3. Rhythm (20%)
-- **Transitions:** for consecutive notes with different pitch (gap < 150 ms), the singer's transition time is when their pitch crosses the midpoint between the two target pitches. Score with the same curve as onset, using tolerances of 80 ms and 300 ms.
+- **Transitions:** for consecutive notes with different pitch (gap < 150 ms), the singer's transition time is when their pitch crosses the midpoint between the two target pitches, *after having been on the first note's side*. Without that requirement, a late singer still on the note before would register an instant transition. Score with the same curve as onset, using tolerances of 80 ms and 300 ms.
 - **Consistency:** `1 − min(1, σ(Δ_all) / 200 ms)`, which penalises erratic timing even when it averages out.
 - **Rhythm = 0.7·mean(transition) + 0.3·consistency.**
 
 ## 4. Stability (15%)
 On attempted notes ≥ 400 ms long:
-1. Take the voiced pitch track in cents and subtract a 150 ms moving average. This removes intentional vibrato (4–8 Hz, which survives as a periodic residual) and slow drift is measured separately.
+1. Take the voiced pitch track in cents and subtract a 250 ms moving average (longer than any vibrato cycle). This removes intentional vibrato (4–8 Hz, which survives as a periodic residual) and slow drift is measured separately.
 2. **Jitter** = std of the residual after removing a fitted sinusoid at 4–8 Hz (if vibrato is detected, its regularity counts as a bonus).
 3. **Drift** = |slope| of the moving average across the note.
 4. `stab = 1` at jitter ≤ 15 cents, falling linearly to `0` at 80 cents; minus `min(0.3, drift/200 cents per s)`.
 5. **Stability** = duration-weighted mean.
 
 ## Overall
-**Score = round(100 · (0.40·Pitch + 0.25·Timing + 0.20·Rhythm + 0.15·Stability))**
+**Score = round(100 · Completion · (0.40·Pitch + 0.25·Timing + 0.20·Rhythm + 0.15·Stability))**
+
+`Completion = 0.5 + 0.5·min(1, coverage / 0.9)`. Pitch, rhythm and stability only judge the notes the singer attempted, so without this factor a perfectly sung half-song would still score about 87. With it, that half-song scores about 68, and full credit starts at 90% coverage.
 
 | Grade | Score |
 |---|---|
@@ -77,3 +81,8 @@ Every performance stores `scoring_version`. Golden fixtures in `packages/contrac
 - missing phrases;
 - wobbly.
 Any change to the weights or curves must update the fixtures intentionally.
+
+## Implementation
+- **Code:** `packages/scoring` (TypeScript), version `1.0.0`.
+- **Golden tests:** `packages/scoring/test/scoring.test.ts`. A deterministic simulated singer covers perfect, octave-down, transposed, semitone-flat, within-50-cents, unknown-latency, calibrated-late, half-skipped, wobbly vs vibrato, silence, and the noise gate.
+- **Server copy:** the `score-performance` Edge Function uses a generated copy of the package (`npm run sync:scoring`). A test fails if the two ever differ.

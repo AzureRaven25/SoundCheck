@@ -1,0 +1,88 @@
+/**
+ * score-performance: compute and store official SoundCheck Scores (docs/SCORING.md).
+ *
+ * Called by the host at the end of a song with each singer's pitch frames (collected over the
+ * session's Realtime channel), or by a solo singer for their own run. Scores are written with the
+ * service role, so clients can't insert or alter performances (RLS has no client insert policy).
+ *
+ * Trust model: the caller must be the session host (or the singer, for solo). Members must belong
+ * to the session. The host relays phone frames, so a malicious host could fabricate frames for their
+ * own party; scores are therefore flagged with how they were captured, and global leaderboards can
+ * later be restricted to verified captures.
+ *
+ * POST { track_id, session_id?, key_shift?, singers: [{ member_id?, frames: number[], latency_ms?, noise_floor_db? }] }
+ *   → { results: [{ member_id, user_id, performance_id, score, grade, pitch, timing, rhythm, stability, feedback }] }
+ */
+import { adminClient, handle, json } from '../_shared/runtime.ts';
+import { scorePerformance, SCORING_VERSION, type Phrase, type RefNote } from '../_shared/scoring.ts';
+
+const MAX_FRAMES = 4 * 100 * 60 * 15; // 15 minutes of 10 ms frames
+
+interface SingerIn { member_id?: string; frames: number[]; latency_ms?: number | null; noise_floor_db?: number | null }
+
+Deno.serve((req) =>
+  handle(req, async (body) => {
+    // who is calling: validate their JWT with Supabase Auth
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const { data: { user } } = token ? await adminClient().auth.getUser(token) : { data: { user: null } };
+    if (!user) return json({ error: 'sign in required' }, 401);
+
+    const trackId = String(body.track_id ?? '');
+    const sessionId = body.session_id ? String(body.session_id) : null;
+    const keyShift = Math.max(-12, Math.min(12, Math.round(Number(body.key_shift ?? 0)) || 0));
+    const singers = (Array.isArray(body.singers) ? body.singers : []) as SingerIn[];
+    if (!trackId || !singers.length || singers.length > 8) return json({ error: 'track_id and 1–8 singers required' }, 400);
+    for (const s of singers) {
+      if (!Array.isArray(s.frames) || s.frames.length % 4 !== 0 || s.frames.length > MAX_FRAMES || s.frames.some((x) => typeof x !== 'number' || !isFinite(x))) {
+        return json({ error: 'frames must be a flat numeric array of [t, f0, conf, rmsDb] quadruples' }, 400);
+      }
+    }
+    const db = adminClient();
+
+    // resolve each singer to a user, enforcing session membership / host rights
+    const resolved: { memberId: string | null; userId: string; s: SingerIn }[] = [];
+    if (sessionId) {
+      const { data: session } = await db.from('karaoke_sessions').select('id, host_id, status').eq('id', sessionId).maybeSingle();
+      if (!session) return json({ error: 'session not found' }, 404);
+      const { data: members } = await db.from('session_members').select('id, user_id, kicked').eq('session_id', sessionId);
+      const byId = new Map((members ?? []).map((m) => [m.id, m]));
+      for (const s of singers) {
+        const m = s.member_id ? byId.get(s.member_id) : undefined;
+        if (!m || m.kicked) return json({ error: `singer ${s.member_id} is not in this session` }, 403);
+        if (session.host_id !== user.id && m.user_id !== user.id) return json({ error: 'only the host can submit other singers' }, 403);
+        resolved.push({ memberId: m.id, userId: m.user_id, s });
+      }
+    } else {
+      if (singers.length !== 1) return json({ error: 'solo runs score one singer' }, 400);
+      resolved.push({ memberId: null, userId: user.id, s: singers[0]! });
+    }
+
+    // reference melody: prefer an analysis from the caller's own upload, else a shared/licensed one, else any
+    const { data: analyses } = await db.from('karaoke_analysis')
+      .select('id, notes, phrases, created_at, audio_assets!karaoke_analysis_source_asset_id_fkey(owner_id)')
+      .eq('track_id', trackId).order('created_at', { ascending: false });
+    type A = { id: string; notes: RefNote[]; phrases: Phrase[]; audio_assets: { owner_id: string | null } | null };
+    const list = (analyses ?? []) as unknown as A[];
+    const analysis = list.find((a) => a.audio_assets?.owner_id === user.id) ?? list.find((a) => a.audio_assets?.owner_id == null) ?? list[0];
+    if (!analysis) return json({ error: 'this song has no karaoke analysis yet' }, 409);
+
+    const results = [];
+    for (const { memberId, userId, s } of resolved) {
+      const r = scorePerformance({
+        notes: analysis.notes, phrases: analysis.phrases, frames: s.frames, keyShift,
+        latencyMs: s.latency_ms ?? null, noiseFloorDb: s.noise_floor_db ?? null,
+      });
+      const durationMs = s.frames.length ? Math.round((s.frames[s.frames.length - 4]! - s.frames[0]!) * 1000) : 0;
+      const { data: perf, error } = await db.from('performances').insert({
+        session_id: sessionId, member_id: memberId, user_id: userId, track_id: trackId, key_shift: keyShift,
+        score: r.score, pitch_score: r.pitch, timing_score: r.timing, rhythm_score: r.rhythm, stability_score: r.stability,
+        grade: r.grade, scoring_version: SCORING_VERSION, duration_ms: Math.max(0, durationMs),
+        details: { ...r.details, feedback: r.feedback, analysis_id: analysis.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id },
+      }).select('id').single();
+      if (error) throw error;
+      results.push({ member_id: memberId, user_id: userId, performance_id: perf.id, score: r.score, grade: r.grade,
+                     pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, feedback: r.feedback });
+    }
+    return json({ results });
+  })
+);
