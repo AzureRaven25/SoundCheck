@@ -16,7 +16,7 @@ Ordered by dependency: the shared foundation comes first, then the platforms. Mi
 | **M9** | Hardening & launch readiness | all | all | Sentry monitoring, CI (GitHub Actions; you push), performance budgets, accessibility, physical-device verification checklist, licensed-content provider integration | Device matrix sign-off |
 
 ## Current focus
-M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ website → **M4 ✅ processing worker (2026-11-17)** → **M5 ✅ SoundCheck Stage + Party on web (2026-11-17)** → **M6 next** (Apple TV + iOS).
+M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ website → **M4 ✅ processing worker (2026-11-17)** → **M5 ✅ SoundCheck Stage + Party on web (2026-11-17)** → **M6 in progress** (Apple TV + iOS).
 
 M5 delivered:
 - Solo Stage: stems, guide-vocal slider, key shift, word wipe, live pitch HUD, official score. E2E score: 66 on a partial take.
@@ -24,6 +24,18 @@ M5 delivered:
 - Playwright multi-context test: TV + 2 phones with fake mics. Phone clock drift measured at 1 ms; both singers scored 84 over the full song.
 - Phones follow the TV's audio clock: the 2 s transport heartbeat is re-anchored to the real playback position.
 - Singer colours are race-free: the session row is locked and each singer gets the first unused palette colour.
+
+M6 so far (2026-11-17):
+- SoundCheckKit Swift package (protocol, clock sync, vDSP YIN, Supabase, Realtime, AVAudioEngine stems with key shift, shared SwiftUI).
+- SoundCheckTV (tvOS 18) and SoundCheckMobile (iOS 18). Build with `cd apps/apple && xcodegen`.
+- Verified in simulators:
+  - The TV hosts with a web phone singing: live 100% on pitch, score 83.
+  - The TV hosts with the native iPhone: joined by `soundcheck://join/CODE` link, mic permission, live lyric sync, official score shown on the phone.
+- Still to do:
+  - Device-code sign-in on the TV (it currently uses an email form).
+  - Solo singing on iPhone.
+  - XCUITests.
+  - Physical-device runs; these need your Apple Developer account.
 
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);
