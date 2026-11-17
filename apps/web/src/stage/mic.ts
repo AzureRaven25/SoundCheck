@@ -13,6 +13,8 @@ export interface MicHandle {
   context: AudioContext;
   /** Output latency estimate of this device's audio stack (ms), for clock alignment. */
   inputLatencyMs: number;
+  /** The processed mic stream (echo cancellation, noise suppression): also sent to the TV for voice monitoring. */
+  stream: MediaStream;
 }
 
 /**
@@ -38,6 +40,7 @@ export async function startMic(onFrame: (f: PitchFrame) => void, shared?: AudioC
   if (ctx.state === 'suspended') await ctx.resume();
   const settings = stream.getAudioTracks()[0]?.getSettings() as MediaTrackSettings & { latency?: number };
   return {
+    stream,
     context: ctx,
     inputLatencyMs: Math.round(((settings?.latency ?? 0) + ctx.baseLatency) * 1000),
     stop: () => {

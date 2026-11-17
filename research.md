@@ -75,3 +75,15 @@ that it reaches the real end. Previews must report themselves as previews. Resul
    recordings.
 3. **One provider interface, honest capabilities.** The app picks the best playable source for each track
    and says exactly what it is ("Full track · Internet Archive · CC BY-NC-SA", "Preview · 30 s").
+
+## 7. Hearing yourself: voice through the TV (2026-11-17)
+
+| Option | Latency | Verdict |
+|---|---|---|
+| **WebRTC audio (Opus), phone → host peer-to-peer**, signalling over the session's private Realtime channel | ~100–200 ms on home Wi-Fi ⚠️ (browser jitter buffer + Wi-Fi) | ✅ **Built (web host + web phones)**. Opt-in "Hear singers through the speakers" with a volume control; uses the phone's echo-cancelled mic. E2E: two phones connected, voices arriving at ≈ −24 dBFS |
+| Audio over WebSockets / Realtime broadcast | 200 ms+, no jitter handling, 1 KB message limits | ❌ |
+| Cloud relay (SFU/TURN) for all audio | +RTT to the cloud; costs | ⏸ Only as a fallback: today STUN only (`stun.l.google.com`), so phones and TV must reach each other directly (same Wi-Fi is the normal case) |
+| Native TVs (tvOS / Fire TV) receiving WebRTC | needs Google's libwebrtc in the apps | ⏸ Next: the Swift/Kotlin protocol layers already ignore `voice`/`rtc` messages safely |
+
+Scoring never depends on this audio: phones still compute pitch locally and send compact pitch frames, so
+scores stay accurate even on poor Wi-Fi. The voice stream is only for hearing yourself in the room.

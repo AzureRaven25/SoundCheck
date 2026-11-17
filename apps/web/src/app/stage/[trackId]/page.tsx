@@ -11,6 +11,7 @@ import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
+import { VoiceReceiver } from '@/session/voice';
 import { StageEngine } from '@/stage/engine';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
@@ -55,11 +56,44 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const noteAt = useRef<(t: number) => number | null>(() => null);
   const keyShiftRef = useRef(0);
   const host = useHostSession(data.track.id, resume);
+  const hostRef = useRef(host);
+  useEffect(() => { hostRef.current = host; });
   const queue = useSessionQueue(host.session?.id, host.queueVersion);
   const nextUp = queue.items.find((q) => q.status === 'queued' && q.track_id !== data.track.id) ?? null;
   // continuing a party from the previous song: reopen the same session straight away
   const { open: openParty, session: partySession } = host;
   useEffect(() => { if (resume && !partySession) void openParty(); }, [resume, partySession, openParty]);
+  // voice monitoring: phones' mics through these speakers (WebRTC), opt-in because speakers can feed back
+  const voice = useRef<VoiceReceiver | null>(null);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceVol, setVoiceVol] = useState(0.8);
+  function toggleVoice(on: boolean) {
+    const e = engine.current ?? new StageEngine();   // inside the click: the shared AudioContext may start
+    engine.current = e;
+    void e.ctx.resume();
+    if (on) {
+      voice.current ??= new VoiceReceiver(e.ctx, (ev) => hostRef.current.send(ev));
+      voice.current.setVolume(voiceVol);
+      hostRef.current.setRtcHandler((ev) => void voice.current?.handle(ev));
+    } else {
+      voice.current?.close();
+      voice.current = null;
+      hostRef.current.setRtcHandler(null);
+    }
+    setVoiceOn(on);
+    hostRef.current.send({ type: 'voice', v: PROTOCOL_VERSION, enabled: on });
+  }
+  const readyCount = host.singers().filter((s) => s.mic === 'ready' || s.mic === 'live').length;
+  useEffect(() => {   // singers who turn their mic on later get the invitation too
+    if (voiceOn && readyCount) hostRef.current.send({ type: 'voice', v: PROTOCOL_VERSION, enabled: true });
+  }, [voiceOn, readyCount]);
+  useEffect(() => { voice.current?.setVolume(voiceVol); }, [voiceVol]);
+  useEffect(() => () => voice.current?.close(), []);
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    (window as unknown as { __soundcheckVoice?: unknown }).__soundcheckVoice = () => voice.current?.status() ?? {};
+  }, []);
+
   async function singNext() {
     const sid = host.session?.id;
     if (!sid) return;
@@ -68,8 +102,6 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     const next = (rows as { track_id: string }[] | null)?.[0];
     if (next) router.push(`/stage/${next.track_id}?party=${sid}`);
   }
-  const hostRef = useRef(host);
-  useEffect(() => { hostRef.current = host; });
   const singerIds = () => hostRef.current.singers().filter((s) => s.mic === 'ready' || s.mic === 'live').map((s) => s.memberId);
 
   useEffect(() => {
@@ -362,6 +394,20 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
                     </div>
                   </div>
                 )}
+
+                {mode === 'party' && host.session && (
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={voiceOn} onChange={(e) => toggleVoice(e.target.checked)} />
+                      Hear singers through the speakers
+                    </label>
+                    {voiceOn && (
+                      <label className="flex items-center gap-2 text-ink-300">Voice volume
+                        <input type="range" min={0} max={1.5} step={0.05} value={voiceVol} onChange={(e) => setVoiceVol(Number(e.target.value))} className="w-28" />
+                      </label>
+                    )}
+                  </div>
+                )}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
                 {scoreError && <p role="alert" className="mt-3 text-sm text-danger-400">{scoreError}</p>}
                 <button type="button" onClick={() => void start()} disabled={mode === 'party' && !partySingers.some((s) => s.mic === 'ready')}
@@ -397,6 +443,12 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
               Guide vocal
               <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-28" />
             </label>
+            {phase === 'singing' && mode === 'party' && voiceOn && (
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
+                Voices
+                <input type="range" min={0} max={1.5} step={0.05} value={voiceVol} onChange={(e) => setVoiceVol(Number(e.target.value))} className="w-24" aria-label="Voice volume" />
+              </label>
+            )}
             {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
           </footer>
         </>

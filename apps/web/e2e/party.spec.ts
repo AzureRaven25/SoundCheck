@@ -52,6 +52,10 @@ test('two phones sing together and both get scored', async ({ page, browser }) =
   await expect(ben.getByText('Added to the queue')).toBeVisible();
   await expect(page.getByRole('list', { name: 'Up next' }).getByText('Stand by Me')).toBeVisible({ timeout: 15_000 });
 
+  // voice monitoring: phones' mics through the TV speakers over WebRTC
+  await page.getByLabel('Hear singers through the speakers').check();
+  for (const p of [ana, ben]) await expect(p.getByText('Your voice is on the TV')).toBeVisible({ timeout: 15_000 });
+
   await page.getByRole('button', { name: 'Start singing' }).click();
   for (const p of [ana, ben]) {
     await p.waitForFunction(() => (window as unknown as W).__soundcheckJoin?.playing(), null, { timeout: 60_000 });
@@ -66,6 +70,14 @@ test('two phones sing together and both get scored', async ({ page, browser }) =
   console.log('E2E clock drift (s)', (drift[1] - drift[0]).toFixed(3));
   expect(Math.abs(drift[1] - drift[0])).toBeLessThan(0.15);
   await page.waitForTimeout(8_000);
+  type VoiceStatus = Record<string, { state: string; levelDb: number }>;
+  const voices = await page.evaluate(() => (window as unknown as { __soundcheckVoice: () => VoiceStatus }).__soundcheckVoice());
+  console.log('E2E voices', JSON.stringify(voices));
+  expect(Object.values(voices)).toHaveLength(2);
+  for (const v of Object.values(voices)) {
+    expect(v.state).toBe('connected');
+    expect(v.levelDb).toBeGreaterThan(-60);              // the singer's audio is arriving and playing
+  }
   if (process.env.E2E_SHOTS) {
     await page.screenshot({ path: `${process.env.E2E_SHOTS}/party-singing.png` });
     await ana.screenshot({ path: `${process.env.E2E_SHOTS}/party-phone.png` });

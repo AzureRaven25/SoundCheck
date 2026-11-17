@@ -12,6 +12,7 @@ import { openSessionChannel, type SessionChannel } from '@/session/channel';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { lineAt } from '@/stage/StageLyrics';
 import { RequestSong } from '@/session/RequestSong';
+import { VoiceSender } from '@/session/voice';
 import type { StageLine } from '@/stage/useStageData';
 
 type Step = 'name' | 'joining' | 'joined' | 'calibrating' | 'live' | 'error';
@@ -34,6 +35,21 @@ export default function JoinSessionPage() {
   const [muted, setMuted] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [queueVersion, setQueueVersion] = useState(0);
+  const [voiceLive, setVoiceLive] = useState(false);
+  const voiceWanted = useRef(false);
+  const sender = useRef<VoiceSender | null>(null);
+  /** Start or stop sending this phone's voice to the TV, following the host's switch. */
+  const syncVoice = useCallback(() => {
+    const me = memberRef.current;
+    if (voiceWanted.current && mic.current && me && ch.current) {
+      if (!sender.current) {
+        sender.current = new VoiceSender(me, (ev) => void ch.current?.send(ev));
+        void sender.current.start(mic.current.stream).then(() => setVoiceLive(true)).catch(() => setVoiceLive(false));
+      }
+    } else if (sender.current) {
+      sender.current.stop(); sender.current = null; setVoiceLive(false);
+    }
+  }, []);
 
   const ch = useRef<SessionChannel | null>(null);
   const mic = useRef<MicHandle | null>(null);
@@ -80,13 +96,18 @@ export default function JoinSessionPage() {
     } else if (e.type === 'results') {
       const mine = e.performances.find((p) => p.memberId === me);
       if (mine) setResult(mine);
+    } else if (e.type === 'voice') {
+      voiceWanted.current = e.enabled;
+      syncVoice();
+    } else if (e.type === 'rtc' && e.from === 'host' && e.memberId === me) {
+      void sender.current?.handle(e);
     } else if (e.type === 'queue_changed') {
       setQueueVersion((v) => v + 1);
     } else if (e.type === 'host_command' && e.memberId === me) {
       if (e.command === 'mute') { mutedRef.current = true; setMuted(true); }
       if (e.command === 'unmute') { mutedRef.current = false; setMuted(false); }
     }
-  }, []);
+  }, [syncVoice]);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();
@@ -142,6 +163,7 @@ export default function JoinSessionPage() {
       await ch.current?.track({ memberId: member.id, displayName: name.trim() || 'Singer', role: 'singer', platform: 'web', color: member.color, mic: 'ready' });
       try { await (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<unknown> } }).wakeLock?.request('screen'); } catch { /* optional */ }
       setStep('live');
+      syncVoice();   // the host may already have voices on
     } catch (err) {
       setError(err instanceof Error && err.name === 'NotAllowedError' ? 'Allow microphone access to sing.' : 'Microphone unavailable.');
       setStep('error');
@@ -159,7 +181,7 @@ export default function JoinSessionPage() {
     return () => clearInterval(iv);
   }, [step, songTime]);
 
-  useEffect(() => () => { mic.current?.stop(); void ch.current?.close(); }, []);
+  useEffect(() => () => { sender.current?.stop(); mic.current?.stop(); void ch.current?.close(); }, []);
 
   const shell = 'flex h-full flex-col items-center justify-center gap-6 p-6 text-center';
   if (step === 'name' || step === 'joining') {
@@ -217,6 +239,7 @@ export default function JoinSessionPage() {
           </div>
           {live && <p className="font-display text-2xl font-bold" role="status">On pitch {Math.round(live.hitRate * 100)}%</p>}
           {muted && <p className="text-gold-400">The host muted your mic</p>}
+          {voiceLive && <p className="text-sm text-ink-300" role="status">🔊 Your voice is on the TV</p>}
         </>
       )}
       {sessionId && <RequestSong sessionId={sessionId} version={queueVersion} notify={(ev) => void ch.current?.send(ev)} />}

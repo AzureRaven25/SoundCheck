@@ -129,6 +129,26 @@ export interface QueueChangedEvent {
   v: typeof PROTOCOL_VERSION;
 }
 
+/** Host → everyone: whether singers' voices should be played through the host's speakers (WebRTC audio). */
+export interface VoiceEvent {
+  type: 'voice';
+  v: typeof PROTOCOL_VERSION;
+  enabled: boolean;
+}
+
+/**
+ * WebRTC signalling for voice monitoring, phone ↔ host only. Media goes peer-to-peer (LAN when possible);
+ * only these small offer/answer/ICE messages use the session channel.
+ */
+export interface RtcEvent {
+  type: 'rtc';
+  v: typeof PROTOCOL_VERSION;
+  memberId: string;            // the phone this conversation is about
+  from: 'host' | 'phone';
+  sdp?: { type: 'offer' | 'answer'; sdp: string };
+  candidate?: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
+}
+
 export type SessionEvent =
   | TransportEvent
   | PitchEvent
@@ -138,7 +158,9 @@ export type SessionEvent =
   | LiveScoreEvent
   | ResultsEvent
   | HostCommandEvent
-  | QueueChangedEvent;
+  | QueueChangedEvent
+  | VoiceEvent
+  | RtcEvent;
 
 /** Presence payload each device tracks on the channel. */
 export interface PresenceState {
