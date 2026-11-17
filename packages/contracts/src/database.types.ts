@@ -295,6 +295,68 @@ export type Database = {
           },
         ]
       }
+      challenge_completions: {
+        Row: {
+          challenge_id: string
+          completed_at: string
+          user_id: string
+        }
+        Insert: {
+          challenge_id: string
+          completed_at?: string
+          user_id: string
+        }
+        Update: {
+          challenge_id?: string
+          completed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_completions_challenge_id_fkey"
+            columns: ["challenge_id"]
+            isOneToOne: false
+            referencedRelation: "challenges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      challenges: {
+        Row: {
+          ends_on: string
+          goal: string
+          id: string
+          kind: string
+          starts_on: string
+          target: number
+          threshold: number | null
+          title: string
+          xp_reward: number
+        }
+        Insert: {
+          ends_on: string
+          goal: string
+          id: string
+          kind: string
+          starts_on: string
+          target: number
+          threshold?: number | null
+          title: string
+          xp_reward: number
+        }
+        Update: {
+          ends_on?: string
+          goal?: string
+          id?: string
+          kind?: string
+          starts_on?: string
+          target?: number
+          threshold?: number | null
+          title?: string
+          xp_reward?: number
+        }
+        Relationships: []
+      }
       device_codes: {
         Row: {
           approved_at: string | null
@@ -809,6 +871,7 @@ export type Database = {
           username: string | null
           vocal_high: number | null
           vocal_low: number | null
+          xp: number
         }
         Insert: {
           avatar_url?: string | null
@@ -822,6 +885,7 @@ export type Database = {
           username?: string | null
           vocal_high?: number | null
           vocal_low?: number | null
+          xp?: number
         }
         Update: {
           avatar_url?: string | null
@@ -835,6 +899,7 @@ export type Database = {
           username?: string | null
           vocal_high?: number | null
           vocal_low?: number | null
+          xp?: number
         }
         Relationships: []
       }
@@ -1182,6 +1247,41 @@ export type Database = {
         }
         Relationships: []
       }
+      xp_events: {
+        Row: {
+          amount: number
+          created_at: string
+          id: number
+          performance_id: string | null
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: never
+          performance_id?: string | null
+          reason: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: never
+          performance_id?: string | null
+          reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xp_events_performance_id_fkey"
+            columns: ["performance_id"]
+            isOneToOne: false
+            referencedRelation: "performances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1230,6 +1330,7 @@ export type Database = {
           session_id: string
         }[]
       }
+      level_for_xp: { Args: { p_xp: number }; Returns: number }
       my_achievements: {
         Args: never
         Returns: {
@@ -1239,6 +1340,19 @@ export type Database = {
           id: string
           tier: string
           title: string
+        }[]
+      }
+      my_challenges: {
+        Args: never
+        Returns: {
+          completed: boolean
+          ends_on: string
+          id: string
+          kind: string
+          progress: number
+          target: number
+          title: string
+          xp_reward: number
         }[]
       }
       my_friends: {
@@ -1253,6 +1367,18 @@ export type Database = {
           songs_sung: number
           status: string
           username: string
+        }[]
+      }
+      my_progress: {
+        Args: never
+        Returns: {
+          best_streak: number
+          current_streak: number
+          level: number
+          level_floor: number
+          next_level_xp: number
+          songs_today: number
+          xp: number
         }[]
       }
       my_stats: {

@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { Award, Crown, Flame, Lock, Mic, Moon, Music2, PartyPopper, Repeat, Star, ThumbsUp, Timer, Users } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { SignInGate } from '@/components/social/SignInGate';
+import { ProgressPanel } from '@/components/social/ProgressPanel';
 
 interface Badge { id: string; title: string; description: string; icon: string; tier: 'bronze' | 'silver' | 'gold' | 'platinum'; earned_at: string | null }
 
@@ -20,6 +21,7 @@ function Badges() {
   const earned = badges?.filter((b) => b.earned_at).length ?? 0;
   return (
     <div className="mx-auto max-w-5xl p-6 md:p-8">
+      <ProgressPanel />
       <h1 className="font-display text-4xl font-extrabold tracking-tight">Achievements</h1>
       <p className="mt-1 text-ink-300">{badges ? `${earned} of ${badges.length} earned` : 'Loading…'}</p>
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

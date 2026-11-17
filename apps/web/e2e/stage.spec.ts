@@ -54,4 +54,11 @@ test('sing on Stage and get a SoundCheck Score', async ({ page }) => {
   console.log('E2E SoundCheck Score', final);
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/stage-results.png`, fullPage: true });
   expect(Math.max(score, final)).toBeGreaterThanOrEqual(60);
+  // progression: XP for this song, then level / streak / challenges on the Achievements page
+  await expect(page.getByRole('status').filter({ hasText: /^\+\d+ XP$/ })).toBeVisible();
+  await page.goto('/achievements');
+  const progress = page.getByRole('region', { name: 'Your progress' });
+  await expect(progress.getByText('1-day streak')).toBeVisible();
+  await expect(progress.getByRole('list', { name: 'Challenges' }).getByRole('listitem')).toHaveCount(2);
+  await expect(page.getByText('Opening Act')).toBeVisible();
 });

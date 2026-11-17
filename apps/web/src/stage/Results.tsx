@@ -51,9 +51,13 @@ interface Row { rank: number; display_name: string; score: number; grade: string
 export function Results({ scores, trackId, onAgain, error, group }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null }) {
   const [board, setBoard] = useState<Row[]>([]);
   const [badges, setBadges] = useState<{ title: string; tier: string }[]>([]);
+  const [xp, setXp] = useState(0);
   useEffect(() => {
     const ids = (scores ?? []).map((s) => s.performance_id).filter((x): x is string => !!x);
     if (!ids.length) return;
+    // XP this performance earned (only your own; RLS hides other singers')
+    void supabaseBrowser().from('xp_events').select('amount').in('performance_id', ids)
+      .then(({ data }) => setXp((data ?? []).reduce((a, r) => a + (r as { amount: number }).amount, 0)));
     // badges this performance just unlocked (awarded by a database trigger when the score was saved)
     void supabaseBrowser().from('user_achievements').select('achievements(title, tier)').in('performance_id', ids)
       .then(({ data }) => setBadges(((data ?? []) as unknown as { achievements: { title: string; tier: string } | null }[]).flatMap((r) => (r.achievements ? [r.achievements] : []))));
@@ -91,6 +95,7 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
           ))}
         </div>
       )}
+      {xp > 0 && <p className="mx-auto mt-6 w-fit rounded-full bg-pink-500/15 px-4 py-1.5 text-sm font-bold text-pink-400" role="status">+{xp} XP</p>}
       {group && (
         <div className="mx-auto mt-6 flex max-w-md items-center justify-between rounded-2xl bg-ink-850/90 p-5 ring-1 ring-pink-500/40" role="status" aria-label="Group score">
           <div><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Group score · {group.singers} singers</p><p className="font-display text-5xl font-black tabular-nums">{group.score}</p></div>
