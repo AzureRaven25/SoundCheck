@@ -182,3 +182,34 @@ describe('frame order', () => {
     expect(out.score).toBeGreaterThan(70);
   });
 });
+
+describe('duration and rhythm categories (v1.1)', () => {
+  const notes = [0, 1, 2, 3, 4, 5].map((i) => ({ start: 1 + i * 1.2, end: 2 + i * 1.2, pitch: [60, 64, 67][i % 3]! }));
+  const sing = (opts: { lag?: number; hold?: number; jitter?: (i: number) => number }) => {
+    const flat: number[] = [];
+    notes.forEach((n, i) => {
+      const lag = (opts.lag ?? 0) + (opts.jitter?.(i) ?? 0);
+      const end = n.start + (n.end - n.start) * (opts.hold ?? 1);
+      for (let t = n.start; t < end; t += 0.01) flat.push(+(t + lag).toFixed(3), 440 * 2 ** ((n.pitch - 69) / 12), 0.95, -20);
+    });
+    return scorePerformance({ notes, frames: flat, keyShift: 0, latencyMs: 0 });
+  };
+  it('rewards holding notes for their length', () => {
+    const full = sing({}), half = sing({ hold: 0.4 });
+    expect(full.duration).toBeGreaterThan(0.9);
+    expect(half.duration).toBeLessThan(0.6);
+    expect(half.feedback.join(' ')).toMatch(/Hold your notes/);
+  });
+  it('rhythm rewards a steady feel even when slightly late; timing still notices the lag', () => {
+    const steady = sing({ lag: 0.15 }), erratic = sing({ jitter: (i) => (i % 2 ? 0.18 : -0.12) });
+    expect(steady.rhythm).toBeGreaterThan(erratic.rhythm);
+    expect(steady.rhythm).toBeGreaterThan(0.8);
+    expect(steady.timing).toBeLessThan(sing({}).timing);
+  });
+  it('reports every category in 0–1 and the overall out of 100', () => {
+    const r = sing({});
+    for (const k of ['pitch', 'timing', 'rhythm', 'duration', 'transitions', 'stability'] as const) expect(r[k]).toBeGreaterThanOrEqual(0), expect(r[k]).toBeLessThanOrEqual(1);
+    expect(r.score).toBeGreaterThan(80);
+    expect(r.details.scoringVersion).toBe('1.1.0');
+  });
+});

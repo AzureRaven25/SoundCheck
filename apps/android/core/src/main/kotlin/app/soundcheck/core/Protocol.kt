@@ -66,10 +66,14 @@ data class LiveScoreEvent(val scores: List<Entry>, val type: String = "live_scor
 data class PerformanceResult(
     val memberId: String, val performanceId: String?, val score: Int, val grade: Grade,
     val pitch: Double, val timing: Double, val rhythm: Double, val stability: Double, val feedback: List<String>,
+    /** SoundCheck Score v1.1+ (absent from older results) */
+    val duration: Double? = null, val transitions: Double? = null,
 )
 
+@Serializable data class GroupScore(val score: Int, val grade: Grade, val singers: Int)
+
 @Serializable
-data class ResultsEvent(val trackId: String, val performances: List<PerformanceResult>, val type: String = "results", val v: Int = SCProtocol.VERSION)
+data class ResultsEvent(val trackId: String, val performances: List<PerformanceResult>, val group: GroupScore? = null, val type: String = "results", val v: Int = SCProtocol.VERSION)
 
 @Serializable
 data class HostCommandEvent(

@@ -102,8 +102,13 @@ export interface ResultsEvent {
     timing: number;
     rhythm: number;
     stability: number;
+    /** SoundCheck Score v1.1+ */
+    duration?: number;
+    transitions?: number;
     feedback: string[];
   }[];
+  /** Party songs with more than one singer: the average of everyone's score. */
+  group?: { score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null;
 }
 
 /** Host → member: host actions (kick, mute, volume). */

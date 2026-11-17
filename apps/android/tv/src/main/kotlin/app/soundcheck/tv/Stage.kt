@@ -79,6 +79,7 @@ import app.soundcheck.core.VocalRange
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private enum class Phase { Loading, Lobby, Warming, Singing, Scoring, Results }
@@ -104,6 +105,7 @@ fun StageScreen(initialTrack: String, autostart: Boolean, onExit: () -> Unit) {
     var guide by remember { mutableFloatStateOf(0f) }
     var rates by remember { mutableStateOf(emptyMap<String, Double>()) }
     var results by remember { mutableStateOf(emptyList<Pair<PartySinger, PerformanceResult>>()) }
+    var group by remember { mutableStateOf<app.soundcheck.core.GroupScore?>(null) }
     val session by host.session.collectAsState()
     val singers by host.singers.collectAsState()
     val hostError by host.error.collectAsState()
@@ -130,7 +132,8 @@ fun StageScreen(initialTrack: String, autostart: Boolean, onExit: () -> Unit) {
         }.onSuccess { scored ->
             val byId = voiced.associateBy { it.memberId }
             results = scored.mapNotNull { r -> byId[r.memberId]?.let { it to r.asResult() } }
-            host.send(SessionEvent.Results(ResultsEvent(trackId, scored.map { it.asResult() })))
+            group = if (scored.size > 1) scored.map { it.score }.average().roundToInt().let { app.soundcheck.core.GroupScore(it, Pitch.grade(it), scored.size) } else null
+            host.send(SessionEvent.Results(ResultsEvent(trackId, scored.map { it.asResult() }, group)))
             message = null
         }.onFailure { println("[soundcheck] scoring failed: ${it.message}"); message = "Scoring failed. Please try again." }
         phase = Phase.Results
@@ -150,7 +153,7 @@ fun StageScreen(initialTrack: String, autostart: Boolean, onExit: () -> Unit) {
     }
 
     LaunchedEffect(trackId, songNumber) {
-        phase = Phase.Loading; data = null; message = null; results = emptyList(); keyShift = 0
+        phase = Phase.Loading; data = null; message = null; results = emptyList(); group = null; keyShift = 0
         runCatching { backend.stageData(trackId) }.onSuccess { r ->
             when (r) {
                 is StageLoad.Ready -> {
@@ -211,7 +214,7 @@ fun StageScreen(initialTrack: String, autostart: Boolean, onExit: () -> Unit) {
                 },
                 onGuide = { guide = if (guide > 0f) 0f else 0.6f; engine.setGuide(guide) })
             phase == Phase.Scoring -> Text("Scoring everyone…", color = SC.ink300, fontSize = 22.sp)
-            else -> ResultsView(results, message, queue.firstOrNull { it.status == "queued" },
+            else -> ResultsView(results, message, group, queue.firstOrNull { it.status == "queued" },
                 onAgain = { results = emptyList(); message = null; phase = Phase.Lobby }, onNext = { scope.launch { singNext() } }, onDone = onExit)
         }
     }
@@ -345,7 +348,7 @@ private fun PitchHud(notes: List<RefNote>, keyShift: Int, time: Double, trails: 
 
 @Composable
 private fun ResultsView(
-    results: List<Pair<PartySinger, PerformanceResult>>, message: String?, next: app.soundcheck.core.QueueItem?,
+    results: List<Pair<PartySinger, PerformanceResult>>, message: String?, group: app.soundcheck.core.GroupScore?, next: app.soundcheck.core.QueueItem?,
     onAgain: () -> Unit, onNext: () -> Unit, onDone: () -> Unit,
 ) {
     val focus = remember { FocusRequester() }
@@ -354,6 +357,7 @@ private fun ResultsView(
         Title("SoundCheck Score", 52)
         message?.let { Text(it, color = SC.danger, fontSize = 18.sp) }
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) { results.forEach { (s, r) -> ScoreCard(s.name, SC.hex(s.color), r) } }
+        group?.let { Text("Group score · ${it.singers} singers: ${it.score} (${it.grade.name})", color = SC.pink, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
             if (next != null) Button(onClick = onNext, modifier = Modifier.focusRequester(focus)) { Text("Sing next: ${next.title}") }
             if (next == null) Button(onClick = onAgain, modifier = Modifier.focusRequester(focus)) { Text("Sing again") } else OutlinedButton(onClick = onAgain) { Text("Sing again") }
@@ -372,7 +376,8 @@ fun ScoreCard(name: String, color: Color, r: PerformanceResult) {
                 fontSize = 30.sp, fontWeight = FontWeight.Black, color = SC.ink950)
         }
         Text("${r.score}", fontSize = 88.sp, fontWeight = FontWeight.Black, color = SC.ink50)
-        listOf("Pitch" to r.pitch, "Timing" to r.timing, "Rhythm" to r.rhythm, "Stability" to r.stability).forEach { (label, v) ->
+        listOf("Pitch" to r.pitch, "Timing" to r.timing, "Rhythm" to r.rhythm, "Duration" to r.duration, "Transitions" to r.transitions, "Stability" to r.stability)
+            .mapNotNull { (l, v) -> v?.let { l to it } }.forEach { (label, v) ->
             Column {
                 Row { Text(label.uppercase(), color = SC.ink300, fontSize = 13.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text("${(v * 100).toInt()}", color = SC.ink300, fontSize = 13.sp) }
                 Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(SC.ink700)) {

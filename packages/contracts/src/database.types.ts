@@ -578,6 +578,7 @@ export type Database = {
           created_at: string
           details: Json
           duration_ms: number | null
+          duration_score: number | null
           grade: string
           id: string
           key_shift: number
@@ -590,12 +591,14 @@ export type Database = {
           stability_score: number
           timing_score: number
           track_id: string
+          transition_score: number | null
           user_id: string
         }
         Insert: {
           created_at?: string
           details?: Json
           duration_ms?: number | null
+          duration_score?: number | null
           grade: string
           id?: string
           key_shift?: number
@@ -608,12 +611,14 @@ export type Database = {
           stability_score: number
           timing_score: number
           track_id: string
+          transition_score?: number | null
           user_id: string
         }
         Update: {
           created_at?: string
           details?: Json
           duration_ms?: number | null
+          duration_score?: number | null
           grade?: string
           id?: string
           key_shift?: number
@@ -626,6 +631,7 @@ export type Database = {
           stability_score?: number
           timing_score?: number
           track_id?: string
+          transition_score?: number | null
           user_id?: string
         }
         Relationships: [

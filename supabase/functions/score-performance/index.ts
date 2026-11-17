@@ -14,7 +14,7 @@
  *   → { results: [{ member_id, user_id, performance_id, score, grade, pitch, timing, rhythm, stability, feedback }] }
  */
 import { adminClient, handle, json } from '../_shared/runtime.ts';
-import { scorePerformance, SCORING_VERSION, type Phrase, type RefNote } from '../_shared/scoring.ts';
+import { grade, scorePerformance, SCORING_VERSION, type Phrase, type RefNote } from '../_shared/scoring.ts';
 
 const MAX_FRAMES = 4 * 100 * 60 * 15; // 15 minutes of 10 ms frames
 
@@ -72,17 +72,25 @@ Deno.serve((req) =>
         notes: analysis.notes, phrases: analysis.phrases, frames: s.frames, keyShift,
         latencyMs: s.latency_ms ?? null, noiseFloorDb: s.noise_floor_db ?? null,
       });
-      const durationMs = s.frames.length ? Math.round((s.frames[s.frames.length - 4]! - s.frames[0]!) * 1000) : 0;
+      let tMin = Infinity, tMax = -Infinity;    // frames can arrive out of order: use the real span
+      for (let i = 0; i < s.frames.length; i += 4) { tMin = Math.min(tMin, s.frames[i]!); tMax = Math.max(tMax, s.frames[i]!); }
+      const durationMs = s.frames.length ? Math.round((tMax - tMin) * 1000) : 0;
       const { data: perf, error } = await db.from('performances').insert({
         session_id: sessionId, member_id: memberId, user_id: userId, track_id: trackId, key_shift: keyShift,
         score: r.score, pitch_score: r.pitch, timing_score: r.timing, rhythm_score: r.rhythm, stability_score: r.stability,
+        duration_score: r.duration, transition_score: r.transitions,
         grade: r.grade, scoring_version: SCORING_VERSION, duration_ms: Math.max(0, durationMs),
         details: { ...r.details, feedback: r.feedback, analysis_id: analysis.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id },
       }).select('id').single();
       if (error) throw error;
       results.push({ member_id: memberId, user_id: userId, performance_id: perf.id, score: r.score, grade: r.grade,
-                     pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, feedback: r.feedback });
+                     pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, duration: r.duration, transitions: r.transitions,
+                     stability: r.stability, feedback: r.feedback });
     }
-    return json({ results });
+    // group result for party songs: the average of everyone who sang (each person keeps their own score too)
+    const group = results.length > 1
+      ? (() => { const score = Math.round(results.reduce((a, r) => a + r.score, 0) / results.length); return { score, grade: grade(score), singers: results.length }; })()
+      : null;
+    return json({ results, group });
   })
 );

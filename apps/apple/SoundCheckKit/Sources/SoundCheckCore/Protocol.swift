@@ -98,20 +98,29 @@ public struct PerformanceResult: Codable, Equatable, Sendable, Identifiable {
     public var timing: Double
     public var rhythm: Double
     public var stability: Double
+    /** SoundCheck Score v1.1+ (absent from older results) */
+    public var duration: Double?
+    public var transitions: Double?
     public var feedback: [String]
     public var id: String { memberId }
-    public init(memberId: String, performanceId: String?, score: Int, grade: Grade, pitch: Double, timing: Double, rhythm: Double, stability: Double, feedback: [String]) {
+    public init(memberId: String, performanceId: String?, score: Int, grade: Grade, pitch: Double, timing: Double, rhythm: Double, stability: Double,
+                duration: Double? = nil, transitions: Double? = nil, feedback: [String]) {
         self.memberId = memberId; self.performanceId = performanceId; self.score = score; self.grade = grade
-        self.pitch = pitch; self.timing = timing; self.rhythm = rhythm; self.stability = stability; self.feedback = feedback
+        self.pitch = pitch; self.timing = timing; self.rhythm = rhythm; self.stability = stability
+        self.duration = duration; self.transitions = transitions; self.feedback = feedback
     }
 }
+
+public struct GroupScore: Codable, Equatable, Sendable { public var score: Int; public var grade: Grade; public var singers: Int
+    public init(score: Int, grade: Grade, singers: Int) { self.score = score; self.grade = grade; self.singers = singers } }
 
 public struct ResultsEvent: Codable, Equatable, Sendable {
     public var type = "results"
     public var v = SCProtocol.version
     public var trackId: String
     public var performances: [PerformanceResult]
-    public init(trackId: String, performances: [PerformanceResult]) { self.trackId = trackId; self.performances = performances }
+    public var group: GroupScore?
+    public init(trackId: String, performances: [PerformanceResult], group: GroupScore? = nil) { self.trackId = trackId; self.performances = performances; self.group = group }
 }
 
 public struct HostCommandEvent: Codable, Equatable, Sendable {

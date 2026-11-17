@@ -7,7 +7,7 @@
  * inputs always produce the same score.
  */
 
-export const SCORING_VERSION = '1.0.0';
+export const SCORING_VERSION = '1.1.0';
 
 export interface RefNote { start: number; end: number; pitch: number; conf?: number }
 export interface Phrase { start: number; end: number; noteIdx: number[] }
@@ -35,7 +35,12 @@ export interface ScoreResult {
   grade: Grade;
   pitch: number;
   timing: number;
+  /** steadiness of your timing from note to note (a consistent small lag is fine) */
   rhythm: number;
+  /** holding notes for their full length */
+  duration: number;
+  /** moving from one note to the next at the right moment */
+  transitions: number;
   stability: number;
   feedback: string[];
   details: {
@@ -52,7 +57,7 @@ export interface ScoreResult {
   };
 }
 
-const WEIGHTS = { pitch: 0.4, timing: 0.25, rhythm: 0.2, stability: 0.15 };
+const WEIGHTS = { pitch: 0.35, timing: 0.2, rhythm: 0.1, duration: 0.1, transitions: 0.1, stability: 0.15 };
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 const std = (xs: number[]) => {
@@ -176,7 +181,7 @@ export function scorePerformance(input: ScoreInput): ScoreResult {
   const fr = parseFrames(input.frames, input.noiseFloorDb);
 
   const empty: ScoreResult = {
-    score: 0, grade: 'D', pitch: 0, timing: 0, rhythm: 0, stability: 0,
+    score: 0, grade: 'D', pitch: 0, timing: 0, rhythm: 0, duration: 0, transitions: 0, stability: 0,
     feedback: ['We didn’t hear any singing. Check that your mic is on and close to you.'],
     details: { scoringVersion: SCORING_VERSION, latencyOffsetMs: 0, octaveShifts: phrases.map(() => 0), meanOnsetMs: null,
                meanPitchBiasCents: null, coverage: 0, completion: 0.5, attemptedNotes: 0, totalNotes: notes.length, phraseScores: phrases.map(() => -1) },
@@ -234,7 +239,9 @@ export function scorePerformance(input: ScoreInput): ScoreResult {
       const t = fr.t[i]! - delta;
       if (t < s0 - 0.4) continue;
       if (t > s0 + 0.4) break;
-      if (fr.voiced[i]) {
+      // the onset is the first frame actually on *this* note (within 50 cents, any octave): the tail of the
+      // previous note must not count as arriving early
+      if (fr.voiced[i] && folded(fr.c[i]!, target(k)) <= 50) {
         deltas.push(t - s0);
         return ramp(Math.abs(t - s0), 0.1, 0.4);
       }
@@ -276,10 +283,21 @@ export function scorePerformance(input: ScoreInput): ScoreResult {
     deltas.push(found - b.start);
     transScores.push(ramp(Math.abs(found - b.start), 0.08, 0.3));
   }
-  const consistency = 1 - Math.min(1, std(deltas) / 0.2);
-  const rhythm = transScores.length
-    ? 0.7 * mean(transScores) + 0.3 * consistency
-    : 0.7 * (onsetScores.length ? mean(onsetScores) : 0) + 0.3 * consistency;
+  const onsetMean = onsetScores.length ? mean(onsetScores) : 0;
+  const transitions = transScores.length ? mean(transScores) : onsetMean;
+  // rhythm: how steady the singer's timing is across onsets and transitions (std of their offsets)
+  const rhythm = deltas.length >= 3 ? 1 - Math.min(1, std(deltas) / 0.2) : onsetMean;
+
+  // 3b. duration: of the notes you sang, did you hold them for their length? (≥ 75% held = full credit)
+  let dNum = 0, dDen = 0;
+  notes.forEach((n, k) => {
+    const len = n.end - n.start;
+    if (len < 0.25 || !attempted[k]) return;
+    const held = framesOf[k]!.filter((i) => fr.voiced[i]).length * hop / len;
+    dNum += ramp(1 - held, 0.25, 0.8) * len;
+    dDen += len;
+  });
+  const duration = dDen ? dNum / dDen : 0;
 
   // 4. stability on sustained notes
   let sNum = 0, sDen = 0;
@@ -301,7 +319,8 @@ export function scorePerformance(input: ScoreInput): ScoreResult {
   // Completion: pitch/rhythm/stability judge only the notes attempted, so a half-sung song must not
   // score like a full one. Full credit from 90% coverage down; half the song ≈ 0.78×.
   const completion = 0.5 + 0.5 * Math.min(1, coverage / 0.9);
-  const score = Math.round(100 * completion * (WEIGHTS.pitch * pitch + WEIGHTS.timing * timing + WEIGHTS.rhythm * rhythm + WEIGHTS.stability * stability));
+  const score = Math.round(100 * completion * (WEIGHTS.pitch * pitch + WEIGHTS.timing * timing + WEIGHTS.rhythm * rhythm
+    + WEIGHTS.duration * duration + WEIGHTS.transitions * transitions + WEIGHTS.stability * stability));
   const phraseScores = phrases.map((p) => {
     const xs = p.noteIdx.map((k) => noteScore[k]!).filter((s) => s >= 0);
     return xs.length ? Math.round(mean(xs) * 1000) / 1000 : -1;
@@ -317,11 +336,13 @@ export function scorePerformance(input: ScoreInput): ScoreResult {
   const worst = phraseScores.reduce((w, s, i) => (s >= 0 && (w < 0 || s < phraseScores[w]!) ? i : w), -1);
   if (worst >= 0 && phraseScores[worst]! < 0.6 && fb.length < 3) fb.push(`Line ${worst + 1} was the toughest. Worth another run.`);
   if (stability >= 0.85 && sDen > 0 && fb.length < 3) fb.push('Rock-solid long notes.');
+  if (duration < 0.6 && dDen > 0 && fb.length < 3) fb.push('Hold your notes a little longer; several were cut short.');
   if (octaveShifts.some((o) => o !== 0) && fb.length < 3) fb.push('You sang in a different octave on some lines. That’s fully counted.');
   if (!fb.length) fb.push(score >= 90 ? 'Outstanding: pitch, timing and control all on point.' : 'Nice run! Sing it again to beat your score.');
 
   return {
-    score, grade: grade(score), pitch: round3(pitch), timing: round3(timing), rhythm: round3(rhythm), stability: round3(stability),
+    score, grade: grade(score), pitch: round3(pitch), timing: round3(timing), rhythm: round3(rhythm),
+    duration: round3(duration), transitions: round3(transitions), stability: round3(stability),
     feedback: fb.slice(0, 3),
     details: {
       scoringVersion: SCORING_VERSION, latencyOffsetMs: Math.round(delta * 1000), octaveShifts,

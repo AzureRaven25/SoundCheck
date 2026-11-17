@@ -22,6 +22,7 @@ struct StageView: View {
     @State private var guide: Float = 0
     @State private var rates: [String: Double] = [:]
     @State private var results: [(PartySinger, PerformanceResult)] = []
+    @State private var groupScore: GroupScore?
     @FocusState private var startFocused: Bool
 
     var body: some View {
@@ -164,6 +165,9 @@ struct StageView: View {
             HStack(alignment: .top, spacing: 40) {
                 ForEach(results, id: \.0.memberId) { s, r in ScoreCard(name: s.name, color: Color(hex: s.color), result: r).frame(maxWidth: 520) }
             }
+            if let g = groupScore {
+                Text("Group score · \(g.singers) singers: \(g.score) (\(g.grade.rawValue))").font(.title3.bold()).foregroundStyle(SC.pink)
+            }
             HStack(spacing: 40) {
                 if let next = host?.queue.first(where: { $0.status == "queued" }) {
                     Button { Task { await singNext() } } label: { Label("Sing next: \(next.title)", systemImage: "forward.fill") }
@@ -184,7 +188,7 @@ struct StageView: View {
 
     // MARK: Flow
     private func load() async {
-        phase = .loading; data = nil; message = nil; results = []; keyShift = 0
+        phase = .loading; data = nil; message = nil; results = []; groupScore = nil; keyShift = 0
         do {
             switch try await model.backend.stageData(trackId: currentTrack) {
             case .ready(let d):
@@ -258,7 +262,12 @@ struct StageView: View {
             })
             let byId = Dictionary(uniqueKeysWithValues: singers.map { ($0.memberId, $0) })
             results = scored.compactMap { r in byId[r.member_id ?? ""].map { ($0, r.asResult) } }
-            host.send(.results(ResultsEvent(trackId: currentTrack, performances: scored.map(\.asResult))))
+            let group = scored.count > 1 ? { () -> GroupScore in
+                let avg = Int((Double(scored.map(\.score).reduce(0, +)) / Double(scored.count)).rounded())
+                return GroupScore(score: avg, grade: Pitch.grade(avg), singers: scored.count)
+            }() : nil
+            groupScore = group
+            host.send(.results(ResultsEvent(trackId: currentTrack, performances: scored.map(\.asResult), group: group)))
             message = nil
         } catch { message = "Scoring failed. Please try again." }
         phase = .results

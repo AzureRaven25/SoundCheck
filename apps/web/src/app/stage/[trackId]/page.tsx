@@ -49,6 +49,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const [hitRate, setHitRate] = useState<number | null>(null);
   const [partyRates, setPartyRates] = useState<Record<string, number>>({});
   const [scores, setScores] = useState<ScoreView[] | null>(null);
+  const [group, setGroup] = useState<{ score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const noiseFloor = useRef<number | null>(null);
   const noteAt = useRef<(t: number) => number | null>(() => null);
@@ -216,7 +217,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         return;
       }
       setPhase('scoring');
-      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[] }>('score-performance', {
+      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[]; group: { score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null }>('score-performance', {
         body: {
           track_id: data.track.id, session_id: hostRef.current.session!.id, key_shift: keyShift,
           singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb })),
@@ -227,12 +228,14 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       } else {
         const byId = new Map(singers.map((s) => [s.memberId, s]));
         setScores(res.results.map((r) => ({ ...r, name: byId.get(r.member_id)?.name ?? 'Singer', color: byId.get(r.member_id)?.color ?? '#fff' })));
+        setGroup(res.group ?? null);
         hostRef.current.sendResults({
           type: 'results', v: PROTOCOL_VERSION, trackId: data.track.id,
           performances: res.results.map((r) => ({
             memberId: r.member_id, performanceId: r.performance_id, score: r.score, grade: r.grade,
-            pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, feedback: r.feedback,
+            pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, duration: r.duration, transitions: r.transitions, feedback: r.feedback,
           })),
+          group: res.group ?? null,
         });
       }
       setPhase('results');
@@ -294,7 +297,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       {phase === 'results' || phase === 'scoring' ? (
         <div className="relative flex flex-1 items-center overflow-y-auto py-8">
           <div className="w-full">
-            <Results scores={scores} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setScoreError(null); setPhase('intro'); }} />
+            <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setGroup(null); setScoreError(null); setPhase('intro'); }} />
             {mode === 'party' && nextUp && phase === 'results' && (
               <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
                 <ListMusic className="text-pink-400" />

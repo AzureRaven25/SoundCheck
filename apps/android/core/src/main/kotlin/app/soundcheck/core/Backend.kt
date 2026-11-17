@@ -56,9 +56,9 @@ data class ScoredSinger(
     @SerialName("member_id") val memberId: String? = null,
     @SerialName("performance_id") val performanceId: String? = null,
     val score: Int, val grade: Grade, val pitch: Double, val timing: Double, val rhythm: Double, val stability: Double,
-    val feedback: List<String>,
+    val feedback: List<String>, val duration: Double? = null, val transitions: Double? = null,
 ) {
-    fun asResult() = PerformanceResult(memberId ?: "", performanceId, score, grade, pitch, timing, rhythm, stability, feedback)
+    fun asResult() = PerformanceResult(memberId ?: "", performanceId, score, grade, pitch, timing, rhythm, stability, feedback, duration, transitions)
 }
 
 /**

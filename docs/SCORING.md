@@ -86,3 +86,21 @@ Any change to the weights or curves must update the fixtures intentionally.
 - **Code:** `packages/scoring` (TypeScript), version `1.0.0`.
 - **Golden tests:** `packages/scoring/test/scoring.test.ts`. A deterministic simulated singer covers perfect, octave-down, transposed, semitone-flat, within-50-cents, unknown-latency, calibrated-late, half-skipped, wobbly vs vibrato, silence, and the noise gate.
 - **Server copy:** the `score-performance` Edge Function uses a generated copy of the package (`npm run sync:scoring`). A test fails if the two ever differ.
+
+## v1.1 (2026-11-17): six categories and a group score
+
+| Category | Weight | What it measures |
+|---|---|---|
+| Pitch | 0.35 | Cents error per note, octave-folded per phrase, vibrato-tolerant (unchanged) |
+| Timing | 0.20 | Note onsets within ±100 ms (full credit) to ±400 ms, plus coverage (unchanged) |
+| Rhythm | 0.10 | **Steadiness** of your timing: the spread (std) of onset/transition offsets. A consistent small lag scores high here; timing still notes it |
+| Duration | 0.10 | **New.** Of the notes you sang, how much of each you held (≥ 75% held = full credit) |
+| Transitions | 0.10 | Moving to the next note at the right moment (the old "rhythm" transition measure) |
+| Stability | 0.15 | Pitch steadiness on sustained notes, vibrato removed (unchanged) |
+
+The overall score is `100 × completion × Σ weight × category`. Party songs with more than one singer also get a
+**group score**: the average of the singers' scores (each person keeps their own result).
+
+Onset detection fix: an onset is now the first frame within 50 cents of the note's target. Previously, the
+tail of the previous note could count as an early onset, so a perfect performance with adjacent notes
+scored 77 instead of 100. Performances store `scoring_version`, so v1.0 and v1.1 results can be told apart.

@@ -11,6 +11,7 @@ export interface ScoreView {
   score: number;
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
   pitch: number; timing: number; rhythm: number; stability: number;
+  duration?: number; transitions?: number;
   feedback: string[];
   performance_id?: string | null;
 }
@@ -47,7 +48,7 @@ function Bar({ label, value }: { label: string; value: number }) {
 interface Row { rank: number; display_name: string; score: number; grade: string }
 
 /** SoundCheck Score results: one card per singer, then the song's leaderboard. */
-export function Results({ scores, trackId, onAgain, error }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null }) {
+export function Results({ scores, trackId, onAgain, error, group }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null }) {
   const [board, setBoard] = useState<Row[]>([]);
   const [badges, setBadges] = useState<{ title: string; tier: string }[]>([]);
   useEffect(() => {
@@ -80,11 +81,20 @@ export function Results({ scores, trackId, onAgain, error }: { scores: ScoreView
               <p className="mb-6 font-display text-8xl font-black tabular-nums tracking-tight"><CountUp to={s.score} /></p>
               <div className="space-y-3">
                 <Bar label="Pitch" value={s.pitch} /><Bar label="Timing" value={s.timing} />
-                <Bar label="Rhythm" value={s.rhythm} /><Bar label="Stability" value={s.stability} />
+                <Bar label="Rhythm" value={s.rhythm} />
+                {s.duration != null && <Bar label="Duration" value={s.duration} />}
+                {s.transitions != null && <Bar label="Transitions" value={s.transitions} />}
+                <Bar label="Stability" value={s.stability} />
               </div>
               <ul className="mt-6 space-y-1 text-sm text-ink-300">{s.feedback.map((f) => <li key={f}>• {f}</li>)}</ul>
             </div>
           ))}
+        </div>
+      )}
+      {group && (
+        <div className="mx-auto mt-6 flex max-w-md items-center justify-between rounded-2xl bg-ink-850/90 p-5 ring-1 ring-pink-500/40" role="status" aria-label="Group score">
+          <div><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Group score · {group.singers} singers</p><p className="font-display text-5xl font-black tabular-nums">{group.score}</p></div>
+          <span className="stage-gradient rounded-xl px-4 py-1 font-display text-3xl font-black text-ink-950">{group.grade}</span>
         </div>
       )}
       {badges.length > 0 && (

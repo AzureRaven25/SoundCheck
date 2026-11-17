@@ -242,7 +242,8 @@ fun ScoreCard(name: String, color: Color, r: PerformanceResult) {
             Text(r.grade.name, Modifier.clip(RoundedCornerShape(10.dp)).background(stage).padding(horizontal = 12.dp, vertical = 2.dp), fontSize = 28.sp, fontWeight = FontWeight.Black, color = ink950)
         }
         Text("${r.score}", fontSize = 80.sp, fontWeight = FontWeight.Black, color = ink50)
-        listOf("Pitch" to r.pitch, "Timing" to r.timing, "Rhythm" to r.rhythm, "Stability" to r.stability).forEach { (label, v) ->
+        listOf("Pitch" to r.pitch, "Timing" to r.timing, "Rhythm" to r.rhythm, "Duration" to r.duration, "Transitions" to r.transitions, "Stability" to r.stability)
+            .mapNotNull { (l, v) -> v?.let { l to it } }.forEach { (label, v) ->
             Row { Text(label.uppercase(), color = ink300, fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text("${(v * 100).toInt()}", color = ink300, fontSize = 12.sp) }
             Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF2A2A38))) {
                 Box(Modifier.fillMaxWidth(v.toFloat().coerceIn(0f, 1f)).height(8.dp).background(stage))

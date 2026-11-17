@@ -113,7 +113,8 @@ public struct ScoreCard: View {
                     .background(SC.stage, in: RoundedRectangle(cornerRadius: 10)).foregroundStyle(SC.ink950)
             }
             Text("\(shown)").font(SC.display(96, .black)).monospacedDigit().contentTransition(.numericText())
-            ForEach([("Pitch", result.pitch), ("Timing", result.timing), ("Rhythm", result.rhythm), ("Stability", result.stability)], id: \.0) { label, v in
+            ForEach([("Pitch", result.pitch), ("Timing", result.timing), ("Rhythm", result.rhythm), ("Duration", result.duration),
+                     ("Transitions", result.transitions), ("Stability", result.stability)].compactMap { l, v in v.map { (l, $0) } }, id: \.0) { label, v in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack { Text(label.uppercased()); Spacer(); Text("\(Int((v * 100).rounded()))") }.font(.caption.bold()).foregroundStyle(SC.ink300)
                     GeometryReader { g in

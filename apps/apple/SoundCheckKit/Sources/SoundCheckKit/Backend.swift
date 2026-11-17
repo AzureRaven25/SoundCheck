@@ -294,10 +294,11 @@ public struct ScoredSinger: Decodable, Sendable, Identifiable {
     public let score: Int
     public let grade: Grade
     public let pitch: Double, timing: Double, rhythm: Double, stability: Double
+    public let duration: Double?, transitions: Double?
     public let feedback: [String]
     public var id: String { member_id ?? "solo" }
     public var asResult: PerformanceResult {
         PerformanceResult(memberId: member_id ?? "", performanceId: performance_id, score: score, grade: grade,
-                          pitch: pitch, timing: timing, rhythm: rhythm, stability: stability, feedback: feedback)
+                          pitch: pitch, timing: timing, rhythm: rhythm, stability: stability, duration: duration, transitions: transitions, feedback: feedback)
     }
 }
