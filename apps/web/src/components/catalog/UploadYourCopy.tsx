@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Mic2, Upload } from 'lucide-react';
 import { useUser } from '@/lib/hooks/useUser';
@@ -107,9 +108,14 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
         </div>
       )}
       {state.kind === 'ready' && (
-        <p className="flex items-center gap-2 text-sm font-bold text-success-400" role="status">
-          <CheckCircle2 size={18} /> Your copy is ready: full-length playback and karaoke tracks are unlocked.
-        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="flex flex-1 items-center gap-2 text-sm font-bold text-success-400" role="status">
+            <CheckCircle2 size={18} /> Your copy is ready: full-length playback and karaoke tracks are unlocked.
+          </p>
+          <Link href={`/stage/${trackId}`} className="stage-gradient flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-lift hover:scale-105">
+            <Mic2 size={16} /> Sing on Stage
+          </Link>
+        </div>
       )}
       {state.kind === 'failed' && (
         <div role="alert" className="text-sm">

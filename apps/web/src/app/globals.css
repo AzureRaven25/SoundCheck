@@ -47,3 +47,14 @@
   scrollbar-width: thin;
   scrollbar-color: var(--color-ink-700) transparent;
 }
+
+/* SoundCheck Stage: per-word karaoke wipe. --p (0–100%) is set every animation frame.
+   Declared as a Tailwind utility so it is emitted wherever the class is used. */
+@utility stage-word {
+  background-image: linear-gradient(90deg, var(--color-cyan-400), var(--color-pink-500)), linear-gradient(var(--color-ink-50), var(--color-ink-50));
+  background-size: var(--p, 0%) 100%, 100% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

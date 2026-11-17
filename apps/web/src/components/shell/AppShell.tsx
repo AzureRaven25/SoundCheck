@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 import { useUser } from '@/lib/hooks/useUser';
 import { PlayerHost } from '@/player/PlayerHost';
@@ -15,6 +16,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user !== undefined) void loadLibrary(user?.id ?? null);
   }, [user, loadLibrary]);
+
+  // SoundCheck Stage and the phone mic page are full-screen experiences without the app chrome.
+  const path = usePathname();
+  if (path.startsWith('/stage') || path.startsWith('/join')) {
+    return <div className="h-full overflow-hidden bg-ink-950">{children}</div>;
+  }
 
   return (
     <div className="grid h-full grid-cols-[auto_1fr] grid-rows-[1fr_auto] gap-2 p-2">

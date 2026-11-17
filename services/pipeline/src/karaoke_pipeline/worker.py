@@ -162,19 +162,13 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
                     "duration_ms": duration_ms, "bitrate_kbps": 256,
                 })
 
-        if lines and word_stats and word_stats["aligned"]:
-            # Word-timed lyrics become the primary version (one primary per track).
-            sb.update("lyrics", {"track_id": job.track_id}, {"is_primary": False})
-            sb.insert("lyrics", {
-                "track_id": job.track_id, "provider": "aligned", "granularity": "word", "is_primary": True,
-                "content": {"lines": lines}, "provider_ref": PIPELINE_VERSION,
-            }, upsert_on="track_id,provider")
-
         analysis = sb.insert("karaoke_analysis", {
             "track_id": job.track_id, "source_asset_id": job.asset_id, "pipeline_version": PIPELINE_VERSION,
             "separation_model": stems.model, "pitch_model": f"crepe-{crepe_model}",
             "musical_key": info["key"]["name"], "tempo_bpm": info["tempo_bpm"], "vocal_range": melody["range"],
             "notes": [{**n, "conf": 1.0} for n in notes], "phrases": phrases, "contour_path": f"{base}/contour.json",
+            # word timing is specific to this upload's audio, so it lives on the analysis (not the shared lyrics)
+            "word_lyrics": {"lines": lines} if lines and word_stats and word_stats["aligned"] else None,
         }, upsert_on="source_asset_id")[0]
         sb.update("audio_assets", {"id": job.asset_id}, {"duration_ms": duration_ms})
         return analysis["id"]

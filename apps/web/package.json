@@ -9,7 +9,10 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "vendor:stretch": "node scripts/vendor-stretch.mjs",
+    "predev": "node scripts/vendor-stretch.mjs",
+    "prebuild": "node scripts/vendor-stretch.mjs"
   },
   "dependencies": {
     "@soundcheck/contracts": "*",
@@ -23,7 +26,8 @@
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
     "signalsmith-stretch": "^1.3.2",
-    "zustand": "^5.1.0"
+    "zustand": "^5.1.0",
+    "@soundcheck/scoring": "*"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",

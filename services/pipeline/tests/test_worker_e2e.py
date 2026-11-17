@@ -74,9 +74,10 @@ def test_upload_to_karaoke_assets(tmp_path, monkeypatch):
         assert sorted(s["kind"] for s in stems) == ["instrumental", "vocals"]
         analysis = http.get(f"{url}/rest/v1/karaoke_analysis", headers=user, params={"source_asset_id": f"eq.{asset_id}"}).json()[0]
         assert len(analysis["notes"]) > 10 and len(analysis["phrases"]) == 4 and analysis["musical_key"]
-        lyr = http.get(f"{url}/rest/v1/lyrics", headers=user, params={"track_id": f"eq.{track_id}", "is_primary": "eq.true"}).json()[0]
-        assert lyr["provider"] == "aligned" and lyr["granularity"] == "word"
-        assert all(line.get("words") for line in lyr["content"]["lines"] if line["text"])
+        assert all(line.get("words") for line in analysis["word_lyrics"]["lines"] if line["text"])
+        # the shared lyrics are untouched (word timing belongs to this upload)
+        lyr = http.get(f"{url}/rest/v1/lyrics", headers=user, params={"track_id": f"eq.{track_id}"}).json()
+        assert [x["provider"] for x in lyr] == ["lrclib"]
         for s in stems:
             got = http.get(f"{url}/storage/v1/object/audio/{s['storage_path']}", headers=user)
             assert got.status_code == 200 and len(got.content) > 50_000   # user can download their stems

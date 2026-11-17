@@ -337,6 +337,7 @@ export type Database = {
           tempo_bpm: number | null
           track_id: string
           vocal_range: Json | null
+          word_lyrics: Json | null
         }
         Insert: {
           contour_path?: string | null
@@ -352,6 +353,7 @@ export type Database = {
           tempo_bpm?: number | null
           track_id: string
           vocal_range?: Json | null
+          word_lyrics?: Json | null
         }
         Update: {
           contour_path?: string | null
@@ -367,6 +369,7 @@ export type Database = {
           tempo_bpm?: number | null
           track_id?: string
           vocal_range?: Json | null
+          word_lyrics?: Json | null
         }
         Relationships: [
           {
@@ -1134,7 +1137,10 @@ export type Database = {
         }
         Returns: undefined
       }
-      provider_reserve_slot: { Args: { p_provider: string }; Returns: number }
+      provider_reserve_slot: {
+        Args: { p_max_wait_ms?: number; p_provider: string }
+        Returns: number
+      }
       request_processing: {
         Args: { p_asset_id: string }
         Returns: {
