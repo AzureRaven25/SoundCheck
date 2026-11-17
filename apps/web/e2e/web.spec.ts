@@ -54,7 +54,7 @@ test('sign up, favorite a song, build a playlist', async ({ page }) => {
   await page.getByRole('button', { name: 'Rename' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Road Trip' })).toBeVisible();
   await page.goto('/settings');
-  await page.getByLabel('Username').fill(`e2e_${Date.now() % 1e6}`);
+  await page.getByLabel('Username', { exact: true }).fill(`e2e_${Date.now() % 1e6}`);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toHaveText('Saved');
 });

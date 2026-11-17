@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Mic2, Upload } from 'lucide-react';
 import { licenseLabel } from '@soundcheck/contracts';
 import { useUser } from '@/lib/hooks/useUser';
+import { loadServers, searchAllServers, type ServerTrack } from '@/lib/personal/servers';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
 const STAGES: Record<string, string> = {
@@ -29,6 +30,29 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [open, setOpen] = useState<{ license_url: string | null; karaoke_ok: boolean; url: string | null } | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
+  const [serverHits, setServerHits] = useState<ServerTrack[] | null>(null);
+  const [hasServer, setHasServer] = useState(false);
+  useEffect(() => { setHasServer(loadServers().length > 0); }, []);
+
+  /** Find this song on the user's own server; picking a match uploads that file like a manual upload. */
+  async function findOnServer() {
+    setServerHits(null);
+    setServerHits(await searchAllServers(title, 8));
+  }
+  async function takeServerCopy(t: ServerTrack) {
+    setServerHits(null);
+    setState({ kind: 'uploading', pct: 0 });
+    try {
+      const r = await fetch(t.streamUrl);
+      if (!r.ok) throw new Error(`your server answered ${r.status}`);
+      const blob = await r.blob();
+      const type = blob.type.startsWith('audio/') ? blob.type : 'audio/mpeg';
+      const ext = type.includes('flac') ? 'flac' : type.includes('mp4') || type.includes('aac') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'mp3';
+      await upload(new File([blob], `${t.title}.${ext}`, { type }));
+    } catch (e) {
+      setState({ kind: 'failed', error: e instanceof Error ? e.message : 'Couldn’t fetch the song from your server', assetId: '' });
+    }
+  }
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -124,9 +148,28 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
             <p className="font-bold">Make “{title}” karaoke-ready</p>
             <p className="text-sm text-ink-300">Upload your own copy (MP3, M4A, FLAC, WAV). We separate the vocals, map the melody and time every word.</p>
           </div>
-          <button type="button" onClick={() => input.current?.click()} className="flex items-center gap-2 rounded-full bg-ink-50 px-5 py-2.5 text-sm font-bold text-ink-950 hover:scale-105">
-            <Upload size={16} /> Upload your copy
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {hasServer && (
+              <button type="button" onClick={() => void findOnServer()} className="rounded-full border border-ink-600 px-5 py-2.5 text-sm font-bold hover:border-ink-300">
+                Use my music server’s copy
+              </button>
+            )}
+            <button type="button" onClick={() => input.current?.click()} className="flex items-center gap-2 rounded-full bg-ink-50 px-5 py-2.5 text-sm font-bold text-ink-950 hover:scale-105">
+              <Upload size={16} /> Upload your copy
+            </button>
+          </div>
+          {serverHits && (
+            <ul className="w-full space-y-1" aria-label="Matches on your music server">
+              {serverHits.length === 0 && <li className="text-sm text-ink-500">Your server doesn’t seem to have this song.</li>}
+              {serverHits.map((t) => (
+                <li key={t.key}>
+                  <button type="button" onClick={() => void takeServerCopy(t)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-ink-800">
+                    <b>{t.title}</b> · {t.artist}{t.album ? ` · ${t.album}` : ''} <span className="text-ink-500">({t.serverName})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {state.kind === 'uploading' && <p className="flex items-center gap-2 text-sm"><Loader2 size={16} className="animate-spin" /> Uploading…</p>}

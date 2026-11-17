@@ -25,7 +25,7 @@ export function PlayerHost() {
   const flushHistory = () => {
     const l = listened.current;
     listened.current = null;
-    if (!l || l.ms < 5000) return; // ignore skips
+    if (!l || l.ms < 5000 || l.trackId.startsWith('server:')) return; // ignore skips; server songs aren't catalog rows
     const sb = supabaseBrowser();
     void sb.auth.getUser().then(({ data }) => {
       if (!data.user) return;
@@ -48,7 +48,8 @@ export function PlayerHost() {
     }
     let cancelled = false;
     report({ load: 'loading', position: 0, duration: (track.durationMs ?? 0) / 1000 });
-    resolveAudio(track.id)
+    const direct = track.stream ? Promise.resolve({ url: track.stream.url, kind: 'full' as const, attributionUrl: null, sourceLabel: track.stream.label }) : null;
+    (direct ?? resolveAudio(track.id))
       .then((src) => {
         if (cancelled) return;
         if (!src) {

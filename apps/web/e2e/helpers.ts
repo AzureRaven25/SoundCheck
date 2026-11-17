@@ -52,3 +52,8 @@ export async function signUp(page: Page, name: string) {
 
 /** Local-stack-only account used when driving the native TV apps against a web phone (see e2e/tv-host.mjs). */
 export const TV_TEST_USER = { email: 'tv-host@soundcheck.test', password: 'tv-host-local-only', name: 'TV Host' };
+
+/** Local-only Navidrome used by e2e/personal-server.spec.ts (docker run deluan/navidrome; see the spec header). */
+export const NAVIDROME_TEST = { url: 'http://localhost:4533', username: 'singer', password: 'local-navidrome-test' };
+/** Local-only Jellyfin used by e2e/personal-server.spec.ts (docker run jellyfin/jellyfin, wizard run via its API). */
+export const JELLYFIN_TEST = { url: 'http://localhost:8096', username: 'singer', password: 'local-jellyfin-test' };

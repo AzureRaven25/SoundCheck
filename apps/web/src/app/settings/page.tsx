@@ -1,4 +1,5 @@
 'use client';
+import { ServerConnections } from '@/components/personal/ServerConnections';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/lib/hooks/useUser';
 import { supabaseBrowser } from '@/lib/supabase/client';
@@ -66,6 +67,7 @@ export default function SettingsPage() {
           Show my scores on public leaderboards
         </label>
       </section>
+      <ServerConnections />
       <section className="space-y-4">
         <h2 className="text-lg font-bold">SoundCheck Stage</h2>
         <label className="block"><span className="mb-1 block text-sm font-bold">Default guide vocal: {Math.round((prefs.default_guide_vocal ?? 0) * 100)}%</span>

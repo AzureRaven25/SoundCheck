@@ -57,6 +57,9 @@ function hash(s: string) {
  * Album artwork with graceful fallback: uses the given URL, otherwise resolves the album's cover on
  * demand, otherwise shows a generated gradient with initials. Never blocks rendering.
  */
+/** Hosts configured in next.config.ts images.remotePatterns. */
+const OPTIMIZABLE = /^https:\/\/(?:[^/]*\.)?(?:coverartarchive\.org|archive\.org|mzstatic\.com|supabase\.co)\//i;
+
 export function Artwork({
   src, albumId, title, className, rounded = 'rounded-md', resolve = true, priority = false,
   sizes = '(max-width: 768px) 45vw, 220px',
@@ -91,6 +94,8 @@ export function Artwork({
           sizes={sizes}
           priority={priority}
           onError={() => setFailedUrl(url)}
+          // only allow-listed catalog hosts go through the optimizer; a user's own music server can be anywhere
+          unoptimized={!OPTIMIZABLE.test(url)}
           className="object-cover"
         />
       </div>

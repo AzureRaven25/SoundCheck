@@ -6,7 +6,7 @@ separation, pitch detection, lyrics, transposition, microphones and infrastructu
 playback**.
 
 Legend: ✅ verified by us (request made, docs/code read, or played) · ⚠️ stated by the provider but not
-verified by us · ❌ not available / not permitted. Last re-verified **2026-11-17**.
+verified by us · ❌ not available / not permitted. Last re-verified **2026-11-17**. Internet Archive metadata lengths can be seconds off for VBR MP3s (165.1 s listed vs 156.87 s decoded), so the player shows the decoded duration and processing writes the measured one back.
 
 ## 1. Capabilities are separate
 
@@ -55,7 +55,7 @@ own (`packages/contracts/src/providers.ts`):
 |---|---|---|---|---|
 | **Your own uploads** | Existing pipeline: upload → HTDemucs stems → melody → word alignment ✅ (E2E tests) | ✅ | ✅ (you own the copy; stems stay private to you) | ✅ Integrated |
 | **Internet Archive** (netlabels, Creative Commons / public-domain audio) | ✅ `advancedsearch.php` returns 61,276 CC-licensed netlabel albums with `licenseurl`; `/metadata/{id}` lists per-track MP3/OGG/FLAC files with real lengths (e.g. 509.22 s), no API key, CORS-enabled | ✅ real files, real durations | ✅ when the license allows derivatives (not `-nd`); always with attribution; NC licenses = non-commercial use only | ✅ Integrated (`open-music` function, "Open music" source) |
-| **Personal music servers**: Navidrome / Airsonic / Gonic (Subsonic API), Jellyfin | Subsonic API: token auth (`t = md5(password + salt)`), `search3`, `getAlbum`, `stream` ✅ (spec). Jellyfin: `/Users/AuthenticateByName`, `/Items`, `/Audio/{id}/universal` ⚠️ | ✅ the user's own files | ✅ the user's own copies (processed into *their* private stems) | ✅ Integrated (web, credentials kept on the device) |
+| **Personal music servers**: Navidrome / Airsonic / Gonic (Subsonic API), Jellyfin | ✅ Tested against **Navidrome 0.64.2** and **Jellyfin 12.4.0** in local Docker: Subsonic token auth (`t = md5(password + salt)`), `search3`, `stream`; Jellyfin `/Users/AuthenticateByName`, `/Users/{id}/Items`, `/Audio/{id}/stream?static=true` (Jellyfin 12.4 rejects `api_key` on `/universal` with 401). Both send `Access-Control-Allow-Origin: *` | ✅ the user's own files (75 s test song played past 30 s at its true length) | ✅ the user's own copies: "Use my music server’s copy" uploads the file to the user's private Storage and runs the normal pipeline (E2E) | ✅ Integrated on the web; credentials (a salted token / access token, never the password) stay in this browser. An https page can't reach an http LAN server (mixed content): use the server's https address |
 | Jamendo | CC-licensed catalog; API needs a free `client_id` ⚠️; commercial use needs Jamendo Licensing | ✅ | ✅ personal use when not ND | ⏸ Candidate (needs `JAMENDO_CLIENT_ID`) |
 | Free Music Archive | Public API was retired ⚠️ | — | — | ❌ |
 

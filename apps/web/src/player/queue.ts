@@ -15,6 +15,8 @@ export interface QueueTrack {
   albumId: string | null;
   artworkUrl: string | null;
   durationMs: number | null;
+  /** A direct full-length source that isn't in the catalog (e.g. the user's own music server). */
+  stream?: { url: string; label: string };
 }
 
 export interface QueueState {
