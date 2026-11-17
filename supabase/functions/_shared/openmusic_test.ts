@@ -1,5 +1,5 @@
 import { assertEquals } from 'jsr:@std/assert@1';
-import { cleanTitle, licenseAllowsKaraoke, parseLength, pickTracks, stableUuid } from './openmusic.ts';
+import { cleanTitle, licenseAllowsKaraoke, parseLength, pickCover, pickTracks, stableUuid } from './openmusic.ts';
 
 Deno.test('parses Internet Archive lengths', () => {
   assertEquals(parseLength('509.22'), 509220);
@@ -30,4 +30,10 @@ Deno.test('stable ids and license rules', async () => {
   assertEquals((await stableUuid('x/y')).length, 36);
   assertEquals(licenseAllowsKaraoke('http://creativecommons.org/licenses/by-nc-nd/3.0/'), false);
   assertEquals(licenseAllowsKaraoke('http://creativecommons.org/licenses/by-sa/4.0/'), true);
+});
+
+Deno.test('picks a real cover image', () => {
+  assertEquals(pickCover('x', [{ name: 'back.jpg', format: 'JPEG' }, { name: 'Front Cover.jpg', format: 'JPEG' }]), 'https://archive.org/download/x/Front%20Cover.jpg');
+  assertEquals(pickCover('x', [{ name: 'a_thumb.jpg', format: 'JPEG Thumb' }, { name: 'art.png', format: 'PNG' }]), 'https://archive.org/download/x/art.png');
+  assertEquals(pickCover('x', [{ name: 'song.mp3', format: 'VBR MP3' }]), 'https://archive.org/services/img/x');
 });

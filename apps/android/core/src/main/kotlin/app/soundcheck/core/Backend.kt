@@ -150,6 +150,9 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
 
     private val trackCols = Columns.raw("id, title, artist_credit, album_id, duration_ms, release_year, albums(title)")
 
+    suspend fun track(id: String): Track? = withArtwork(
+        client.from("tracks").select(trackCols) { filter { eq("id", id) } }.decodeList<Row>()).firstOrNull()
+
     suspend fun popular(limit: Int = 30): List<Track> = withArtwork(
         client.from("tracks").select(trackCols) { order("popularity", Order.DESCENDING); range(0L, limit - 1L) }.decodeList<Row>())
 
@@ -180,6 +183,20 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
     suspend fun isKaraokeReady(trackId: String): Boolean = runCatching {
         client.from("karaoke_analysis").select(Columns.raw("id")) { filter { eq("track_id", trackId) }; limit(1) }.decodeList<JsonObject>().isNotEmpty()
     }.getOrDefault(false)
+
+    /** Best way to listen on this device: a full-length open recording when one exists, else a labelled 30 s preview. */
+    data class ListenSource(val url: String, val full: Boolean, val label: String, val credit: String?)
+    suspend fun listenSource(trackId: String): ListenSource? {
+        @Serializable data class S(@SerialName("stream_url") val streamUrl: String? = null, val url: String? = null, @SerialName("license_url") val licenseUrl: String? = null)
+        val open = runCatching {
+            client.from("track_sources").select(Columns.raw("stream_url, url, license_url")) {
+                filter { eq("track_id", trackId); eq("provider", "internet_archive") }; limit(1)
+            }.decodeList<S>().firstOrNull()
+        }.getOrNull()
+        if (open?.streamUrl != null) return ListenSource(open.streamUrl, true, listOfNotNull("Internet Archive", licenseLabel(open.licenseUrl)).joinToString(" · "), open.url)
+        val pv = preview(trackId) ?: return null
+        return ListenSource(pv.first, false, "Preview · 30 s", pv.second)
+    }
 
     /** 30 s preview (resolve-preview) + the store page to credit. */
     suspend fun preview(trackId: String): Pair<String, String?>? = runCatching {
@@ -284,4 +301,13 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
     }
 
     fun joinUrl(code: String) = "${config.siteUrl.trimEnd('/')}/join/$code"
+}
+
+/** "CC BY-NC-SA 3.0" from a Creative Commons deed URL (mirror of contracts/providers.ts). */
+fun licenseLabel(url: String?): String? {
+    if (url == null) return null
+    Regex("licenses/([a-z-]+)/([\\d.]+)", RegexOption.IGNORE_CASE).find(url)?.let { return "CC ${it.groupValues[1].uppercase()} ${it.groupValues[2]}" }
+    if (url.contains("publicdomain/zero", true)) return "CC0"
+    if (url.contains("publicdomain", true)) return "Public domain"
+    return "Open license"
 }

@@ -156,15 +156,21 @@ fun SearchScreen(onOpen: (Track) -> Unit) {
 }
 
 @Composable
-fun TrackDetail(track: Track, signedIn: Boolean, onSing: (Track) -> Unit, onBack: () -> Unit) {
+fun TrackDetail(track: Track, signedIn: Boolean, onSing: (Track) -> Unit, onBack: () -> Unit, autoplay: Boolean = false) {
     val ctx = LocalContext.current
     var ready by remember { mutableStateOf(false) }
-    var previewLabel by remember { mutableStateOf("Preview") }
-    var attributed by remember { mutableStateOf(false) }
+    var previewLabel by remember { mutableStateOf("Play") }
+    var sourceLabel by remember { mutableStateOf<String?>(null) }
     val player = remember { ExoPlayer.Builder(ctx).build() }
     val scope = rememberCoroutineScope()
     DisposableEffect(Unit) { onDispose { player.release() } }
     LaunchedEffect(track.id) { ready = signedIn && Services.backend.isKaraokeReady(track.id) }
+    if (BuildConfig.DEBUG && autoplay) LaunchedEffect(Unit) {   // emulator tests: play straight away and log the position
+        val src = Services.backend.listenSource(track.id) ?: return@LaunchedEffect
+        sourceLabel = (if (src.full) "Full track · " else "") + src.label
+        player.setMediaItem(MediaItem.fromUri(src.url)); player.prepare(); player.play(); previewLabel = "Pause"
+        repeat(8) { delay(10_000); println("[soundcheck] listen pos=${player.currentPosition / 1000}s dur=${player.duration / 1000}s playing=${player.isPlaying} full=${src.full}") }
+    }
     androidx.activity.compose.BackHandler(onBack = onBack)
     Row(Modifier.fillMaxSize().padding(64.dp), horizontalArrangement = Arrangement.spacedBy(56.dp)) {
         Artwork(track, Modifier.size(420.dp))
@@ -176,21 +182,21 @@ fun TrackDetail(track: Track, signedIn: Boolean, onSing: (Track) -> Unit, onBack
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 if (ready) Button(onClick = { onSing(track) }) { Text("Sing on Stage") }
                 OutlinedButton(onClick = {
-                    if (player.isPlaying) { player.pause(); previewLabel = "Preview"; return@OutlinedButton }
+                    if (player.isPlaying) { player.pause(); previewLabel = "Play"; return@OutlinedButton }
                     if (player.mediaItemCount > 0) { player.play(); previewLabel = "Pause"; return@OutlinedButton }
                     previewLabel = "Loading…"
                     scope.launch {
-                        val pv = Services.backend.preview(track.id)
-                        if (pv == null) { previewLabel = "No preview"; return@launch }
-                        attributed = pv.second != null
-                        player.setMediaItem(MediaItem.fromUri(pv.first)); player.prepare(); player.play()
+                        val src = Services.backend.listenSource(track.id)
+                        if (src == null) { previewLabel = "Not available"; return@launch }
+                        sourceLabel = (if (src.full) "Full track · " else "") + src.label
+                        player.setMediaItem(MediaItem.fromUri(src.url)); player.prepare(); player.play()
                         previewLabel = "Pause"
                     }
                 }) { Text(previewLabel) }
             }
             if (!ready) Text(if (signedIn) "Karaoke tracks for this song aren’t ready yet. Upload your copy on the SoundCheck website to sing it here."
                              else "Sign in on the Account tab to sing your karaoke-ready songs.", color = SC.ink300, modifier = Modifier.width(640.dp))
-            if (attributed) Text("Preview courtesy of Apple Music", color = SC.ink500, fontSize = 14.sp)
+            sourceLabel?.let { Text(it, color = SC.ink300, fontSize = 14.sp) }
         }
     }
 }

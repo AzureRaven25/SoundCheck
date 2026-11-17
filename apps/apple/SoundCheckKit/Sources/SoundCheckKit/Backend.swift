@@ -175,6 +175,21 @@ public final class SoundCheckBackend: Sendable {
         return !(a ?? []).isEmpty
     }
 
+    /// Best way to *listen* to a song on this device: a full-length open recording (Internet Archive) when one
+    /// exists, otherwise a clearly labelled 30 s preview. (Uploads play through Stage; DRM services use their own players.)
+    public struct ListenSource: Sendable { public let url: URL; public let full: Bool; public let label: String; public let credit: URL? }
+    public func listenSource(trackId: String) async -> ListenSource? {
+        struct S: Decodable { let stream_url: String?; let url: String?; let license_url: String? }
+        if let rows: [S] = try? await client.from("track_sources").select("stream_url, url, license_url").eq("track_id", value: trackId)
+            .eq("provider", value: "internet_archive").limit(1).execute().value,
+           let r = rows.first, let u = r.stream_url.flatMap(URL.init(string:)) {
+            return ListenSource(url: u, full: true, label: ["Internet Archive", licenseLabel(r.license_url)].compactMap { $0 }.joined(separator: " · "),
+                                credit: r.url.flatMap(URL.init(string:)))
+        }
+        guard let pv = await preview(trackId: trackId) else { return nil }
+        return ListenSource(url: pv.url, full: false, label: "Preview · 30 s", credit: pv.attribution)
+    }
+
     /// 30 s preview for browsing (resolve-preview), with the store link to credit.
     public func preview(trackId: String) async -> (url: URL, attribution: URL?)? {
         struct Body: Encodable { let track_id: String }
@@ -288,6 +303,18 @@ public struct QueueItem: Decodable, Sendable, Identifiable, Equatable {
 }
 
 /// One singer's official result as returned by score-performance.
+/// "CC BY-NC-SA 3.0" from a Creative Commons deed URL (mirror of contracts/providers.ts).
+public func licenseLabel(_ url: String?) -> String? {
+    guard let url else { return nil }
+    if let r = url.range(of: #"licenses/([a-z-]+)/([\d.]+)"#, options: [.regularExpression, .caseInsensitive]) {
+        let parts = url[r].split(separator: "/")
+        if parts.count >= 3 { return "CC \(parts[1].uppercased()) \(parts[2])" }
+    }
+    if url.lowercased().contains("publicdomain/zero") { return "CC0" }
+    if url.lowercased().contains("publicdomain") { return "Public domain" }
+    return "Open license"
+}
+
 public struct ScoredSinger: Decodable, Sendable, Identifiable {
     public let member_id: String?
     public let performance_id: String?

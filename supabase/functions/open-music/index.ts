@@ -9,7 +9,7 @@
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import { adminClient, cors, json, USER_AGENT } from '../_shared/runtime.ts';
-import { licenseAllowsKaraoke, pickTracks, stableUuid, type IaFile } from '../_shared/openmusic.ts';
+import { licenseAllowsKaraoke, pickCover, pickTracks, stableUuid, type IaFile } from '../_shared/openmusic.ts';
 
 const IA = 'https://archive.org';
 const ID_RE = /^[A-Za-z0-9._-]{1,100}$/;
@@ -54,13 +54,17 @@ async function album(identifier: string) {
 
   const db = adminClient();
   const albumId = await stableUuid(identifier);
+  const coverUrl = pickCover(identifier, (d.files ?? []) as IaFile[]);
+  // insert-only (ignoreDuplicates): re-importing must never overwrite what we've since measured or corrected,
+  // e.g. the decoded duration the worker writes back
   const { error: ae } = await db.from('albums').upsert({
     id: albumId, title: title.slice(0, 500), artist_credit: creator,
     primary_type: files.length <= 3 ? 'single' : 'album', release_year: year >= 1800 && year <= 2200 ? year : null,
-  });
+  }, { ignoreDuplicates: true });
   if (ae) throw ae;
-  await db.from('artwork').upsert({ entity_type: 'album', entity_id: albumId, provider: 'internet_archive', source_url: cover(identifier), is_primary: true },
-    { onConflict: 'entity_type,entity_id,provider,source_url' });
+  await db.from('artwork').delete().eq('entity_type', 'album').eq('entity_id', albumId).eq('provider', 'internet_archive').neq('source_url', coverUrl);
+  await db.from('artwork').upsert({ entity_type: 'album', entity_id: albumId, provider: 'internet_archive', source_url: coverUrl, is_primary: true },
+    { onConflict: 'entity_type,entity_id,provider,source_url', ignoreDuplicates: true });
 
   const tracks = [];
   for (const f of files) {
@@ -70,16 +74,16 @@ async function album(identifier: string) {
   const { error: te } = await db.from('tracks').upsert(tracks.map((t) => ({
     id: t.id, title: t.title.slice(0, 500), artist_credit: creator, album_id: albumId, duration_ms: t.durationMs,
     release_year: year >= 1800 && year <= 2200 ? year : null,
-  })));
+  })), { ignoreDuplicates: true });
   if (te) throw te;
   const { error: se } = await db.from('track_sources').upsert(tracks.map((t) => ({
     track_id: t.id, provider: 'internet_archive', external_id: `${identifier}/${t.file}`, url: page, stream_url: t.streamUrl,
     duration_ms: t.durationMs, license_url: license, attribution: `${creator} — ${title} (Internet Archive)`, karaoke_ok: karaokeOk,
-  })), { onConflict: 'provider,external_id' });
+  })), { onConflict: 'provider,external_id', ignoreDuplicates: true });
   if (se) throw se;
 
   return {
-    album: { id: albumId, identifier, title, creator, year: year || null, license_url: license, karaoke_ok: karaokeOk, cover: cover(identifier), page },
+    album: { id: albumId, identifier, title, creator, year: year || null, license_url: license, karaoke_ok: karaokeOk, cover: coverUrl, page },
     tracks: tracks.map((t) => ({ id: t.id, title: t.title, track_no: t.trackNo, duration_ms: t.durationMs, stream_url: t.streamUrl })),
   };
 }

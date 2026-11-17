@@ -55,13 +55,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val dev = if (BuildConfig.DEBUG) DevLaunch(
             intent.getStringExtra("sc_email"), intent.getStringExtra("sc_password"),
-            intent.getStringExtra("sc_stage"), intent.getBooleanExtra("sc_autostart", false),
+            intent.getStringExtra("sc_stage"), intent.getBooleanExtra("sc_autostart", false), intent.getStringExtra("sc_play"),
         ) else DevLaunch()
         setContent { SoundCheckTv(dev) }
     }
 }
 
-data class DevLaunch(val email: String? = null, val password: String? = null, val stage: String? = null, val autostart: Boolean = false)
+data class DevLaunch(val email: String? = null, val password: String? = null, val stage: String? = null, val autostart: Boolean = false, val play: String? = null)
 
 @Composable
 fun SoundCheckTv(dev: DevLaunch) {
@@ -76,12 +76,13 @@ fun SoundCheckTv(dev: DevLaunch) {
         if (dev.email != null && dev.password != null && !backend.isSignedIn) runCatching { backend.signIn(dev.email, dev.password) }
         signedIn = backend.isSignedIn
         if (dev.stage != null && signedIn) stage = dev.stage
+        if (dev.play != null) detail = runCatching { backend.track(dev.play) }.getOrNull()
     }
     MaterialTheme(colorScheme = darkColorScheme(primary = SC.pink, background = SC.ink950, surface = SC.ink900)) {
         Box(Modifier.fillMaxSize().background(SC.ink950)) {
             when {
                 stage != null -> StageScreen(stage!!, autostart = dev.autostart, onExit = { stage = null })
-                detail != null -> TrackDetail(detail!!, signedIn, onSing = { stage = it.id }, onBack = { detail = null })
+                detail != null -> TrackDetail(detail!!, signedIn, onSing = { stage = it.id }, onBack = { detail = null }, autoplay = dev.play != null)
                 else -> Column(Modifier.fillMaxSize()) {
                     TabRow(selectedTabIndex = tab, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 24.dp)) {
                         listOf("Home", "Search", "Account").forEachIndexed { i, label ->

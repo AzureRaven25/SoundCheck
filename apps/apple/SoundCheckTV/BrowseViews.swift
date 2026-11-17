@@ -100,7 +100,8 @@ struct TrackDetailView: View {
     @State private var ready = false
     @State private var player: AVPlayer?
     @State private var attribution: URL?
-    @State private var previewState = "Preview"
+    @State private var previewState = "Play"
+    @State private var sourceLabel: String?
     @State private var stage = false
 
     var body: some View {
@@ -125,7 +126,7 @@ struct TrackDetailView: View {
                                         : "Sign in to sing your karaoke-ready songs on Stage.")
                         .foregroundStyle(SC.ink300).frame(maxWidth: 800, alignment: .leading)
                 }
-                if attribution != nil { Text("Preview courtesy of Apple Music").font(.caption).foregroundStyle(SC.ink500) }
+                if let sourceLabel { Text(sourceLabel).font(.caption).foregroundStyle(SC.ink300) }
             }
             Spacer()
         }
@@ -136,11 +137,12 @@ struct TrackDetailView: View {
     }
 
     private func togglePreview() async {
-        if let p = player { if p.rate > 0 { p.pause(); previewState = "Preview" } else { p.play(); previewState = "Pause" }; return }
+        if let p = player { if p.rate > 0 { p.pause(); previewState = "Play" } else { p.play(); previewState = "Pause" }; return }
         previewState = "Loading…"
-        guard let pv = await model.backend.preview(trackId: track.id) else { previewState = "No preview"; return }
-        attribution = pv.attribution
-        let p = AVPlayer(url: pv.url)
+        guard let src = await model.backend.listenSource(trackId: track.id) else { previewState = "Not available"; return }
+        sourceLabel = (src.full ? "Full track · " : "") + src.label
+        attribution = src.credit
+        let p = AVPlayer(url: src.url)
         player = p
         p.play()
         previewState = "Pause"

@@ -61,3 +61,11 @@ export function licenseAllowsKaraoke(licenseUrl: string | null | undefined): boo
   if (u.includes('publicdomain') || u.includes('/zero/')) return true;
   return u.includes('creativecommons.org/licenses/') && !u.includes('-nd');
 }
+
+/** Album art: a file named like a cover beats the archive's default item image (often a scan or a tracklist). */
+export function pickCover(identifier: string, files: IaFile[]): string {
+  const images = files.filter((f) => /^(JPEG|PNG|JPEG Thumb)$/.test(f.format ?? '') && !/thumb|back|tracklist|_itemimage/i.test(f.name) && f.format !== 'JPEG Thumb');
+  const pick = images.find((f) => /front|cover|folder|artwork/i.test(f.name)) ?? images[0];
+  return pick ? `https://archive.org/download/${encodeURIComponent(identifier)}/${pick.name.split('/').map(encodeURIComponent).join('/')}`
+              : `https://archive.org/services/img/${encodeURIComponent(identifier)}`;
+}
