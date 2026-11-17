@@ -115,6 +115,15 @@ export interface HostCommandEvent {
   value?: number;
 }
 
+/**
+ * Anyone → everyone: the session's song queue (session_queue table) changed; re-read it with
+ * session_queue_list. Carries no data, so RLS on the table stays the only gate on what members see.
+ */
+export interface QueueChangedEvent {
+  type: 'queue_changed';
+  v: typeof PROTOCOL_VERSION;
+}
+
 export type SessionEvent =
   | TransportEvent
   | PitchEvent
@@ -123,7 +132,8 @@ export type SessionEvent =
   | MicStatusEvent
   | LiveScoreEvent
   | ResultsEvent
-  | HostCommandEvent;
+  | HostCommandEvent
+  | QueueChangedEvent;
 
 /** Presence payload each device tracks on the channel. */
 export interface PresenceState {

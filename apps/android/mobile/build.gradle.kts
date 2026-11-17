@@ -18,6 +18,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         debug {
@@ -28,7 +29,7 @@ android {
         release {
             isMinifyEnabled = false
             buildConfigField("String", "SUPABASE_URL", "\"https://ppmzqjrfcbemzzbwicrd.supabase.co\"")
-            buildConfigField("String", "SITE_URL", "\"https://soundcheck.app\"")
+            buildConfigField("String", "SITE_URL", "\"https://soundcheck-gules.vercel.app\"")
             buildConfigField("String", "SUPABASE_KEY", secret("sc.publishableKey.release"))
         }
     }
@@ -48,4 +49,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.ktor)
     implementation(libs.compose.material3)
+    implementation(libs.media3.exoplayer)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

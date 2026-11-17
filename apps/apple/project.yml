@@ -68,6 +68,17 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.soundcheck.mobile
         TARGETED_DEVICE_FAMILY: "1"
+  SoundCheckMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SoundCheckMobileUITests]
+    dependencies:
+      - target: SoundCheckMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.soundcheck.mobile.uitests
+        TEST_TARGET_NAME: SoundCheckMobile
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   SoundCheckTV:
     build: { targets: { SoundCheckTV: all } }
@@ -75,3 +86,4 @@ schemes:
   SoundCheckMobile:
     build: { targets: { SoundCheckMobile: all } }
     run: { config: Debug }
+    test: { config: Debug, targets: [SoundCheckMobileUITests] }

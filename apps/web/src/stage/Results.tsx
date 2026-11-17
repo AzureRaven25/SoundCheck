@@ -12,6 +12,7 @@ export interface ScoreView {
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
   pitch: number; timing: number; rhythm: number; stability: number;
   feedback: string[];
+  performance_id?: string | null;
 }
 
 const GRADE_COLOR: Record<ScoreView['grade'], string> = {
@@ -48,6 +49,14 @@ interface Row { rank: number; display_name: string; score: number; grade: string
 /** SoundCheck Score results: one card per singer, then the song's leaderboard. */
 export function Results({ scores, trackId, onAgain, error }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null }) {
   const [board, setBoard] = useState<Row[]>([]);
+  const [badges, setBadges] = useState<{ title: string; tier: string }[]>([]);
+  useEffect(() => {
+    const ids = (scores ?? []).map((s) => s.performance_id).filter((x): x is string => !!x);
+    if (!ids.length) return;
+    // badges this performance just unlocked (awarded by a database trigger when the score was saved)
+    void supabaseBrowser().from('user_achievements').select('achievements(title, tier)').in('performance_id', ids)
+      .then(({ data }) => setBadges(((data ?? []) as unknown as { achievements: { title: string; tier: string } | null }[]).flatMap((r) => (r.achievements ? [r.achievements] : []))));
+  }, [scores]);
   useEffect(() => {
     if (!scores) return;
     void supabaseBrowser().rpc('track_leaderboard', { p_track_id: trackId, p_scope: 'global', p_limit: 5 })
@@ -75,6 +84,13 @@ export function Results({ scores, trackId, onAgain, error }: { scores: ScoreView
               </div>
               <ul className="mt-6 space-y-1 text-sm text-ink-300">{s.feedback.map((f) => <li key={f}>• {f}</li>)}</ul>
             </div>
+          ))}
+        </div>
+      )}
+      {badges.length > 0 && (
+        <div className="mx-auto mt-6 flex max-w-xl flex-wrap justify-center gap-2" role="status" aria-label="New achievements">
+          {badges.map((b) => (
+            <span key={b.title} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-sm font-bold text-gold-400"><Trophy size={14} /> New badge: {b.title}</span>
           ))}
         </div>
       )}

@@ -43,7 +43,8 @@ struct JoinView: View {
             Text("SOUNDCHECK PARTY").font(.caption.bold()).kerning(4).foregroundStyle(SC.pink)
             Text("Join the stage").font(SC.display(40))
             Text("Enter the 6-character code on the TV.").foregroundStyle(SC.ink300)
-            TextField("ABC123", text: Binding(get: { code }, set: { code = Self.clean($0) }))
+            TextField("ABC234", text: $code)
+                .onChange(of: code) { _, v in let c = Self.clean(v); if c != v { code = c } }
                 .font(SC.display(40, .bold)).kerning(10).multilineTextAlignment(.center)
                 .textInputAutocapitalization(.characters).autocorrectionDisabled()
                 .padding(.vertical, 16).background(SC.ink850, in: RoundedRectangle(cornerRadius: 18))

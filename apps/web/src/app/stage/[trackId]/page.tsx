@@ -1,15 +1,16 @@
 'use client';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowLeft, Loader2, Mic, MicOff, Minus, Pause, Play, Plus, RotateCcw, Smartphone, Square, Users } from 'lucide-react';
+import { ArrowLeft, ListMusic, Loader2, SkipForward, Mic, MicOff, Minus, Pause, Play, Plus, RotateCcw, Smartphone, Square, Users } from 'lucide-react';
 import clsx from 'clsx';
 import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { liveHit } from '@soundcheck/scoring';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useHostSession } from '@/session/useHostSession';
+import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
 import { StageEngine } from '@/stage/engine';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
@@ -30,13 +31,14 @@ const transposeKey = (k: string | null, n: number) => {
 const SOLO_COLOR = '#ffc94d';
 const midiOf = (f0: number) => 69 + 12 * Math.log2(f0 / 440);
 
-function Stage({ data }: { data: StageData }) {
+function Stage({ data, resume }: { data: StageData; resume: string | null }) {
+  const router = useRouter();
   const engine = useRef<StageEngine | null>(null);
   const mic = useRef<MicHandle | null>(null);
   const frames = useRef<number[]>([]);               // solo singer's frames
   const trail = useRef<[number, number | null][]>([]);
   const hits = useRef({ hit: 0, total: 0 });
-  const [mode, setMode] = useState<Mode>('solo');
+  const [mode, setMode] = useState<Mode>(resume ? 'party' : 'solo');
   const [phase, setPhase] = useState<Phase>('intro');
   const [loadPct, setLoadPct] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -51,7 +53,20 @@ function Stage({ data }: { data: StageData }) {
   const noiseFloor = useRef<number | null>(null);
   const noteAt = useRef<(t: number) => number | null>(() => null);
   const keyShiftRef = useRef(0);
-  const host = useHostSession(data.track.id);
+  const host = useHostSession(data.track.id, resume);
+  const queue = useSessionQueue(host.session?.id, host.queueVersion);
+  const nextUp = queue.items.find((q) => q.status === 'queued' && q.track_id !== data.track.id) ?? null;
+  // continuing a party from the previous song: reopen the same session straight away
+  const { open: openParty, session: partySession } = host;
+  useEffect(() => { if (resume && !partySession) void openParty(); }, [resume, partySession, openParty]);
+  async function singNext() {
+    const sid = host.session?.id;
+    if (!sid) return;
+    const { data: rows } = await supabaseBrowser().rpc('advance_queue', { p_session_id: sid });
+    host.send(queueChanged);
+    const next = (rows as { track_id: string }[] | null)?.[0];
+    if (next) router.push(`/stage/${next.track_id}?party=${sid}`);
+  }
   const hostRef = useRef(host);
   useEffect(() => { hostRef.current = host; });
   const singerIds = () => hostRef.current.singers().filter((s) => s.mic === 'ready' || s.mic === 'live').map((s) => s.memberId);
@@ -278,7 +293,16 @@ function Stage({ data }: { data: StageData }) {
 
       {phase === 'results' || phase === 'scoring' ? (
         <div className="relative flex flex-1 items-center overflow-y-auto py-8">
-          <Results scores={scores} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setScoreError(null); setPhase('intro'); }} />
+          <div className="w-full">
+            <Results scores={scores} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setScoreError(null); setPhase('intro'); }} />
+            {mode === 'party' && nextUp && phase === 'results' && (
+              <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
+                <ListMusic className="text-pink-400" />
+                <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Up next</p><p className="truncate font-bold">{nextUp.title} <span className="font-normal text-ink-300">· {nextUp.artist_credit}</span></p></div>
+                <button type="button" onClick={() => void singNext()} className="flex items-center gap-2 rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950"><SkipForward size={16} /> Sing next</button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <>
@@ -331,6 +355,7 @@ function Stage({ data }: { data: StageData }) {
                           </li>
                         ))}
                       </ul>
+                      <UpNext items={queue.items} current={data.track.id} />
                     </div>
                   </div>
                 )}
@@ -377,10 +402,27 @@ function Stage({ data }: { data: StageData }) {
   );
 }
 
-export default function StagePage() {
+/** The party's request queue, shown in the lobby. */
+function UpNext({ items, current }: { items: QueueItem[]; current: string }) {
+  const upcoming = items.filter((q) => q.status === 'queued' && q.track_id !== current);
+  if (!upcoming.length) return <p className="mt-4 text-xs text-ink-500">Singers can request songs from their phones.</p>;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold uppercase tracking-widest text-ink-300">Up next</p>
+      <ol className="mt-1 space-y-0.5 text-sm" aria-label="Up next">
+        {upcoming.slice(0, 5).map((q, i) => (
+          <li key={q.id} className="truncate"><span className="text-ink-500">{i + 1}.</span> <b>{q.title}</b> <span className="text-ink-300">· {q.artist_credit}{q.requester_name ? ` — ${q.requester_name}` : ''}</span></li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function StageRoute() {
   const { trackId } = useParams<{ trackId: string }>();
+  const resume = useSearchParams().get('party');
   const state = useStageData(trackId);
-  if (state.kind === 'ready') return <Stage data={state.data} />;
+  if (state.kind === 'ready') return <Stage data={state.data} resume={resume} />;
   return (
     <div className="flex h-full items-center justify-center p-8 text-center">
       {state.kind === 'loading' && <p className="flex items-center gap-3 text-ink-300"><Loader2 className="animate-spin" /> Setting the stage…</p>}
@@ -395,4 +437,8 @@ export default function StagePage() {
       {state.kind === 'error' && <p role="alert" className="text-danger-400">Couldn’t open Stage: {state.message}</p>}
     </div>
   );
+}
+
+export default function StagePage() {
+  return <Suspense><StageRoute /></Suspense>;
 }

@@ -13,7 +13,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- QR codes on the TV: soundcheck://join/ABC123 -->
+            <!-- QR codes on the TV: soundcheck://join/ABC234 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

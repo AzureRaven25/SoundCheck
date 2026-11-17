@@ -45,6 +45,13 @@ test('two phones sing together and both get scored', async ({ page, browser }) =
   await expect(singers.getByText('mic ready')).toHaveCount(2, { timeout: 15_000 });
   if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/party-lobby.png` });
 
+  // M8: a phone requests a song; it shows up next on the TV
+  await ben.getByRole('button', { name: /Request a song/ }).click();
+  await ben.getByPlaceholder('Search songs').fill('Stand by Me');
+  await ben.getByRole('button', { name: /Stand by Me/ }).first().click();
+  await expect(ben.getByText('Added to the queue')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Up next' }).getByText('Stand by Me')).toBeVisible({ timeout: 15_000 });
+
   await page.getByRole('button', { name: 'Start singing' }).click();
   for (const p of [ana, ben]) {
     await p.waitForFunction(() => (window as unknown as W).__soundcheckJoin?.playing(), null, { timeout: 60_000 });
@@ -79,4 +86,10 @@ test('two phones sing together and both get scored', async ({ page, browser }) =
     await page.waitForTimeout(1600);
     await page.screenshot({ path: `${process.env.E2E_SHOTS}/party-results.png`, fullPage: true });
   }
+  // the party continues with the requested song in the same session (phones stay joined)
+  const sid = page.url();
+  await page.getByRole('button', { name: 'Sing next' }).click();
+  await expect(page).toHaveURL(/\/stage\/[0-9a-f-]+\?party=[0-9a-f-]+/);
+  await expect(page.getByText(/isn’t karaoke-ready yet|Code [A-Z0-9]{6}/).first()).toBeVisible({ timeout: 20_000 });
+  console.log("E2E party continued from", sid);
 });

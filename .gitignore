@@ -26,3 +26,6 @@ apps/apple/Config/Local.xcconfig
 apps/apple/Config/Release.local.xcconfig
 DerivedData/
 apps/android/secrets.properties
+.vercel/
+.vercel
+.env*

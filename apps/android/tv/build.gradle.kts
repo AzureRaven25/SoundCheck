@@ -28,7 +28,7 @@ android {
         release {
             isMinifyEnabled = false
             buildConfigField("String", "SUPABASE_URL", "\"https://ppmzqjrfcbemzzbwicrd.supabase.co\"")
-            buildConfigField("String", "SITE_URL", "\"https://soundcheck.app\"")
+            buildConfigField("String", "SITE_URL", "\"https://soundcheck-gules.vercel.app\"")
             buildConfigField("String", "SUPABASE_KEY", secret("sc.publishableKey.release"))
         }
     }

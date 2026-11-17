@@ -52,6 +52,28 @@ M7 so far (2026-11-17):
   - Solo singing on the phone.
   - UI tests.
 
+M8 + polish (2026-11-17):
+- **Live site:** https://soundcheck-gules.vercel.app (Vercel; builds from the repo root with `apps/web` as the root directory).
+  - Cloud auth: site URL and redirects set, anonymous sign-ins on. Email confirmation and TOTP MFA stay on through `[remotes.production]` overrides in `supabase/config.toml`.
+- **Party queue:** phones request songs from `/join`. The host sees "Up next", and "Sing next" continues the same session (`?party=<id>`) so phones stay joined. New `queue_changed` protocol event.
+- **Social:**
+  - `/friends`: find people, send/accept requests.
+  - `/leaderboards`: global and friends boards, plus your stats.
+  - `/achievements`: all badges with progress; three new badges.
+  - Badges a song unlocks show on its results screen.
+- **TV sign-in with your phone:** the `device-auth` Edge Function plus the `/activate` page, in both TV apps. The device code is stored hashed, expires in 10 minutes, and works once.
+- **Solo singing on iPhone and Android phones:** "Sing solo" tab, phone playback + mic, official score.
+- **UI tests:**
+  - Web: Playwright social, device-sign-in and party-queue tests.
+  - iOS: XCUITest (join form, solo tab).
+  - Android: Compose instrumented tests (join form, deep links, solo tab).
+  - Database: 20 new pgTAP tests (88 total).
+- **Bugs fixed:**
+  - iOS code field didn't clean what you typed.
+  - The "ABC123" placeholder wasn't a valid code (codes never use 0, 1, I or O).
+  - Android solo crashed because the mic thread touched the player; it now reads a snapshot.
+- **Not yet:** native TV apps don't show the party queue yet (web host only).
+
 M2 delivered:
 - 100,000 top-ranked songs in Supabase (218 MB);
 - tiered `catalog-search` (Supabase → Turso → MusicBrainz live);
@@ -67,7 +89,6 @@ M2 leftovers:
 - Search latency for very short words (~1.5 s) needs tuning.
 
 ## Blocked on you (independent work continues)
-- Turn on **anonymous sign-ins** in the cloud project (Dashboard → Authentication → Sign In / Providers → "Allow anonymous sign-ins"). Phones need this to join a party on the hosted site; it is already on in the local stack. I did not run `supabase config push`, because it would also overwrite the cloud Site URL with local values.
 - GPU host account (Modal or RunPod) for cloud processing: M4 deploy step.
 - Supabase Pro, once processed audio exceeds about 1 GB.
 - Apple Developer account, for physical Apple TV/iPhone testing.

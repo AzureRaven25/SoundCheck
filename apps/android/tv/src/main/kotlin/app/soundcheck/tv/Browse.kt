@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -204,7 +205,13 @@ fun AccountScreen(signedIn: Boolean, onChanged: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxSize().padding(64.dp).width(720.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    var useEmail by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(64.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        if (!signedIn && !useEmail) {
+            PhoneSignIn(onSignedIn = onChanged)
+            OutlinedButton(onClick = { useEmail = true }) { Text("Use email and password instead") }
+            return@Column
+        }
         if (signedIn) {
             Title("Signed in as ${backend.displayName}", 32)
             Button(onClick = { scope.launch { runCatching { backend.signOut() }; onChanged() } }) { Text("Sign out") }
@@ -223,6 +230,48 @@ fun AccountScreen(signedIn: Boolean, onChanged: () -> Unit) {
                     }
                 }) { Text(if (busy) "Please wait…" else if (creating) "Sign up" else "Sign in") }
                 OutlinedButton(onClick = { creating = !creating }) { Text(if (creating) "I have an account" else "Create an account") }
+                OutlinedButton(onClick = { useEmail = false }) { Text("Sign in with your phone") }
+            }
+            error?.let { Text(it, color = SC.danger) }
+        }
+    }
+}
+
+
+/** Sign in on the TV with your phone: show a code + QR, the phone approves it at /activate, the TV polls. */
+@Composable
+fun PhoneSignIn(onSignedIn: () -> Unit) {
+    var session by remember { mutableStateOf<app.soundcheck.core.SoundCheckBackend.DeviceSignIn?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {   // start, then poll; a fresh code is issued when one expires
+            val s = runCatching { Services.backend.startDeviceSignIn(app.soundcheck.core.Platform.firetv) }.getOrElse {
+                error = "Can’t reach SoundCheck. Retrying…"; delay(5000); null
+            } ?: continue
+            session = s; error = null
+            while (true) {
+                delay(s.interval * 1000L)
+                when (runCatching { Services.backend.pollDeviceSignIn(s) }.getOrDefault(app.soundcheck.core.SoundCheckBackend.DevicePoll.Pending)) {
+                    app.soundcheck.core.SoundCheckBackend.DevicePoll.Pending -> continue
+                    app.soundcheck.core.SoundCheckBackend.DevicePoll.SignedIn -> { onSignedIn(); return@LaunchedEffect }
+                    app.soundcheck.core.SoundCheckBackend.DevicePoll.Expired -> break
+                }
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(56.dp), verticalAlignment = Alignment.CenterVertically) {
+        session?.let { s ->
+            val qr = remember(s.userCode) { qrBitmap(s.activateUrl) }
+            androidx.compose.foundation.Image(qr.asImageBitmap(), contentDescription = "QR code to sign in",
+                modifier = Modifier.size(280.dp).clip(RoundedCornerShape(20.dp)).background(androidx.compose.ui.graphics.Color.White).padding(14.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Title("Sign in with your phone", 40)
+            val s = session
+            if (s == null) Text("Getting a code…", color = SC.ink300)
+            else {
+                Text("Scan the code, or open ${s.verificationUrl.removePrefix("https://").removePrefix("http://")} on a signed-in phone and enter", color = SC.ink300, fontSize = 18.sp)
+                Text(s.userCode.toCharArray().joinToString(" "), fontSize = 80.sp, fontWeight = FontWeight.Black, color = SC.ink50)
             }
             error?.let { Text(it, color = SC.danger) }
         }

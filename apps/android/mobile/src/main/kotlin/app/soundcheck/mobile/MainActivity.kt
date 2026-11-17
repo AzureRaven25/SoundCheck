@@ -35,10 +35,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -99,13 +101,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handle(intent)
-        setContent { MaterialTheme(colorScheme = darkColorScheme(primary = pink, background = ink950)) { JoinFlow() } }
+        val dev = if (BuildConfig.DEBUG) Triple(intent.getStringExtra("sc_email"), intent.getStringExtra("sc_password"), intent.getStringExtra("sc_solo")) else Triple(null, null, null)
+        setContent { MaterialTheme(colorScheme = darkColorScheme(primary = pink, background = ink950)) { Home(dev) } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handle(intent) }
     private fun handle(i: Intent?) { codeFrom(i?.data)?.let { Services.pendingCode.value = it } }
 }
 
-/** soundcheck://join/ABC123 or https://<site>/join/ABC123 → "ABC123". */
+/** Two tabs: Party (phone as a mic for the TV) and Sing solo (the phone plays and scores you). */
+@Composable
+fun Home(dev: Triple<String?, String?, String?>) {
+    var tab by remember { mutableStateOf(if (dev.third != null) 1 else 0) }
+    val pending by Services.pendingCode.collectAsState()
+    LaunchedEffect(pending) { if (pending != null) tab = 0 }
+    androidx.compose.material3.Scaffold(containerColor = ink950, bottomBar = {
+        androidx.compose.material3.NavigationBar(containerColor = ink850) {
+            NavigationBarItem(tab == 0, { tab = 0 }, icon = { Icon(Icons.Default.Mic, null) }, label = { Text("Party") })
+            NavigationBarItem(tab == 1, { tab = 1 }, icon = { Icon(Icons.Default.MusicNote, null) }, label = { Text("Sing solo") })
+        }
+    }) { pad ->
+        Box(Modifier.padding(pad)) { if (tab == 0) JoinFlow() else SoloHome(dev.first, dev.second, dev.third) }
+    }
+}
+
+/** soundcheck://join/ABC234 or https://<site>/join/ABC234 → "ABC234". */
 fun codeFrom(u: Uri?): String? {
     u ?: return null
     val seg = if (u.scheme == "soundcheck" && u.host == "join") u.pathSegments.firstOrNull()
@@ -134,7 +153,7 @@ fun JoinFlow() {
             Text("SOUNDCHECK PARTY", color = pink, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, fontSize = 13.sp)
             Text("Join the stage", color = ink50, fontSize = 38.sp, fontWeight = FontWeight.Black)
             Text("Enter the 6-character code on the TV.", color = ink300)
-            OutlinedTextField(code, { code = cleanCode(it) }, placeholder = { Text("ABC123", color = ink500) }, singleLine = true,
+            OutlinedTextField(code, { code = cleanCode(it) }, placeholder = { Text("ABC234", color = ink500) }, singleLine = true,
                 textStyle = MaterialTheme.typography.headlineMedium.copy(textAlign = TextAlign.Center, letterSpacing = 8.sp, fontWeight = FontWeight.Bold, color = ink50),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false),
                 colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = ink850, focusedContainerColor = ink850, focusedBorderColor = pink),

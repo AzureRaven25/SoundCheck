@@ -11,6 +11,7 @@ import { supabaseBrowser } from '@/lib/supabase/client';
 import { openSessionChannel, type SessionChannel } from '@/session/channel';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { lineAt } from '@/stage/StageLyrics';
+import { RequestSong } from '@/session/RequestSong';
 import type { StageLine } from '@/stage/useStageData';
 
 type Step = 'name' | 'joining' | 'joined' | 'calibrating' | 'live' | 'error';
@@ -31,6 +32,8 @@ export default function JoinSessionPage() {
   const [result, setResult] = useState<ResultsEvent['performances'][number] | null>(null);
   const [line, setLine] = useState<string>('');
   const [muted, setMuted] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [queueVersion, setQueueVersion] = useState(0);
 
   const ch = useRef<SessionChannel | null>(null);
   const mic = useRef<MicHandle | null>(null);
@@ -55,6 +58,7 @@ export default function JoinSessionPage() {
   const onEvent = useCallback((e: SessionEvent) => {
     const me = memberRef.current;
     if (e.type === 'transport') {
+      if (e.trackId !== transport.current?.trackId && e.state === 'playing') setResult(null);
       transport.current = e;
       setTransportState(e.state);
       if (e.trackId && lyricsFor.current !== e.trackId) {
@@ -73,6 +77,8 @@ export default function JoinSessionPage() {
     } else if (e.type === 'results') {
       const mine = e.performances.find((p) => p.memberId === me);
       if (mine) setResult(mine);
+    } else if (e.type === 'queue_changed') {
+      setQueueVersion((v) => v + 1);
     } else if (e.type === 'host_command' && e.memberId === me) {
       if (e.command === 'mute') { mutedRef.current = true; setMuted(true); }
       if (e.command === 'unmute') { mutedRef.current = false; setMuted(false); }
@@ -100,6 +106,7 @@ export default function JoinSessionPage() {
       for (let i = 0; i < 6; i++) {
         setTimeout(() => void ch.current?.send({ type: 'clock_ping', v: PROTOCOL_VERSION, memberId: m.id, id: i, t0: Date.now() }), i * 250);
       }
+      setSessionId(data[0].session_id);
       setMember(m);
       setStep('joined');
     } catch (err) {
@@ -182,6 +189,7 @@ export default function JoinSessionPage() {
           <Mic size={64} className="text-ink-950" />
         </button>
         <p className="text-sm text-ink-500" role="status">{step === 'calibrating' ? 'Stay quiet for a second…' : 'Tap to turn on your mic'}</p>
+        {sessionId && <RequestSong sessionId={sessionId} version={queueVersion} notify={(ev) => void ch.current?.send(ev)} />}
       </main>
     );
   }
@@ -208,6 +216,7 @@ export default function JoinSessionPage() {
           {muted && <p className="text-gold-400">The host muted your mic</p>}
         </>
       )}
+      {sessionId && <RequestSong sessionId={sessionId} version={queueVersion} notify={(ev) => void ch.current?.send(ev)} />}
     </main>
   );
 }

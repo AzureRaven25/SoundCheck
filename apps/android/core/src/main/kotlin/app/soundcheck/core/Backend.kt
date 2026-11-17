@@ -68,6 +68,8 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
     // Auth
     val isSignedIn get() = client.auth.currentUserOrNull() != null
     val userId get() = client.auth.currentUserOrNull()?.id
+    /** Signed in with a real account (not an anonymous party guest). */
+    val hasAccount get() = client.auth.currentUserOrNull()?.email?.isNotEmpty() == true
     suspend fun awaitSession() { client.auth.awaitInitialization() }
     suspend fun signIn(email: String, password: String) { client.auth.signInWith(Email) { this.email = email; this.password = password } }
     suspend fun signUp(email: String, password: String, displayName: String) {
@@ -78,6 +80,31 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
         if (!isSignedIn) client.auth.signInAnonymously(data = buildJsonObject { put("display_name", displayName) })
     }
     suspend fun signOut() = client.auth.signOut()
+
+    /** TV sign-in with a phone (device-auth Edge Function): show userCode, then poll until approved. */
+    @Serializable
+    data class DeviceSignIn(
+        @SerialName("device_code") val deviceCode: String, @SerialName("user_code") val userCode: String,
+        @SerialName("verification_url") val verificationUrl: String, @SerialName("expires_in") val expiresIn: Int, val interval: Int,
+    ) { val activateUrl get() = "$verificationUrl?code=$userCode" }
+    enum class DevicePoll { Pending, Expired, SignedIn }
+
+    suspend fun startDeviceSignIn(platform: Platform): DeviceSignIn =
+        json.decodeFromJsonElement(invoke("device-auth", buildJsonObject { put("action", "start"); put("platform", platform.name) }))
+
+    /** One poll; on approval exchanges the one-time token for a session on this device. */
+    suspend fun pollDeviceSignIn(s: DeviceSignIn): DevicePoll {
+        val r = invoke("device-auth", buildJsonObject { put("action", "poll"); put("device_code", s.deviceCode) })
+        return when (r["status"]?.jsonPrimitive?.content) {
+            "approved" -> {
+                val hash = r["token_hash"]?.jsonPrimitive?.content ?: return DevicePoll.Expired
+                client.auth.verifyEmailOtp(type = io.github.jan.supabase.auth.OtpType.Email.MAGIC_LINK, tokenHash = hash)
+                DevicePoll.SignedIn
+            }
+            "pending" -> DevicePoll.Pending
+            else -> DevicePoll.Expired
+        }
+    }
     val displayName: String get() {
         val u = client.auth.currentUserOrNull()
         return u?.userMetadata?.get("display_name")?.jsonPrimitive?.content ?: u?.email?.substringBefore("@") ?: "Host"

@@ -18,7 +18,7 @@ export default function JoinCodePage() {
         <label htmlFor="code" className="sr-only">Pairing code</label>
         <input
           id="code" value={clean} onChange={(e) => setCode(e.target.value)} autoFocus autoComplete="off" autoCapitalize="characters"
-          inputMode="text" maxLength={6} placeholder="ABC123"
+          inputMode="text" maxLength={6} placeholder="ABC234"
           className="w-full rounded-2xl border-2 border-ink-700 bg-ink-850 py-4 text-center font-display text-4xl font-bold tracking-[0.4em] placeholder:text-ink-700 focus:border-pink-500 focus:outline-none"
         />
         <button type="submit" disabled={clean.length !== 6} className="stage-gradient mt-6 w-full rounded-full py-4 text-lg font-bold disabled:opacity-40">Join</button>

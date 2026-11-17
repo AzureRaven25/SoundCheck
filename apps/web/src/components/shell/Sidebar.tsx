@@ -3,13 +3,16 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import clsx from 'clsx';
-import { Home, Library, ListMusic, Plus, Search } from 'lucide-react';
+import { Award, Home, Library, ListMusic, Plus, Search, Trophy, Users } from 'lucide-react';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 
 const NAV = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/search', label: 'Search', icon: Search },
   { href: '/library', label: 'Your Library', icon: Library },
+  { href: '/leaderboards', label: 'Leaderboards', icon: Trophy },
+  { href: '/friends', label: 'Friends', icon: Users },
+  { href: '/achievements', label: 'Achievements', icon: Award },
 ];
 
 export function Sidebar({ user }: { user: User | null }) {

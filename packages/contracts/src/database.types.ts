@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.18"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1078,6 +1098,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      advance_queue: {
+        Args: { p_session_id: string; p_skip?: boolean }
+        Returns: {
+          id: string
+          track_id: string
+        }[]
+      }
       create_session: {
         Args: { p_display_name?: string; p_platform: string }
         Returns: {
@@ -1085,6 +1112,14 @@ export type Database = {
           pairing_code: string
           session_id: string
         }[]
+      }
+      enqueue_song: {
+        Args: {
+          p_session_id: string
+          p_singer_member_ids?: string[]
+          p_track_id: string
+        }
+        Returns: string
       }
       global_leaderboard: {
         Args: { p_limit?: number; p_scope?: string }
@@ -1104,6 +1139,31 @@ export type Database = {
           host_platform: string
           member_id: string
           session_id: string
+        }[]
+      }
+      my_achievements: {
+        Args: never
+        Returns: {
+          description: string
+          earned_at: string
+          icon: string
+          id: string
+          tier: string
+          title: string
+        }[]
+      }
+      my_friends: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          best_score: number
+          direction: string
+          display_name: string
+          id: string
+          since: string
+          songs_sung: number
+          status: string
+          username: string
         }[]
       }
       my_stats: {
@@ -1149,6 +1209,16 @@ export type Database = {
           status: string
         }[]
       }
+      search_people: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
+          relationship: string
+          username: string
+        }[]
+      }
       search_tracks: {
         Args: { lim?: number; off?: number; q: string }
         Returns: {
@@ -1162,6 +1232,21 @@ export type Database = {
           rank: number
           release_year: number
           title: string
+        }[]
+      }
+      session_queue_list: {
+        Args: { p_session_id: string }
+        Returns: {
+          artist_credit: string
+          id: string
+          key_shift: number
+          queue_position: number
+          requested_by: string
+          requester_name: string
+          singer_member_ids: string[]
+          status: string
+          title: string
+          track_id: string
         }[]
       }
       track_leaderboard: {
@@ -1220,12 +1305,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1249,11 +1334,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1274,11 +1359,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1299,11 +1384,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1316,11 +1401,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1330,7 +1415,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

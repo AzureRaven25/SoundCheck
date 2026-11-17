@@ -63,6 +63,37 @@ public final class SoundCheckBackend: Sendable {
         }
     }
     public func signOut() async throws { try await client.auth.signOut() }
+
+    /// TV sign-in with a phone (device-auth Edge Function): show `userCode`, then poll until approved.
+    public struct DeviceSignIn: Decodable, Sendable {
+        public let device_code: String
+        public let user_code: String
+        public let verification_url: String
+        public let expires_in: Int
+        public let interval: Int
+        public var activateURL: String { "\(verification_url)?code=\(user_code)" }
+    }
+    public enum DevicePoll: Sendable { case pending, expired, signedIn }
+
+    public func startDeviceSignIn(platform: Platform) async throws -> DeviceSignIn {
+        struct Body: Encodable { let action = "start"; let platform: String }
+        return try await client.functions.invoke("device-auth", options: .init(body: Body(platform: platform.rawValue)))
+    }
+
+    /// One poll; on approval exchanges the one-time token for a session on this device.
+    public func pollDeviceSignIn(_ s: DeviceSignIn) async throws -> DevicePoll {
+        struct Body: Encodable { let action = "poll"; let device_code: String }
+        struct Res: Decodable { let status: String; let token_hash: String? }
+        let r: Res = try await client.functions.invoke("device-auth", options: .init(body: Body(device_code: s.device_code)))
+        switch r.status {
+        case "approved":
+            guard let hash = r.token_hash else { return .expired }
+            _ = try await client.auth.verifyOTP(tokenHash: hash, type: .magiclink)
+            return .signedIn
+        case "pending": return .pending
+        default: return .expired
+        }
+    }
     public var displayName: String {
         if case let .string(n)? = currentUser?.userMetadata["display_name"] { return n }
         return currentUser?.email?.components(separatedBy: "@").first ?? "Host"

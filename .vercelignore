@@ -1,0 +1,22 @@
+# Only the website and the shared TS packages are needed for a Vercel build.
+/.reference/
+/.claude/
+/apps/apple/
+/apps/android/
+/apps/tv/
+/services/
+/supabase/
+/docs/
+/data/
+/library/
+/music/
+**/node_modules/
+**/.next/
+**/.vercel/
+**/test-results/
+**/playwright-report/
+**/.build/
+**/build/
+*.wav
+*.mp3
+.env*

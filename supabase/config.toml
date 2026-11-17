@@ -417,3 +417,25 @@ verify_jwt = false
 
 [functions.resolve-preview]
 verify_jwt = false
+
+# ---------------------------------------------------------------- cloud project overrides
+# `supabase config push` applies [auth] with these overrides, so production keeps its stricter settings
+# (email confirmation, TOTP MFA, rate limits) and only gets the site address and anonymous sign-ins.
+[remotes.production]
+project_id = "ppmzqjrfcbemzzbwicrd"
+
+[remotes.production.auth]
+site_url = "https://soundcheck-gules.vercel.app"
+additional_redirect_urls = ["https://soundcheck-gules.vercel.app/auth/callback", "http://localhost:3000/auth/callback"]
+
+[remotes.production.auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[remotes.production.auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[functions.device-auth]
+verify_jwt = false

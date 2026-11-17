@@ -155,12 +155,16 @@ struct AccountView: View {
     @State private var creating = false
     @State private var error: String?
     @State private var busy = false
+    @State private var useEmail = false
 
     var body: some View {
         VStack(spacing: 30) {
             if model.signedIn {
                 Text("Signed in as \(model.backend.displayName)").font(.title2)
                 Button("Sign out") { Task { try? await model.backend.signOut(); model.refreshAuth() } }
+            } else if !useEmail {
+                PhoneSignIn(onSignedIn: { model.refreshAuth() })
+                Button("Use email and password instead") { useEmail = true }
             } else {
                 Text(creating ? "Create your SoundCheck account" : "Sign in to SoundCheck").font(SC.display(48))
                 if creating { TextField("Display name", text: $name) }
@@ -168,6 +172,7 @@ struct AccountView: View {
                 SecureField("Password", text: $password)
                 Button(busy ? "Please wait…" : creating ? "Sign up" : "Sign in") { Task { await submit() } }.disabled(busy)
                 Button(creating ? "I already have an account" : "Create an account") { creating.toggle() }
+                Button("Sign in with your phone instead") { useEmail = false }
                 if let error { Text(error).foregroundStyle(SC.danger) }
             }
         }
@@ -183,5 +188,54 @@ struct AccountView: View {
             model.refreshAuth()
         } catch { self.error = error.localizedDescription }
         busy = false
+    }
+}
+
+
+/// Sign in on the TV with your phone: show a code + QR, the phone approves it at /activate, the TV polls.
+struct PhoneSignIn: View {
+    @Environment(AppModel.self) private var model
+    let onSignedIn: () -> Void
+    @State private var session: SoundCheckBackend.DeviceSignIn?
+    @State private var error: String?
+
+    var body: some View {
+        HStack(spacing: 70) {
+            if let s = session {
+                QRCodeImage(text: s.activateURL).frame(width: 300, height: 300).padding(16).background(.white, in: RoundedRectangle(cornerRadius: 22))
+            }
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Sign in with your phone").font(SC.display(48))
+                if let s = session {
+                    Text("Scan the code, or open \(s.verification_url.replacingOccurrences(of: "https://", with: "")) on a signed-in phone and enter").foregroundStyle(SC.ink300)
+                    Text(s.user_code).font(SC.display(96, .black)).kerning(16)
+                        .accessibilityLabel("Sign-in code \(s.user_code.map(String.init).joined(separator: " "))")
+                } else {
+                    ProgressView()
+                }
+                if let error { Text(error).foregroundStyle(SC.danger) }
+            }
+        }
+        .task {
+            // start, then poll; a fresh code is issued when one expires
+            while !Task.isCancelled {
+                do {
+                    let s = try await model.backend.startDeviceSignIn(platform: .tvos)
+                    session = s; error = nil
+                    while !Task.isCancelled {
+                        try await Task.sleep(for: .seconds(s.interval))
+                        switch try await model.backend.pollDeviceSignIn(s) {
+                        case .pending: continue
+                        case .signedIn: onSignedIn(); return
+                        case .expired: break
+                        }
+                        break
+                    }
+                } catch {
+                    self.error = "Can’t reach SoundCheck. Retrying…"
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+        }
     }
 }
