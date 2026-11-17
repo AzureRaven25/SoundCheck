@@ -1,14 +1,18 @@
 'use client';
 import { licenseLabel } from '@soundcheck/contracts';
 import { supabaseBrowser } from './supabase/client';
+import { rememberedVideo } from '@/player/youtube';
 
 /** Thrown when audio couldn't be resolved right now (provider busy, network): try again later. */
 export class AudioTemporarilyUnavailable extends Error {}
 
 export interface ResolvedAudio {
   url: string;
-  /** original = your upload · full = complete recording from an open source · preview = ~30 s clip */
-  kind: 'original' | 'full' | 'preview';
+  /** original = your upload · full = complete recording from an open source · youtube = YouTube's own player ·
+   *  preview = ~30 s clip */
+  kind: 'original' | 'full' | 'youtube' | 'preview';
+  /** for kind = youtube */
+  videoId?: string;
   /** Page to credit (store page for previews, archive page for open recordings). */
   attributionUrl: string | null;
   /** e.g. "Internet Archive · CC BY-NC-SA 3.0" */
@@ -52,6 +56,13 @@ export async function resolveAudio(trackId: string): Promise<ResolvedAudio | nul
     cache.set(trackId, r);
     return r;
   }
+  // the full song in YouTube's own player: a link this person chose, a known video, or a search (needs YOUTUBE_API_KEY)
+  const yt = await youtubeFor(trackId);
+  if (yt) {
+    const r: ResolvedAudio = { url: '', kind: 'youtube', videoId: yt, attributionUrl: `https://www.youtube.com/watch?v=${yt}`, sourceLabel: 'YouTube' };
+    cache.set(trackId, r);
+    return r;
+  }
   const preview = assets?.find((a) => a.kind === 'preview' && a.external_url);
   if (preview?.external_url) {
     const r: ResolvedAudio = { url: preview.external_url, kind: 'preview', attributionUrl: preview.attribution_url, sourceLabel: 'Preview · 30 s' };
@@ -66,3 +77,16 @@ export async function resolveAudio(trackId: string): Promise<ResolvedAudio | nul
   cache.set(trackId, r); // definitive answer (including "no preview exists")
   return r;
 }
+
+async function youtubeFor(trackId: string): Promise<string | null> {
+  const chosen = rememberedVideo(trackId);
+  if (chosen) return chosen;
+  const sb = supabaseBrowser();
+  const { data: known } = await sb.from('track_sources').select('external_id').eq('track_id', trackId).eq('provider', 'youtube').limit(1).maybeSingle();
+  if (known?.external_id) return known.external_id;
+  const { data } = await sb.functions.invoke<{ configured: boolean; videos: { id: string }[] }>('youtube', { body: { track_id: trackId } });
+  return data?.configured ? data.videos?.[0]?.id ?? null : null;
+}
+
+/** Forget a cached source (e.g. after choosing a different YouTube video for a song). */
+export function forgetAudio(trackId: string) { cache.delete(trackId); }

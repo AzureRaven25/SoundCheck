@@ -5,6 +5,8 @@ import { Loader2, MonitorPlay, Music2, Pause, Play } from 'lucide-react';
 import { youtubeId } from '@soundcheck/contracts';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { usePlayer } from '@/player/store';
+import { rememberVideo } from '@/player/youtube';
+import { forgetAudio } from '@/lib/audio';
 
 /**
  * Official full-length players that SoundCheck may not process (research.md §3): YouTube's embedded player and
@@ -57,14 +59,14 @@ function YouTubePanel({ trackId, onPlay }: { trackId: string; onPlay: () => void
       ) : (
         <p className="text-sm text-ink-300">Paste a YouTube or YouTube Music link for this song to play it here.</p>
       )}
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const id = youtubeId(link); setBad(!id); if (id) setVideo(id); }}>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const id = youtubeId(link); setBad(!id); if (id) { setVideo(id); rememberVideo(trackId, id); forgetAudio(trackId); } }}>
         <label htmlFor="ytlink" className="sr-only">YouTube link</label>
         <input id="ytlink" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.youtube.com/watch?v=…"
           className="min-w-0 flex-1 rounded-full bg-ink-850 px-4 py-2 text-sm ring-1 ring-ink-700 focus:outline-none focus:ring-pink-500" />
         <button type="submit" className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950">{video ? 'Use this link' : 'Play'}</button>
       </form>
       {bad && <p role="alert" className="text-sm text-danger-400">That isn’t a YouTube link.</p>}
-      <p className="text-xs text-ink-500">Played by YouTube. YouTube doesn’t allow separating its audio, so it can’t be used for karaoke.</p>
+      <p className="text-xs text-ink-500">Played by YouTube. A link you paste here is also used when you play this song from anywhere on SoundCheck (on this device). YouTube doesn’t allow separating its audio, so it can’t be used for karaoke.</p>
     </div>
   );
 }

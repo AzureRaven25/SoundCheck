@@ -22,3 +22,20 @@ test('artist pages show the artist’s photo (Wikimedia Commons via Wikidata)', 
   await expect(page).toHaveURL(/\/artist\//);
   await expect(page.locator('header img[src*="wikimedia"]').first()).toBeVisible({ timeout: 20_000 });
 });
+
+test('a song with a chosen YouTube video plays in full through the site player', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/search?q=Stand%20by%20Me');
+  await page.getByRole('link', { name: 'Stand by Me', exact: true }).first().click();
+  await expect(page).toHaveURL(/\/track\//);
+  const url = page.url();
+  await page.getByRole('button', { name: 'Watch on YouTube' }).click();
+  await page.getByLabel('YouTube link').fill('https://www.youtube.com/watch?v=hwZNL7QVJjE');
+  await page.getByRole('region', { name: 'Listen elsewhere' }).getByRole('button', { name: /^(Play|Use this link)$/ }).click();
+  await page.goto(url);                                                     // fresh page: only the site player
+  await page.getByRole('button', { name: /^Play Stand by Me$/ }).first().click();
+  await expect(page.getByTestId('source-label')).toContainText('YouTube');
+  await expect(page.getByRole('region', { name: 'YouTube player' }).locator('iframe')).toHaveAttribute('src', /hwZNL7QVJjE/, { timeout: 20_000 });
+  const bar = page.getByRole('contentinfo');
+  await expect(bar.getByText(/^0:0[3-9]$|^0:[1-5]\d$/).first()).toBeVisible({ timeout: 40_000 });   // elapsed time is moving
+});

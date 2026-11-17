@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { loadYouTubeApi, type YTPlayer } from './youtube';
 import { resolveAudio } from '@/lib/audio';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { usePlayer, useCurrentTrack } from './store';
@@ -20,6 +21,10 @@ export function PlayerHost() {
   const seekRequest = usePlayer((s) => s.seekRequest);
   const report = usePlayer((s) => s._report);
   const listened = useRef<{ trackId: string; ms: number; kind: string } | null>(null);
+  // YouTube mode: the song plays in YouTube's own (visible) player instead of the <audio> element
+  const [ytId, setYtId] = useState<string | null>(null);
+  const yt = useRef<YTPlayer | null>(null);
+  const ytHost = useRef<HTMLDivElement | null>(null);
 
   // Flush listening history for the song that's ending.
   const flushHistory = () => {
@@ -57,8 +62,16 @@ export function PlayerHost() {
           return;
         }
         listened.current = { trackId: track.id, ms: 0, kind: src.kind };
+        if (src.kind === 'youtube' && src.videoId) {
+          el.removeAttribute('src');
+          el.load();
+          setYtId(src.videoId);
+          report({ sourceKind: 'full', attributionUrl: src.attributionUrl, sourceLabel: src.sourceLabel });
+          return;
+        }
+        setYtId(null);
         el.src = src.url;
-        report({ sourceKind: src.kind, attributionUrl: src.attributionUrl, sourceLabel: src.sourceLabel });
+        report({ sourceKind: src.kind === 'youtube' ? 'full' : src.kind, attributionUrl: src.attributionUrl, sourceLabel: src.sourceLabel });
         if (usePlayer.getState().playing) void el.play().catch(() => report({ playing: false }));
       })
       .catch(() => !cancelled && report({ load: 'error', playing: false }));
@@ -69,20 +82,64 @@ export function PlayerHost() {
   }, [track?.id, reloadToken]);
 
   useEffect(() => {
+    if (yt.current) { if (playing) yt.current.playVideo(); else yt.current.pauseVideo(); return; }
     const el = audio.current;
     if (!el || !el.src) return;
     if (playing) void el.play().catch(() => report({ playing: false }));
     else el.pause();
   }, [playing, report]);
 
+  // YouTube player lifecycle + position/duration reporting
+  useEffect(() => {
+    if (!ytId) { yt.current?.destroy(); yt.current = null; return; }
+    let live = true;
+    void loadYouTubeApi().then(() => {
+      if (!live || !ytHost.current || !window.YT) return;
+      if (yt.current) { yt.current.loadVideoById(ytId); return; }
+      const mount = document.createElement('div');
+      ytHost.current.replaceChildren(mount);
+      yt.current = new window.YT.Player(mount, {
+        videoId: ytId, width: '100%', height: '100%',
+        playerVars: { autoplay: usePlayer.getState().playing ? 1 : 0, playsinline: 1, rel: 0 },
+        events: {
+          onReady: () => {
+            const st = usePlayer.getState();
+            yt.current?.setVolume(Math.round(st.volume * 100));
+            if (st.muted) yt.current?.mute();
+            if (st.playing) yt.current?.playVideo();
+            report({ load: 'ready' });
+          },
+          onStateChange: (e: { data: number }) => {
+            if (e.data === window.YT!.PlayerState.ENDED) usePlayer.getState().nextTrack(true);
+            if (e.data === window.YT!.PlayerState.PLAYING) report({ load: 'ready', playing: true });
+          },
+        },
+      });
+    });
+    const iv = setInterval(() => {
+      const p = yt.current;
+      if (!p || typeof p.getCurrentTime !== 'function') return;
+      const t = p.getCurrentTime(), d = p.getDuration();
+      const prev = usePlayer.getState().position;
+      if (listened.current && t > prev && t - prev < 2) listened.current.ms += (t - prev) * 1000;
+      report({ position: t, ...(d > 0 ? { duration: d } : {}) });
+    }, 500);
+    return () => { live = false; clearInterval(iv); };
+  }, [ytId, report]);
+
   useEffect(() => {
     if (audio.current) {
       audio.current.volume = volume;
       audio.current.muted = muted;
     }
+    if (yt.current && typeof yt.current.setVolume === 'function') {
+      yt.current.setVolume(Math.round(volume * 100));
+      if (muted) yt.current.mute(); else yt.current.unMute();
+    }
   }, [volume, muted]);
 
   useEffect(() => {
+    if (yt.current && restartToken) { yt.current.seekTo(0, true); yt.current.playVideo(); return; }
     const el = audio.current;
     if (el && restartToken) {
       el.currentTime = 0;
@@ -91,6 +148,7 @@ export function PlayerHost() {
   }, [restartToken]);
 
   useEffect(() => {
+    if (yt.current && seekRequest) { yt.current.seekTo(seekRequest.to, true); return; }
     if (audio.current && seekRequest) audio.current.currentTime = seekRequest.to;
   }, [seekRequest]);
 
@@ -130,6 +188,14 @@ export function PlayerHost() {
   useEffect(() => () => flushHistory(), []);
 
   return (
+    <>
+    {/* YouTube's player must stay visible (≥ 200 px) while it plays: a docked mini window above the player bar */}
+    <div
+      ref={ytHost}
+      aria-label="YouTube player"
+      role="region"
+      className={ytId ? 'fixed bottom-[92px] right-4 z-40 h-[200px] w-[356px] overflow-hidden rounded-xl bg-black shadow-lift ring-1 ring-ink-700' : 'hidden'}
+    />
     <audio
       ref={audio}
       preload="auto"
@@ -143,7 +209,8 @@ export function PlayerHost() {
       }}
       onDurationChange={(e) => isFinite(e.currentTarget.duration) && report({ duration: e.currentTarget.duration })}
       onEnded={() => usePlayer.getState().nextTrack(true)}
-      onError={() => usePlayer.getState().load !== 'idle' && report({ load: 'error', playing: false })}
+      onError={() => !yt.current && usePlayer.getState().load !== 'idle' && report({ load: 'error', playing: false })}
     />
+    </>
   );
 }
