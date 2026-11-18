@@ -22,7 +22,14 @@ const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s);
 export async function generateMetadata({ params }: PageProps<'/track/[id]'>): Promise<Metadata> {
   const { id } = await params;
   const t = isUuid(id) ? await getTrack(id) : null;
-  return { title: t ? `${t.title} · ${t.artist_credit}` : 'Song' };
+  if (!t) return { title: 'Song' };
+  const description = `Listen to ${t.title} by ${t.artist_credit} and sing it with SoundCheck: vocals removed, synced lyrics, your phone as the mic.`;
+  return {
+    title: `${t.title} · ${t.artist_credit}`,
+    description,
+    openGraph: { title: `${t.title} · ${t.artist_credit}`, description, type: 'music.song', images: t.artwork_url ? [{ url: t.artwork_url }] : [] },
+    twitter: { card: t.artwork_url ? 'summary_large_image' : 'summary', title: `${t.title} · ${t.artist_credit}`, description },
+  };
 }
 
 export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {

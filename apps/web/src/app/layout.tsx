@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Sora } from 'next/font/google';
 import { AppShell } from '@/components/shell/AppShell';
 import './globals.css';
+import { SITE_ORIGIN } from '@/lib/site';
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
 const sora = Sora({ variable: '--font-sora', subsets: ['latin'], weight: ['600', '700', '800'] });
@@ -9,6 +10,8 @@ const sora = Sora({ variable: '--font-sora', subsets: ['latin'], weight: ['600',
 export const metadata: Metadata = {
   title: { default: 'SoundCheck', template: '%s · SoundCheck' },
   description: 'Stream music, sing karaoke with your phone as the mic, and get scored like a pro.',
+  metadataBase: new URL(SITE_ORIGIN),
+  openGraph: { siteName: 'SoundCheck', type: 'website' },
 };
 
 export const viewport: Viewport = { themeColor: '#07060c' };
