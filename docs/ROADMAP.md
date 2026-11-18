@@ -113,5 +113,14 @@ M2 leftovers:
 - **Speed**: cached (ISR) home/song/album/artist pages via a cookie-less catalog client; batched artwork reads;
   open-source searches cached per query, rendered per source as they arrive, and only fired once typing settles.
 
-Next: genre data on tracks for real genre pages; more curated karaoke versions (storage permitting); native TV
-apps showing "Ready to sing"; recommendations from listening history.
+Later the same session (2026-11-17/18):
+- Catalog 20,560+ full songs (Internet Archive incl. Jamendo + FMA mirrors 15,554; Audius 3,941; Openverse 1,065),
+  genres on ~9,000+ songs with `/genre` pages and TV genre rows; 24 shared songs ready to sing (lyrics by ear).
+- Features: Picked for you, autoplay, keyboard shortcuts, Top singers per song, Share score, word-by-word lyric
+  highlight, music-server library import, playlist import from song lists/CSV, processing queue status
+  (worker heartbeat), installable web app, sitemap + share previews, WCAG AA contrast (axe checks).
+- Fixes: listening/search history were never saved (lazy query builders), instrumentals failed processing,
+  canceled jobs still ran, Wikimedia refused the worker (User-Agent), artwork no longer uses Vercel's optimizer quota.
+
+Next: an always-on worker host (processing only runs while a worker is up); Openverse/Jamendo keys for more
+open music; native listening history.
