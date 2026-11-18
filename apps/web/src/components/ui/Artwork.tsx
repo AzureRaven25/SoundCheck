@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import Image from 'next/image';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { sizedArtwork } from '@/lib/artwork-size';
 
 const resolved = new Map<string, Promise<string | null>>();
 const MAX_CONCURRENT = 4;
@@ -96,8 +97,6 @@ function hash(s: string) {
  * Album artwork with graceful fallback: uses the given URL, otherwise resolves the album's cover on
  * demand, otherwise shows a generated gradient with initials. Never blocks rendering.
  */
-/** Hosts configured in next.config.ts images.remotePatterns. */
-const OPTIMIZABLE = /^https:\/\/(?:[^/]*\.)?(?:coverartarchive\.org|archive\.org|mzstatic\.com|supabase\.co|wikimedia\.org|dzcdn\.net)\//i;
 
 export function Artwork({
   src, albumId, artistId, title, className, rounded = 'rounded-md', resolve = true, priority = false,
@@ -132,14 +131,14 @@ export function Artwork({
     return (
       <div className={clsx('relative aspect-square w-full overflow-hidden bg-ink-800', rounded, className)}>
         <Image
-          src={url}
+          // the host's own thumbnail at about the drawn size (2× for sharp screens): no optimizer quota, no cold resize
+          src={sizedArtwork(url, priority || /(?:2\d\d|[3-9]\d\d)px\s*$/.test(sizes) ? 600 : 300)}
           alt=""
           fill
           sizes={sizes}
           priority={priority}
           onError={() => setFailedUrl(url)}
-          // only allow-listed catalog hosts go through the optimizer; a user's own music server can be anywhere
-          unoptimized={!OPTIMIZABLE.test(url)}
+          unoptimized
           className="object-cover"
         />
       </div>

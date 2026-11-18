@@ -40,11 +40,31 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--queries", default="", help="comma-separated searches (e.g. 'female vocal,singer songwriter'): pick from these"
                     " results instead of at random, which favors songs with vocals; needs SUPABASE_PUBLISHABLE_KEY")
+    ap.add_argument("--ia-queries", default="", help="comma-separated Internet Archive searches (incl. Jamendo's mirror): import"
+                    " the matching albums and pick from their tracks")
     a = ap.parse_args()
     url, key = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_SECRET_KEY"]
     rest = f"{url}/rest/v1"
 
-    if a.queries:
+    if a.ia_queries:
+        pub = os.environ["SUPABASE_PUBLISHABLE_KEY"]
+        ids: list[str] = []
+        for q in [x.strip() for x in a.ia_queries.split(",") if x.strip()]:
+            albums = req(f"{url}/functions/v1/open-music", pub, "POST", {"action": "search", "q": q, "limit": 6})["albums"]  # type: ignore[index]
+            for al in albums:
+                if not al["karaoke_ok"]:
+                    continue
+                try:
+                    got = req(f"{url}/functions/v1/open-music", pub, "POST", {"action": "album", "identifier": al["identifier"]})
+                except Exception as e:  # noqa: BLE001
+                    print(f"  skip {al['identifier']}: {e}")
+                    continue
+                ids += [t["id"] for t in got["tracks"][:2]]  # type: ignore[index]  # at most 2 per album, for variety
+        print(f"{len(ids)} tracks from karaoke-eligible Internet Archive albums")
+        cands = req(f"{rest}/track_sources?select=track_id,provider,stream_url,license_url,duration_ms,format"
+                    f"&karaoke_ok=is.true&stream_url=not.is.null&duration_ms=gte.{a.min_seconds * 1000}"
+                    f"&duration_ms=lte.{a.max_seconds * 1000}&track_id=in.({','.join(ids)})", key) if ids else []
+    elif a.queries:
         pub = os.environ["SUPABASE_PUBLISHABLE_KEY"]
         picked: dict[str, dict] = {}
         for q in [x.strip() for x in a.queries.split(",") if x.strip()]:
@@ -66,7 +86,7 @@ def main() -> int:
                     f"&duration_ms=gte.{a.min_seconds * 1000}&duration_ms=lte.{a.max_seconds * 1000}&limit=2000", key)
     done = {r["track_id"] for r in req(f"{rest}/audio_assets?select=track_id&owner_id=is.null&kind=eq.original&limit=5000", key)}
     pool = [c for c in cands if c["track_id"] not in done]  # type: ignore[union-attr]
-    if not a.queries:
+    if not a.queries and not a.ia_queries:
         random.Random(a.seed).shuffle(pool)
     print(f"{len(cands)} karaoke-eligible full recordings, {len(pool)} not yet prepared")  # type: ignore[arg-type]
     queued = 0

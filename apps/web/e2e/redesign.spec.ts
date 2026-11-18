@@ -65,3 +65,13 @@ test('autoplay continues with similar songs when the queue ends', async ({ page 
   await expect(page.getByRole('switch')).toBeChecked();
   await expect(page.getByRole('complementary', { name: 'Queue' }).getByRole('button', { name: /^Play / }).first()).toBeVisible();
 });
+
+test('covers load straight from their hosts (no image optimizer)', async ({ page }) => {
+  await page.goto('/search?q=queen');
+  const rows = page.getByRole('row');
+  await expect(rows.nth(3)).toBeVisible({ timeout: 30_000 });
+  await expect.poll(async () => page.locator('main img').evaluateAll((imgs) =>
+    (imgs as HTMLImageElement[]).filter((i) => i.complete && i.naturalWidth > 0).length), { timeout: 30_000 }).toBeGreaterThan(5);
+  const srcs = await page.locator('main img').evaluateAll((imgs) => (imgs as HTMLImageElement[]).map((i) => i.src));
+  expect(srcs.some((s) => s.includes('/_next/image'))).toBe(false);
+});
