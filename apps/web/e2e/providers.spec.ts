@@ -18,7 +18,8 @@ test('YouTube plays through its official embed from a pasted link; Apple Music h
 
 test('artist pages show the artist’s photo (Wikimedia Commons via Wikidata)', async ({ page }) => {
   await page.goto('/search?q=Radiohead');
-  await page.getByRole('link', { name: /^Radiohead/ }).first().click();
+  // search lists songs first; the artist card is in the Artists row
+  await page.getByRole('region', { name: 'Artists' }).getByRole('link', { name: /^Radiohead/ }).first().click();
   await expect(page).toHaveURL(/\/artist\//);
   await expect(page.locator('header img[src*="wikimedia"]').first()).toBeVisible({ timeout: 20_000 });
 });
