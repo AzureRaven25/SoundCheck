@@ -1,13 +1,15 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import {
-  Heart, ListMusic, Loader2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX,
+  Heart, ListMusic, Loader2, Mic2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX,
 } from 'lucide-react';
 import { Artwork } from '@/components/ui/Artwork';
 import { formatSeconds } from '@/lib/format';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 import { usePlayer, useCurrentTrack } from '@/player/store';
+import { trackAvailability } from '@/lib/acquire';
 
 function IconButton({ label, active, onClick, children, disabled }: {
   label: string; active?: boolean; onClick: () => void; children: React.ReactNode; disabled?: boolean;
@@ -27,6 +29,41 @@ function IconButton({ label, active, onClick, children, disabled }: {
   );
 }
 
+/** Small "Sing" shortcut to SoundCheck Stage when the playing song has a karaoke version. */
+function SingChip({ trackId }: { trackId: string }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true; // keyed by track, so state starts fresh for each song
+    void trackAvailability([trackId]).then((m) => { if (live) setReady(!!m.get(trackId)?.karaoke_ready); }).catch(() => {});
+    return () => { live = false; };
+  }, [trackId]);
+  if (!ready) return null;
+  return (
+    <Link href={`/stage/${trackId}`} className="stage-gradient inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-white hover:scale-105">
+      <Mic2 size={12} aria-hidden /> Sing
+    </Link>
+  );
+}
+
+/** Space plays/pauses, ←/→ seek 10 s, Shift+←/→ previous/next, M mutes (not while typing). */
+function useMediaKeys() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || !el) return;
+      if (el.closest('input, textarea, select, [contenteditable="true"], button, a, [role="slider"]')) return;
+      const p = usePlayer.getState();
+      if (!p.queue.items.length) return;
+      if (e.code === 'Space') { e.preventDefault(); p.toggle(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); if (e.shiftKey) p.nextTrack(); else p.seek(Math.min(p.duration || Infinity, p.position + 10)); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); if (e.shiftKey) p.previousTrack(); else p.seek(Math.max(0, p.position - 10)); }
+      else if (e.key === 'm' || e.key === 'M') p.toggleMute();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 export function PlayerBar({ signedIn }: { signedIn: boolean }) {
   const track = useCurrentTrack();
   const p = usePlayer();
@@ -35,6 +72,7 @@ export function PlayerBar({ signedIn }: { signedIn: boolean }) {
   const liked = track ? favorites.has(track.id) : false;
   const VolumeIcon = p.muted || p.volume === 0 ? VolumeX : p.volume < 0.5 ? Volume1 : Volume2;
   const pct = p.duration ? (p.position / p.duration) * 100 : 0;
+  useMediaKeys();
 
   return (
     <footer className="grid h-[76px] grid-cols-[1fr_auto] items-center gap-4 px-2 md:grid-cols-[minmax(180px,1fr)_minmax(320px,2fr)_minmax(180px,1fr)]" aria-label="Player">
@@ -48,6 +86,7 @@ export function PlayerBar({ signedIn }: { signedIn: boolean }) {
               <Link href={`/track/${track.id}`} className="block truncate text-sm font-bold hover:underline">{track.title}</Link>
               <p className="truncate text-xs text-ink-300">{track.artist}</p>
             </div>
+            {!track.id.startsWith('server:') && <SingChip key={track.id} trackId={track.id} />}
             {signedIn && (
               <IconButton label={liked ? 'Remove from favorites' : 'Save to favorites'} active={liked} onClick={() => void toggleFavorite(track.id)}>
                 <Heart size={16} fill={liked ? 'currentColor' : 'none'} />

@@ -33,3 +33,18 @@ test('favorites drive "Picked for you"; library lists your music', async ({ page
   await page.goto('/library?tab=music');
   await expect(page.getByText(/Songs you upload or import show up here/)).toBeVisible();
 });
+
+test('keyboard: space toggles playback, not while typing', async ({ page }) => {
+  await page.goto('/');
+  const firstCard = page.locator('a[href^="/track/"]').first();
+  await firstCard.hover();
+  await firstCard.getByRole('button', { name: /^Play / }).click();
+  const player = page.getByRole('contentinfo', { name: 'Player' });
+  await expect(player.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await page.getByRole('heading', { level: 1 }).click(); // move focus off the buttons
+  await page.keyboard.press('Space');
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await page.getByRole('searchbox').or(page.getByPlaceholder('What do you want to sing?')).first().click();
+  await page.keyboard.press('Space');
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible(); // typing a space didn't play
+});
