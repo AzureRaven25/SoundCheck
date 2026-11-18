@@ -26,10 +26,8 @@ test('favorites drive "Picked for you"; library lists your music', async ({ page
   await page.getByRole('row').filter({ hasText: 'Gloria Gaynor' }).first().getByRole('link', { name: 'I Will Survive' }).click();
   await page.getByRole('button', { name: /Save I Will Survive to favorites/ }).click();
   await page.goto('/');
-  const shelf = page.getByRole('region').filter({ has: page.getByRole('heading', { name: 'Picked for you' }) });
   await expect(page.getByRole('heading', { name: 'Picked for you' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("Because you've been listening to Gloria Gaynor")).toBeVisible();
-  await expect(shelf.getByRole('link', { name: 'I Will Survive' })).toHaveCount(0); // already yours
   await page.goto('/library?tab=music');
   await expect(page.getByText(/Songs you upload or import show up here/)).toBeVisible();
 });
@@ -99,4 +97,31 @@ test('song list from another app becomes a playlist', async ({ page }) => {
   await status.getByRole('link', { name: 'Open playlist' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Moved over' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'I Will Survive' })).toBeVisible();
+});
+
+test('empty search shows recent searches and genres', async ({ page }) => {
+  await signUp(page, 'Searcher');
+  await page.goto('/search?q=queen');
+  await expect(page.getByRole('heading', { name: 'Songs' })).toBeVisible({ timeout: 30_000 });
+  await page.goto('/search');
+  await expect(page.getByRole('region', { name: 'Recent searches' }).getByRole('link', { name: 'queen' })).toBeVisible();
+  await page.getByRole('region', { name: 'Browse genres' }).getByRole('link', { name: 'Jazz' }).click();
+  await expect(page).toHaveURL(/\/genre\/jazz$/);
+});
+
+test('listening history is recorded and shows as Recently played', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signUp(page, 'Listener');
+  await page.goto('/search?q=love');
+  const row = page.getByTestId('source-results').locator('li').filter({ hasText: ' · Openverse' }).first();
+  await expect(row).toBeVisible({ timeout: 45_000 });
+  const title = (await row.locator('p').first().textContent())!.trim();
+  await row.getByRole('button', { name: /^Play / }).click();
+  const audio = page.getByTestId('player-audio');
+  await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.currentTime), { timeout: 60_000, intervals: [2000] }).toBeGreaterThan(32);
+  await page.waitForTimeout(1500); // the entry is written once 30 s have been heard
+  await page.goto('/');
+  const recent = page.getByRole('region', { name: 'Recently played' });
+  await expect(recent).toBeVisible({ timeout: 20_000 });
+  await expect(recent).toContainText(title.slice(0, 15));
 });

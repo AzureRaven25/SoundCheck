@@ -21,7 +21,7 @@ export function PlayerHost() {
   const reloadToken = usePlayer((s) => s.reloadToken);
   const seekRequest = usePlayer((s) => s.seekRequest);
   const report = usePlayer((s) => s._report);
-  const listened = useRef<{ trackId: string; ms: number; kind: string } | null>(null);
+  const listened = useRef<{ trackId: string; ms: number; kind: string; recorded?: boolean } | null>(null);
   // YouTube mode: the song plays in YouTube's own (visible) player instead of the <audio> element
   const [ytId, setYtId] = useState<string | null>(null);
   const yt = useRef<YTPlayer | null>(null);
@@ -39,18 +39,30 @@ export function PlayerHost() {
     usePlayer.getState().nextTrack(true);
   };
 
-  // Flush listening history for the song that's ending.
+  // Listening history: one entry per play, written once 30 s have been heard (so closing the tab mid-song still
+  // counts), or when the song changes after at least 5 s.
+  const recordListen = (l: { trackId: string; ms: number; kind: string; recorded?: boolean }) => {
+    if (l.recorded || l.ms < 5000 || l.trackId.startsWith('server:')) return; // skips; server songs aren't catalog rows
+    l.recorded = true;
+    const sb = supabaseBrowser();
+    void sb.auth.getSession().then(({ data }) => {
+      if (!data.session) return;
+      // a query builder only runs when awaited or then'd: without .then() nothing was ever sent
+      void sb.from('listening_history').insert({
+        track_id: l.trackId, ms_played: Math.round(l.ms), platform: 'web', mode: l.kind === 'preview' ? 'preview' : 'listen',
+      }).then(() => {}, () => {});
+    });
+  };
   const flushHistory = () => {
     const l = listened.current;
     listened.current = null;
-    if (!l || l.ms < 5000 || l.trackId.startsWith('server:')) return; // ignore skips; server songs aren't catalog rows
-    const sb = supabaseBrowser();
-    void sb.auth.getUser().then(({ data }) => {
-      if (!data.user) return;
-      void sb.from('listening_history').insert({
-        track_id: l.trackId, ms_played: Math.round(l.ms), platform: 'web', mode: l.kind === 'preview' ? 'preview' : 'listen',
-      });
-    });
+    if (l) recordListen(l);
+  };
+  const countListen = (deltaMs: number) => {
+    const l = listened.current;
+    if (!l) return;
+    l.ms += deltaMs;
+    if (l.ms >= 30_000) recordListen(l);
   };
 
   // Load the source whenever the current track changes.
@@ -134,7 +146,7 @@ export function PlayerHost() {
       if (!p || typeof p.getCurrentTime !== 'function') return;
       const t = p.getCurrentTime(), d = p.getDuration();
       const prev = usePlayer.getState().position;
-      if (listened.current && t > prev && t - prev < 2) listened.current.ms += (t - prev) * 1000;
+      if (t > prev && t - prev < 2) countListen((t - prev) * 1000);
       report({ position: t, ...(d > 0 ? { duration: d } : {}) });
     }, 500);
     return () => { live = false; clearInterval(iv); };
@@ -217,7 +229,7 @@ export function PlayerHost() {
       onTimeUpdate={(e) => {
         const t = e.currentTarget.currentTime;
         const prev = usePlayer.getState().position;
-        if (listened.current && t > prev && t - prev < 2) listened.current.ms += (t - prev) * 1000;
+        if (t > prev && t - prev < 2) countListen((t - prev) * 1000);
         report({ position: t });
       }}
       onDurationChange={(e) => isFinite(e.currentTarget.duration) && report({ duration: e.currentTarget.duration })}

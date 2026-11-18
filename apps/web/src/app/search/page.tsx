@@ -1,5 +1,7 @@
 'use client';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { GENRE_INFO } from '@/lib/genres';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { EntityCard, Shelf } from '@/components/catalog/Cards';
 import { TrackList } from '@/components/catalog/TrackList';
@@ -54,7 +56,10 @@ function Results() {
         setTracks(items);
         setSource(data?.source ?? null);
         setState('done');
-        if (user) void sb.from('search_history').insert({ query: q.slice(0, 200) });
+        // ask the session directly: on a fresh page load the user hook may not have resolved yet
+        void sb.auth.getSession().then(({ data }) => {
+          if (data.session && !data.session.user.is_anonymous) void sb.from('search_history').insert({ query: q.slice(0, 200) }).then(() => {}, () => {}); // builders only run when awaited/then'd
+        });
       } catch {
         if (id === req.current) setState('error');
       }
@@ -62,14 +67,7 @@ function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  if (!q) {
-    return (
-      <div className="pt-8">
-        <h1 className="font-display text-3xl font-bold">Search</h1>
-        <p className="mt-2 text-ink-300">Search a million songs by title or artist. Typos are fine.</p>
-      </div>
-    );
-  }
+  if (!q) return <SearchHome />;
   return (
     <div className="pt-4" aria-busy={state === 'loading'}>
       {state === 'error' && <p role="alert" className="text-danger-400">Search failed. Check your connection and try again.</p>}
@@ -98,6 +96,44 @@ function Results() {
       {q && <ServerResults q={q} />}
       {q && <MoreSources key={q} q={q} />}
       {q && <OpenMusicResults q={q} />}
+    </div>
+  );
+}
+
+/** Empty search: your recent searches and genres to browse. */
+function SearchHome() {
+  const user = useUser();
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    if (!user) return;
+    void supabaseBrowser().from('search_history').select('query').order('created_at', { ascending: false }).limit(40)
+      .then(({ data }) => setRecent([...new Set((data ?? []).map((r) => r.query as string))].slice(0, 10)));
+  }, [user]);
+  return (
+    <div className="pt-8">
+      <h1 className="font-display text-3xl font-bold">Search</h1>
+      <p className="mt-2 text-ink-300">Search a million songs by title or artist. Typos are fine.</p>
+      {recent.length > 0 && (
+        <section className="mt-8" aria-label="Recent searches">
+          <h2 className="mb-3 font-display text-xl font-bold">Recent searches</h2>
+          <ul className="flex flex-wrap gap-2">
+            {recent.map((r) => (
+              <li key={r}><Link href={`/search?q=${encodeURIComponent(r)}`} className="rounded-full bg-ink-800 px-4 py-1.5 text-sm hover:bg-ink-700">{r}</Link></li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section className="mt-8" aria-label="Browse genres">
+        <h2 className="mb-3 font-display text-xl font-bold">Browse full songs by genre</h2>
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {Object.entries(GENRE_INFO).map(([slug, g]) => (
+            <li key={slug}>
+              <Link href={`/genre/${slug}`} className="flex aspect-[5/2] items-end rounded-xl p-3 font-display font-bold text-white shadow-lift transition hover:scale-[1.02]"
+                style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}>{g.label}</Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

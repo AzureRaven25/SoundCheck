@@ -207,7 +207,7 @@ export async function runImport(
       } catch (e) {
         item.status = 'failed';
         item.error = e instanceof Error ? e.message : String(e);
-        void sb.from('acquisition_log').insert({ user_id: user.id, provider: 'upload', action: 'upload', external_id: item.path.slice(0, 200), ok: false, error: item.error.slice(0, 500) });
+        void sb.from('acquisition_log').insert({ user_id: user.id, provider: 'upload', action: 'upload', external_id: item.path.slice(0, 200), ok: false, error: item.error.slice(0, 500) }).then(() => {}, () => {});
       }
       onUpdate();
     }
