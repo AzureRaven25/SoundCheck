@@ -118,7 +118,9 @@ class Supabase:
         if not url_allowed(url):
             raise ValueError(f"refusing to download from {urlparse(url).hostname or url!r}")
         start = urlparse(url).hostname or ""
-        with httpx.Client(follow_redirects=True, timeout=120) as c, c.stream("GET", url) as r:
+        # an honest, descriptive User-Agent: Wikimedia's policy refuses generic HTTP-library agents
+        headers = {"User-Agent": "SoundCheck/0.2 (karaoke pipeline; https://soundcheck-gules.vercel.app)"}
+        with httpx.Client(follow_redirects=True, timeout=120, headers=headers) as c, c.stream("GET", url) as r:
             r.raise_for_status()
             final = str(r.url)
             if not redirect_allowed(start, final):
