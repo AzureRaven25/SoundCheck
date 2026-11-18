@@ -132,12 +132,14 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--once", action="store_true", help="process at most one job, then exit")
     w.add_argument("--model", default="htdemucs", choices=["htdemucs", "htdemucs_ft", "htdemucs_6s"])
     w.add_argument("--crepe-model", default="full", choices=["full", "tiny"])
+    w.add_argument("--drain", action="store_true", help="exit once the queue is empty (for scheduled runs)")
+    w.add_argument("--max-minutes", type=float, default=None, help="stop taking new jobs after this long")
     w.add_argument("--asr-model", default="small", help="Whisper size for songs without published lyrics (tiny/base/small/medium, or none)")
     args = parser.parse_args(argv)
 
     if args.command == "worker":
         from .worker import run
-        n = run(once=args.once, model=args.model, crepe_model=args.crepe_model, asr_model=args.asr_model)
+        n = run(once=args.once, drain=args.drain, max_minutes=args.max_minutes, model=args.model, crepe_model=args.crepe_model, asr_model=args.asr_model)
         print(f"processed {n} job(s)")
         return 0
 

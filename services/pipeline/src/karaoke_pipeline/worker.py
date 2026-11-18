@@ -261,7 +261,7 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
         return analysis["id"]
 
 
-def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, **kw) -> int:
+def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, drain: bool = False, max_minutes: float | None = None, **kw) -> int:
     url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SECRET_KEY")
     if not url or not key:
         raise SystemExit("SUPABASE_URL and SUPABASE_SECRET_KEY must be set")
@@ -270,7 +270,11 @@ def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, *
     done = 0
     print(f"worker {worker} polling {url}", flush=True)
     last_beat = 0.0
+    started = time.monotonic()
     while True:
+        if max_minutes and time.monotonic() - started > max_minutes * 60:
+            print(f"time limit reached after {done} jobs", flush=True)
+            return done
         if time.monotonic() - last_beat > 60:  # tell the site processing is available (shown to users waiting)
             try:
                 sb.rpc("worker_heartbeat", {"p_worker": worker})
@@ -279,7 +283,7 @@ def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, *
             last_beat = time.monotonic()
         claimed = sb.rpc("worker_claim_jobs", {"p_worker": worker, "p_visibility_seconds": visibility, "p_qty": 1}) or []
         if not claimed:
-            if once:
+            if once or drain:  # drain: process what's queued, then exit (scheduled runs)
                 return done
             time.sleep(poll_seconds)
             continue
