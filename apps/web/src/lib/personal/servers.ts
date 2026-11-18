@@ -131,3 +131,31 @@ export async function searchAllServers(q: string, limit = 20): Promise<ServerTra
   const results = await Promise.allSettled(loadServers().map((s) => searchServer(s, q, limit)));
   return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 }
+
+export interface ServerSong { id: string; title: string; artist: string; album: string | null; suffix: string; streamUrl: string }
+
+/** Every song on a server, a page at a time (Subsonic search3 with an empty query; Jellyfin Items paging). */
+export async function listServerSongs(s: ServerConfig, offset: number, size = 200): Promise<ServerSong[]> {
+  if (s.kind === 'subsonic') {
+    type Song = { id: string; title: string; artist?: string; album?: string; suffix?: string };
+    const d = await subsonic<{ searchResult3?: { song?: Song[] } }>(s, 'search3', {
+      query: '', songCount: String(size), songOffset: String(offset), albumCount: '0', artistCount: '0',
+    });
+    return (d.searchResult3?.song ?? []).map((x) => ({
+      id: x.id, title: x.title, artist: x.artist ?? 'Unknown artist', album: x.album ?? null, suffix: (x.suffix ?? 'mp3').toLowerCase(),
+      // format=raw: the original file, never a transcode
+      streamUrl: `${s.url}/rest/stream?${subsonicParams(s, { id: x.id, format: 'raw' })}`,
+    }));
+  }
+  const params = new URLSearchParams({
+    IncludeItemTypes: 'Audio', Recursive: 'true', StartIndex: String(offset), Limit: String(size), Fields: 'MediaSources', SortBy: 'AlbumArtist,Album,IndexNumber',
+  });
+  const r = await fetch(`${s.url}/Users/${s.userId}/Items?${params}`, { headers: { Authorization: jellyfinAuth(s.token) } });
+  if (!r.ok) throw new Error(`server answered ${r.status}`);
+  type Item = { Id: string; Name: string; AlbumArtist?: string; Artists?: string[]; Album?: string; Container?: string };
+  return (((await r.json()).Items ?? []) as Item[]).map((x) => ({
+    id: x.Id, title: x.Name, artist: x.Artists?.[0] ?? x.AlbumArtist ?? 'Unknown artist', album: x.Album ?? null,
+    suffix: (x.Container ?? 'mp3').split(',')[0]!.toLowerCase(),
+    streamUrl: `${s.url}/Audio/${x.Id}/stream?${new URLSearchParams({ static: 'true', api_key: s.token })}`,
+  }));
+}

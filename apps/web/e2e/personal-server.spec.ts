@@ -61,3 +61,29 @@ test('connect a Jellyfin server and play a song in full', async ({ page }) => {
   expect(Math.abs((await audio(page)).d - 75)).toBeLessThan(1.5);
   await expect.poll(async () => (await audio(page)).t, { timeout: 20_000 }).toBeGreaterThan(3);
 });
+
+test('import a whole music server library (Navidrome)', async ({ page }) => {
+  test.skip(!process.env.E2E_NAVIDROME, 'set E2E_NAVIDROME=1 with the local Navidrome running');
+  test.setTimeout(180_000);
+  await signUp(page, 'Library Mover');
+  await page.goto('/settings');
+  await expect(page.getByLabel('Display name')).toHaveValue('Library Mover');
+  const box = page.getByRole('region', { name: 'Your music server' });
+  await box.getByLabel('Server address').fill(NAVIDROME_TEST.url);
+  await box.getByLabel('Server username').fill(NAVIDROME_TEST.username);
+  await box.getByLabel('Server password').fill(NAVIDROME_TEST.password);
+  await box.getByRole('button', { name: 'Connect server' }).click();
+  await expect(box.getByRole('status')).toContainText('Connected to Navidrome');
+
+  await page.goto('/import');
+  await page.getByRole('button', { name: 'Import from Navidrome' }).click();
+  const start = page.getByRole('button', { name: /^Import \d+ songs?$/ });
+  await expect(start).toBeVisible({ timeout: 60_000 });
+  const n = Number((await start.textContent())!.match(/\d+/)![0]);
+  await page.getByLabel('Make karaoke versions').uncheck();
+  await start.click();
+  await expect(page.getByTestId('import-summary')).toContainText(`${n} of ${n}`, { timeout: 120_000 });
+  await expect(page.getByTestId('import-summary')).toContainText('0 failed');
+  await page.goto('/library?tab=music');
+  await expect(page.getByRole('row').nth(1)).toBeVisible();
+});

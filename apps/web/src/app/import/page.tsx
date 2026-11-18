@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { useRef, useState } from 'react';
-import { CheckCircle2, CircleAlert, Copy, FolderOpen, Loader2, Mic2, RotateCcw, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, CircleAlert, Copy, FolderOpen, Loader2, Mic2, RotateCcw, Server, Upload } from 'lucide-react';
 import { SignInGate } from '@/components/social/SignInGate';
-import { expandZips, filesFromDrop, filesFromInput, planImport, runImport, type ImportItem, type InputFile, type PlaylistResult } from '@/lib/import/engine';
+import { loadServers, type ServerConfig } from '@/lib/personal/servers';
+import { expandZips, filesFromDrop, filesFromInput, planImport, planServerImport, runImport, type ImportItem, type InputFile, type PlaylistResult } from '@/lib/import/engine';
 
 const SOURCES = [
   'My music files', 'Bandcamp purchase', 'CD rip', 'Store purchase (DRM-free)', 'Artist download', 'Recording I made',
@@ -32,6 +33,24 @@ function Importer() {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const abort = useRef<AbortController | null>(null);
   const rerender = () => setTick((n) => n + 1);
+  const [servers, setServers] = useState<ServerConfig[]>([]);
+  useEffect(() => { setServers(loadServers()); }, []); // connected in Settings; stored on this device only
+
+  async function fromServer(server: ServerConfig) {
+    setPhase('scanning');
+    setNote(`Listing songs on ${server.name}…`);
+    try {
+      const p = await planServerImport(server, (n) => setNote(`Found ${n.toLocaleString()} songs on ${server.name}…`));
+      setPlan(p);
+      setPlaylists([]);
+      setSource('My music files');
+      setNote(p.items.length ? null : `${server.name} has no songs to import.`);
+      setPhase(p.items.length ? 'ready' : 'idle');
+    } catch (e) {
+      setNote(e instanceof Error ? `Couldn’t list your server’s songs: ${e.message}` : 'Couldn’t list your server’s songs.');
+      setPhase('idle');
+    }
+  }
 
   async function accept(files: InputFile[]) {
     setPhase('scanning');
@@ -103,6 +122,18 @@ function Importer() {
           onChange={(e) => e.target.files && void accept(filesFromInput(e.target.files))} />
         {phase === 'scanning' && <p className="mt-4 flex items-center justify-center gap-2 text-sm text-ink-300"><Loader2 className="size-4 animate-spin" aria-hidden /> {note ?? 'Reading your files…'}</p>}
       </div>
+      {servers.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-ink-850 p-4" aria-label="Music servers">
+          <Server className="text-cyan-400" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-ink-300">Bring in the whole library from your music server. Each song is copied when its turn comes.</p>
+          {servers.map((sv) => (
+            <button key={sv.id} type="button" onClick={() => void fromServer(sv)} disabled={phase === 'running' || phase === 'scanning'}
+              className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950 disabled:opacity-50">
+              Import from {sv.name}
+            </button>
+          ))}
+        </div>
+      )}
       {note && phase !== 'scanning' && <p role="alert" className="mt-3 text-sm text-danger-400">{note}</p>}
 
       {plan && items.length > 0 && (

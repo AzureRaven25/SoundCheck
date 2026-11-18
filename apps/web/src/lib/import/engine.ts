@@ -9,6 +9,7 @@
  * Every step is idempotent, so "Retry failed" (or importing the same folder again) only redoes what didn't finish.
  */
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { listServerSongs, type ServerConfig } from '@/lib/personal/servers';
 import { AUDIO_EXT, classify, extOf, guessFromPath, mimeFor, parsePlaylist, parseRipLog, provenanceLabel, resolveEntry, type RipLog } from './parse';
 
 export interface InputFile { path: string; file: File }
@@ -16,6 +17,8 @@ export type ItemStatus = 'waiting' | 'reading' | 'uploading' | 'processing' | 'd
 export interface ImportItem {
   path: string;
   file: File;
+  /** downloaded only when its turn comes (songs from a music server), so big libraries don't fill memory */
+  fetchFile?: () => Promise<File>;
   status: ItemStatus;
   title?: string;
   artist?: string;
@@ -110,8 +113,9 @@ async function readTags(item: ImportItem): Promise<void> {
 
 async function importOne(item: ImportItem, uid: string, opts: ImportOptions, rip: RipLog | null): Promise<void> {
   const sb = supabaseBrowser();
-  if (item.file.size > MAX_BYTES) throw new Error('larger than 200 MB');
   item.status = 'reading';
+  if (item.fetchFile && !item.file.size) item.file = await item.fetchFile();
+  if (item.file.size > MAX_BYTES) throw new Error('larger than 200 MB');
   await readTags(item);
   const trackNo = guessFromPath(item.path).trackNo;
   item.provenance = provenanceLabel(opts.sourceLabel, rip && trackNo ? rip.tracks.get(trackNo) : null);
@@ -199,6 +203,7 @@ export async function runImport(
       const dir = item.path.split('/').slice(0, -1).join('/');
       try {
         await importOne(item, user.id, opts, plan.rips.get(dir) ?? null);
+        if (item.fetchFile) item.file = new File([], item.file.name); // release the download
       } catch (e) {
         item.status = 'failed';
         item.error = e instanceof Error ? e.message : String(e);
@@ -232,4 +237,27 @@ export async function runImport(
   }
   onUpdate();
   return results;
+}
+
+/** Plan an import of a music server's whole library (each file is fetched when it's imported). */
+export async function planServerImport(server: ServerConfig, onProgress?: (found: number) => void, max = 10_000): Promise<Awaited<ReturnType<typeof planImport>>> {
+  const items: ImportItem[] = [];
+  for (let offset = 0; offset < max; offset += 200) {
+    const page = await listServerSongs(server, offset, 200);
+    for (const song of page) {
+      const path = `${song.artist}/${song.album ?? 'Singles'}/${song.title}.${song.suffix}`.replace(/[\\:*?"<>|]/g, '_');
+      items.push({
+        path, file: new File([], `${song.title}.${song.suffix}`), status: 'waiting',
+        fetchFile: async () => {
+          const r = await fetch(song.streamUrl);
+          if (!r.ok) throw new Error(`your server answered ${r.status}`);
+          const blob = await r.blob();
+          return new File([blob], `${song.title}.${song.suffix}`, { type: mimeFor(`x.${song.suffix}`, blob.type) });
+        },
+      });
+    }
+    onProgress?.(items.length);
+    if (page.length < 200) break;
+  }
+  return { items, playlists: [], rips: new Map() };
 }
