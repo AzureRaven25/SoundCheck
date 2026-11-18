@@ -11,7 +11,7 @@
   --color-ink-850: #14121f;     /* cards */
   --color-ink-800: #1c1929;     /* hover / raised */
   --color-ink-700: #2a2638;     /* borders, inputs */
-  --color-ink-500: #6b6684;     /* dim text */
+  --color-ink-500: #86829e;     /* dim text: ≥ 4.6:1 on every ink background (WCAG AA) */
   --color-ink-300: #a7a2bd;     /* secondary text */
   --color-ink-50:  #f6f4ff;     /* primary text */
 
