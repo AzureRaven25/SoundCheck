@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { RotateCcw, Trophy } from 'lucide-react';
+import { RotateCcw, Share2, Trophy } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
 export interface ScoreView {
@@ -121,8 +121,30 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
       )}
       <div className="mt-8 flex justify-center gap-4">
         <button type="button" onClick={onAgain} className="flex items-center gap-2 rounded-full bg-pink-500 px-6 py-3 font-bold text-ink-950 hover:scale-105"><RotateCcw size={18} /> Sing again</button>
+        {scores?.[0] && <ShareScore trackId={trackId} score={scores[0].score} grade={scores[0].grade} />}
         <Link href={`/track/${trackId}`} className="rounded-full border border-ink-700 px-6 py-3 font-bold hover:border-ink-300">Back to song</Link>
       </div>
     </div>
+  );
+}
+
+/** Share a score: the phone's share sheet when there is one, otherwise copy the text and link. */
+function ShareScore({ trackId, score, grade }: { trackId: string; score: number; grade: string }) {
+  const [copied, setCopied] = useState(false);
+  async function share() {
+    const url = `${location.origin}/track/${trackId}`;
+    const title = document.title.replace(/ · SoundCheck$/, '');
+    const text = `I scored ${score} (${grade}) singing ${title} on SoundCheck. Can you beat it?`;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'SoundCheck', text, url }); return; }
+    } catch { /* closed the sheet, or not allowed: fall back to copying */ }
+    await navigator.clipboard?.writeText(`${text} ${url}`).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+  return (
+    <button type="button" onClick={() => void share()} className="flex items-center gap-2 rounded-full border border-ink-700 px-6 py-3 font-bold hover:border-ink-300">
+      <Share2 size={18} aria-hidden /> {copied ? 'Copied!' : 'Share score'}
+    </button>
   );
 }

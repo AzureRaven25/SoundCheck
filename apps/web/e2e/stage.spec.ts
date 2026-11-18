@@ -47,6 +47,7 @@ test('sing on Stage and get a SoundCheck Score', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'Results' })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Pitch')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sing again' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Share score' })).toBeVisible();
   // the "singer" is the original vocal, so the official score must be strong
   const score = Number(await page.locator('.text-8xl').first().textContent({ timeout: 10_000 }));
   await page.waitForTimeout(1600); // count-up animation
