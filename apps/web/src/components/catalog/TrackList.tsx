@@ -104,17 +104,18 @@ export function TrackList({
             key={`${t.id}-${i}`}
             onDoubleClick={() => playTracks(tracks.map(toQueueTrack), i)}
             className={clsx(
-              'group relative grid grid-cols-[2rem_1fr_auto] items-center gap-4 rounded-md px-3 py-2 hover:bg-ink-800 md:grid-cols-[2rem_6fr_4fr_auto]',
+              'group relative grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-md px-2 py-2 hover:bg-ink-800 sm:gap-4 sm:px-3 md:grid-cols-[2rem_6fr_4fr_auto]',
               menuFor === i && 'bg-ink-800',
             )}
           >
             <div role="cell" className="relative flex h-6 items-center justify-center text-ink-300">
-              <span className={clsx('tabular-nums group-hover:invisible', isCurrent && 'text-pink-500')}>{numbered ? i + 1 : '•'}</span>
+              <span className={clsx('tabular-nums group-hover:invisible [@media(hover:none)]:invisible', isCurrent && 'text-pink-500')}>{numbered ? i + 1 : '•'}</span>
               <button
                 type="button"
                 aria-label={isCurrent && playing ? `Pause ${t.title}` : `Play ${t.title}`}
                 onClick={() => (isCurrent ? toggle() : playTracks(tracks.map(toQueueTrack), i))}
-                className="invisible absolute inset-0 flex items-center justify-center text-ink-50 group-hover:visible focus:visible"
+                // touch screens have no hover: the play button is always shown there
+                className="invisible absolute inset-0 flex items-center justify-center text-ink-50 group-hover:visible focus:visible [@media(hover:none)]:visible"
               >
                 {isCurrent && playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
               </button>
@@ -145,19 +146,19 @@ export function TrackList({
                   aria-label={liked ? `Remove ${t.title} from favorites` : `Save ${t.title} to favorites`}
                   aria-pressed={liked}
                   onClick={() => void toggleFavorite(t.id)}
-                  className={clsx('p-1', liked ? 'text-pink-500' : 'invisible hover:text-ink-50 group-hover:visible focus:visible')}
+                  className={clsx('p-1', liked ? 'text-pink-500' : 'invisible max-sm:hidden hover:text-ink-50 group-hover:visible focus:visible')}
                 >
                   <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
                 </button>
               )}
-              <span className="w-12 text-right tabular-nums">{formatDuration(t.duration_ms)}</span>
+              <span className="hidden w-12 text-right tabular-nums sm:inline">{formatDuration(t.duration_ms)}</span>
               <div className="relative">
                 <button
                   type="button"
                   aria-label={`More options for ${t.title}`}
                   aria-haspopup="menu"
                   onClick={() => setMenuFor(menuFor === i ? null : i)}
-                  className="invisible p-1 hover:text-ink-50 group-hover:visible focus:visible"
+                  className="invisible p-1 hover:text-ink-50 group-hover:visible focus:visible [@media(hover:none)]:visible"
                 >
                   <MoreHorizontal size={18} />
                 </button>

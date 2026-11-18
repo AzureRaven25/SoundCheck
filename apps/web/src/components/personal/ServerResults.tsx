@@ -14,7 +14,8 @@ export const toQueue = (t: ServerTrack) => ({
 /** Search results from the user's connected music servers (full-length, their own files). */
 export function ServerResults({ q }: { q: string }) {
   const [hits, setHits] = useState<ServerTrack[]>([]);
-  const p = usePlayer();
+  // only what this list needs: subscribing to the whole store re-rendered it on every playback tick
+  const p = { playing: usePlayer((s) => s.playing), playTracks: usePlayer((s) => s.playTracks), toggle: usePlayer((s) => s.toggle) };
   const current = useCurrentTrack();
   useEffect(() => {
     let live = true;
