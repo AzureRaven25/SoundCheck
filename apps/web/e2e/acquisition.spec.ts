@@ -103,3 +103,23 @@ test('bulk import: ZIP with playlist and rip log, duplicates, karaoke', async ({
     return page.getByTestId('availability').getAttribute('data-level');
   }, { timeout: 300_000, intervals: [10_000] }).toBe('karaoke_ready');
 });
+
+// Needs the local worker to have processed a shared open-licensed song with transcribed lyrics
+// (scripts/process_open_catalog.py / admin_request_processing). Skipped when none is ready.
+test('open-licensed song: lyrics by ear, listed on /sing, opens on Stage', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signUp(page, 'Busker');
+  await page.goto('/sing');
+  const everyone = page.getByRole('region', { name: 'Ready for everyone' }).or(page.locator('section').filter({ has: page.getByRole('heading', { name: 'Ready for everyone' }) }));
+  const sing = everyone.first().getByRole('link', { name: /^Sing / }).first();
+  test.skip(!(await sing.isVisible().catch(() => false)), 'no shared karaoke version with lyrics yet');
+  const title = (await sing.getAttribute('aria-label'))!.replace(/^Sing /, '');
+  const href = (await sing.getAttribute('href'))!;
+  // the song page shows the transcribed words
+  await page.goto(`/track/${href.split('/').pop()}`);
+  await expect(page.getByText(/Lyrics transcribed automatically/)).toBeVisible({ timeout: 20_000 });
+  await page.goto(href);
+  await expect(page.getByRole('heading', { name: 'Ready to sing?' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/transcribed automatically from the vocals/)).toBeVisible();
+  expect(title.length).toBeGreaterThan(0);
+});

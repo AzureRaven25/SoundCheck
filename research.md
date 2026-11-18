@@ -164,9 +164,10 @@ Seeded with `scripts/seed_open_catalog.py` (45 genre/mood queries) and verified 
 
 | Source | Full-length songs in the catalog before → after |
 |---|---|
-| Openverse (Jamendo + Wikimedia Commons) | 0 → 793 |
-| Audius | 0 → 1,008 |
-| Internet Archive | 0 → 4,305 |
+| Openverse (Jamendo + Wikimedia Commons) | 0 → 793 → 1,065 (second pass; Openverse then rate-limited us) |
+| Audius | 0 → 1,008 → 2,283 |
+| Internet Archive (netlabels, Jamendo + FMA mirrors, community music) | 0 → 4,305 → 7,038 |
+| **Total** | **10,386** |
 
 Any search also finds more on demand ("Full songs from open sources"), and played results join the catalog.
 Caveat: Internet Archive and Audius licenses are declared by the uploader; both sites handle takedowns, and

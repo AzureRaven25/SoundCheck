@@ -86,7 +86,14 @@ function LyricsInner({ trackId }: { trackId: string }) {
               !l.text && 'h-4',
             )}
           >
-            {l.text || '♪'}
+            {synced && i === idx && l.words?.length
+              ? l.words.map((w, j) => (
+                  // word-timed lyrics: sung words light up as the song reaches them
+                  <span key={j} className={clsx('transition-colors duration-150', position >= w.start ? 'text-pink-400' : 'text-ink-50')}>
+                    {w.text}{j < l.words!.length - 1 ? ' ' : ''}
+                  </span>
+                ))
+              : l.text || '♪'}
           </p>
         ))}
       </div>
