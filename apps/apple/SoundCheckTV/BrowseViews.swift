@@ -7,6 +7,7 @@ struct HomeView: View {
     @Environment(AppModel.self) private var model
     @State private var ready: [Track] = []
     @State private var popular: [Track] = []
+    @State private var full: [Track] = []
     @State private var error: String?
 
     var body: some View {
@@ -17,6 +18,7 @@ struct HomeView: View {
                     Text("STAGE").font(.caption.bold()).padding(.horizontal, 12).padding(.vertical, 6).background(SC.stage, in: Capsule())
                 }
                 if !ready.isEmpty { TrackRow(title: "Ready to sing", tracks: ready) }
+                if !full.isEmpty { TrackRow(title: "Full songs, free to play", tracks: full) }
                 TrackRow(title: "Popular right now", tracks: popular)
                 if let error { Text(error).foregroundStyle(SC.danger) }
             }
@@ -25,8 +27,10 @@ struct HomeView: View {
         .task(id: model.signedIn) {
             do {
                 async let p = model.backend.popular(limit: 40)
-                async let r = model.signedIn ? model.backend.karaokeReady() : []
-                (popular, ready) = try await (p, r)
+                // signed in: your karaoke tracks plus shared ones; signed out: the shared ones anyone can sing
+                async let r = model.signedIn ? model.backend.karaokeReady() : model.backend.readyToSing()
+                async let f = model.backend.fullLength()
+                (popular, ready, full) = try await (p, r, (try? await f) ?? [])
             } catch { self.error = "Couldn’t load the catalog: \(error.localizedDescription)" }
         }
     }

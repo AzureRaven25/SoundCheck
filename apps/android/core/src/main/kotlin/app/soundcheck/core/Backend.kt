@@ -166,6 +166,29 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
         return ids.mapNotNull(byId::get)
     }
 
+    /** Songs anyone can sing (shared karaoke versions with words to sing); works signed out. */
+    suspend fun readyToSing(limit: Int = 30): List<Track> {
+        @Serializable data class R(@SerialName("track_id") val trackId: String)
+        val ids = client.postgrest.rpc("ready_to_sing", buildJsonObject { put("p_limit", limit) }).decodeList<R>().map { it.trackId }
+        return tracksByIds(ids)
+    }
+
+    /** Songs that play in full for everyone (open sources), newest additions first. */
+    suspend fun fullLength(limit: Int = 40): List<Track> {
+        @Serializable data class S(@SerialName("track_id") val trackId: String, @SerialName("stream_url") val streamUrl: String? = null)
+        val ids = client.from("track_sources").select(Columns.raw("track_id, stream_url")) {
+            filter { isIn("provider", listOf("openverse", "internet_archive", "audius")) }
+            order("created_at", Order.DESCENDING); limit(limit * 2L)
+        }.decodeList<S>().filter { it.streamUrl != null }.map { it.trackId }.distinct().take(limit)
+        return tracksByIds(ids)
+    }
+
+    private suspend fun tracksByIds(ids: List<String>): List<Track> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = withArtwork(client.from("tracks").select(trackCols) { filter { isIn("id", ids) } }.decodeList<Row>()).associateBy { it.id }
+        return ids.mapNotNull(byId::get)
+    }
+
     private suspend fun invoke(fn: String, body: JsonObject): JsonObject =
         json.parseToJsonElement(client.functions.invoke(fn, body = body).bodyAsText()).jsonObject
 

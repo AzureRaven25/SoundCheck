@@ -90,12 +90,15 @@ fun TrackCard(t: Track, onOpen: (Track) -> Unit) {
 fun HomeScreen(signedIn: Boolean, onOpen: (Track) -> Unit) {
     var ready by remember { mutableStateOf(emptyList<Track>()) }
     var popular by remember { mutableStateOf(emptyList<Track>()) }
+    var full by remember { mutableStateOf(emptyList<Track>()) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(signedIn) {
         runCatching {
             popular = Services.backend.popular(40)
-            ready = if (signedIn) Services.backend.karaokeReady() else emptyList()
+            // signed in: your karaoke tracks plus shared ones; signed out: the shared ones anyone can sing
+            ready = if (signedIn) Services.backend.karaokeReady() else Services.backend.readyToSing()
         }.onFailure { error = "Couldn’t load the catalog: ${it.message}" }
+        full = runCatching { Services.backend.fullLength() }.getOrDefault(emptyList())
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 56.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
         item {
@@ -106,6 +109,7 @@ fun HomeScreen(signedIn: Boolean, onOpen: (Track) -> Unit) {
             }
         }
         if (ready.isNotEmpty()) item { TrackRow("Ready to sing", ready, onOpen) }
+        if (full.isNotEmpty()) item { TrackRow("Full songs, free to play", full, onOpen) }
         item { TrackRow("Popular right now", popular, onOpen) }
         error?.let { item { Text(it, color = SC.danger) } }
     }

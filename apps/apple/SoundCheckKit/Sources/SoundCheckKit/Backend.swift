@@ -168,6 +168,33 @@ public final class SoundCheckBackend: Sendable {
         return ids.compactMap { byId[$0] }
     }
 
+    /// Songs anyone can sing (shared karaoke versions with words to sing); works signed out.
+    public func readyToSing(limit: Int = 30) async throws -> [Track] {
+        struct R: Decodable { let track_id: String }
+        struct P: Encodable { let p_limit: Int }
+        let r: [R] = try await client.rpc("ready_to_sing", params: P(p_limit: limit)).execute().value
+        return try await tracks(ids: r.map(\.track_id))
+    }
+
+    /// Songs that play in full for everyone (open sources), newest additions first.
+    public func fullLength(limit: Int = 40) async throws -> [Track] {
+        struct S: Decodable { let track_id: String }
+        let s: [S] = try await client.from("track_sources").select("track_id")
+            .in("provider", values: ["openverse", "internet_archive", "audius"]).not("stream_url", operator: .is, value: "null")
+            .order("created_at", ascending: false).limit(limit * 2).execute().value
+        var seen = Set<String>()
+        return try await tracks(ids: Array(s.map(\.track_id).filter { seen.insert($0).inserted }.prefix(limit)))
+    }
+
+    /// Catalog rows for ids, in the given order, with artwork.
+    public func tracks(ids: [String]) async throws -> [Track] {
+        guard !ids.isEmpty else { return [] }
+        let rows: [Row] = try await client.from("tracks").select("id, title, artist_credit, album_id, duration_ms, release_year, albums(title)")
+            .in("id", values: ids).execute().value
+        let byId = Dictionary(uniqueKeysWithValues: try await withArtwork(rows).map { ($0.id, $0) })
+        return ids.compactMap { byId[$0] }
+    }
+
     /// Whether SoundCheck Stage assets exist for a track (any processed analysis).
     public func isKaraokeReady(trackId: String) async -> Bool {
         struct A: Decodable { let id: String }
