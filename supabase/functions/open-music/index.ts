@@ -25,9 +25,10 @@ async function search(q: string, limit: number) {
   const words = q.replace(/[^\p{L}\p{N}\s'-]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 8);
   if (!words.length) return [];
   const terms = words.map((w) => `"${w}"`).join(' AND ');
-  // netlabel releases (curated) plus community uploads tagged as music, always with an explicit open license:
-  // 62k + 186k items (counted 2026-11-17)
-  const query = `(title:(${terms}) OR creator:(${terms})) AND mediatype:audio AND licenseurl:* AND (collection:netlabels OR (collection:opensource_audio AND subject:music) OR collection:audio_music)`;
+  // netlabel releases, Jamendo's catalog as mirrored on the archive (235k albums), the Free Music Archive mirror
+  // (8.8k) and community uploads tagged as music, always with an explicit open license (counted 2026-11-17)
+  const collections = '(collection:netlabels OR collection:jamendo-albums OR collection:freemusicarchive OR (collection:opensource_audio AND subject:music) OR collection:audio_music)';
+  const query = `(title:(${terms}) OR creator:(${terms})) AND mediatype:audio AND licenseurl:* AND ${collections}`;
   const params = new URLSearchParams({ q: query, rows: String(limit), output: 'json', 'sort[]': 'downloads desc' });
   for (const f of ['identifier', 'title', 'creator', 'year', 'licenseurl', 'downloads']) params.append('fl[]', f);
   const d = await iaJson(`${IA}/advancedsearch.php?${params}`);

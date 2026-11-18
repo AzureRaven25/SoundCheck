@@ -170,4 +170,10 @@ Seeded with `scripts/seed_open_catalog.py` (45 genre/mood queries) and verified 
 
 Any search also finds more on demand ("Full songs from open sources"), and played results join the catalog.
 Caveat: Internet Archive and Audius licenses are declared by the uploader; both sites handle takedowns, and
-SoundCheck shows the declared license and source next to every song.
+SoundCheck shows the declared license and source next to every song. Covers of other artists' songs uploaded
+under a CC license only license the recording, not the underlying composition.
+
+**More Internet Archive collections (2026-11-17):** the archive mirrors Jamendo's catalog (`jamendo-albums`:
+294,067 albums, 235,022 with an explicit license) and the Free Music Archive (`freemusicarchive`: 8,794 licensed).
+Both are now part of open-music search, so Jamendo music is reachable without a Jamendo key and without
+Openverse's anonymous rate limit (which started refusing our requests during bulk seeding).
