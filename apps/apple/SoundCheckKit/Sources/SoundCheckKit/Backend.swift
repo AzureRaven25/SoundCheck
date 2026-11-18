@@ -186,6 +186,14 @@ public final class SoundCheckBackend: Sendable {
         return try await tracks(ids: Array(s.map(\.track_id).filter { seen.insert($0).inserted }.prefix(limit)))
     }
 
+    /// Full-length songs in a genre (slugs as in supabase/functions/_shared/genres.ts).
+    public func genre(_ slug: String, limit: Int = 30) async throws -> [Track] {
+        struct R: Decodable { let track_id: String }
+        struct P: Encodable { let p_genre: String; let p_limit: Int }
+        let r: [R] = try await client.rpc("genre_tracks", params: P(p_genre: slug, p_limit: limit)).execute().value
+        return try await tracks(ids: r.map(\.track_id))
+    }
+
     /// Catalog rows for ids, in the given order, with artwork.
     public func tracks(ids: [String]) async throws -> [Track] {
         guard !ids.isEmpty else { return [] }

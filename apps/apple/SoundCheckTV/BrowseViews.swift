@@ -8,6 +8,8 @@ struct HomeView: View {
     @State private var ready: [Track] = []
     @State private var popular: [Track] = []
     @State private var full: [Track] = []
+    @State private var genres: [(String, [Track])] = []
+    private static let homeGenres = [("pop", "Pop"), ("rock", "Rock"), ("hip-hop", "Hip-hop"), ("electronic", "Electronic"), ("folk", "Folk & acoustic")]
     @State private var error: String?
 
     var body: some View {
@@ -19,6 +21,7 @@ struct HomeView: View {
                 }
                 if !ready.isEmpty { TrackRow(title: "Ready to sing", tracks: ready) }
                 if !full.isEmpty { TrackRow(title: "Full songs, free to play", tracks: full) }
+                ForEach(genres, id: \.0) { g in TrackRow(title: g.0, tracks: g.1) }
                 TrackRow(title: "Popular right now", tracks: popular)
                 if let error { Text(error).foregroundStyle(SC.danger) }
             }
@@ -31,6 +34,11 @@ struct HomeView: View {
                 async let r = model.signedIn ? model.backend.karaokeReady() : model.backend.readyToSing()
                 async let f = model.backend.fullLength()
                 (popular, ready, full) = try await (p, r, (try? await f) ?? [])
+                var rows: [(String, [Track])] = []
+                for (slug, label) in Self.homeGenres {
+                    if let t = try? await model.backend.genre(slug, limit: 20), !t.isEmpty { rows.append((label, t)) }
+                }
+                genres = rows
             } catch { self.error = "Couldn’t load the catalog: \(error.localizedDescription)" }
         }
     }

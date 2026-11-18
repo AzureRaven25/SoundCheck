@@ -91,6 +91,7 @@ fun HomeScreen(signedIn: Boolean, onOpen: (Track) -> Unit) {
     var ready by remember { mutableStateOf(emptyList<Track>()) }
     var popular by remember { mutableStateOf(emptyList<Track>()) }
     var full by remember { mutableStateOf(emptyList<Track>()) }
+    var genres by remember { mutableStateOf(emptyList<Pair<String, List<Track>>>()) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(signedIn) {
         runCatching {
@@ -99,6 +100,8 @@ fun HomeScreen(signedIn: Boolean, onOpen: (Track) -> Unit) {
             ready = if (signedIn) Services.backend.karaokeReady() else Services.backend.readyToSing()
         }.onFailure { error = "Couldn’t load the catalog: ${it.message}" }
         full = runCatching { Services.backend.fullLength() }.getOrDefault(emptyList())
+        genres = listOf("pop" to "Pop", "rock" to "Rock", "hip-hop" to "Hip-hop", "electronic" to "Electronic", "folk" to "Folk & acoustic")
+            .mapNotNull { (slug, label) -> runCatching { Services.backend.genre(slug, 20) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { label to it } }
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 56.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
         item {
@@ -110,6 +113,7 @@ fun HomeScreen(signedIn: Boolean, onOpen: (Track) -> Unit) {
         }
         if (ready.isNotEmpty()) item { TrackRow("Ready to sing", ready, onOpen) }
         if (full.isNotEmpty()) item { TrackRow("Full songs, free to play", full, onOpen) }
+        genres.forEach { (label, tracks) -> item { TrackRow(label, tracks, onOpen) } }
         item { TrackRow("Popular right now", popular, onOpen) }
         error?.let { item { Text(it, color = SC.danger) } }
     }

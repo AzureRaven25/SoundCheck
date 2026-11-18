@@ -183,6 +183,13 @@ class SoundCheckBackend(val config: SoundCheckConfig) {
         return tracksByIds(ids)
     }
 
+    /** Full-length songs in a genre (slugs as in supabase/functions/_shared/genres.ts). */
+    suspend fun genre(slug: String, limit: Int = 30): List<Track> {
+        @Serializable data class R(@SerialName("track_id") val trackId: String)
+        val ids = client.postgrest.rpc("genre_tracks", buildJsonObject { put("p_genre", slug); put("p_limit", limit) }).decodeList<R>().map { it.trackId }
+        return tracksByIds(ids)
+    }
+
     private suspend fun tracksByIds(ids: List<String>): List<Track> {
         if (ids.isEmpty()) return emptyList()
         val byId = withArtwork(client.from("tracks").select(trackCols) { filter { isIn("id", ids) } }.decodeList<Row>()).associateBy { it.id }
