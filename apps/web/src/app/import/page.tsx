@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, CircleAlert, Copy, FolderOpen, Loader2, Mic2, RotateCcw, Server, Upload } from 'lucide-react';
 import { SignInGate } from '@/components/social/SignInGate';
+import { SongListImport } from '@/components/catalog/SongListImport';
 import { loadServers, type ServerConfig } from '@/lib/personal/servers';
 import { expandZips, filesFromDrop, filesFromInput, planImport, planServerImport, runImport, type ImportItem, type InputFile, type PlaylistResult } from '@/lib/import/engine';
 
@@ -231,6 +232,7 @@ function Importer() {
           {shown.length > 500 && <p className="mt-2 text-xs text-ink-500">Showing the first 500 of {shown.length}.</p>}
         </section>
       )}
+      <SongListImport />
       <p className="mt-8 text-xs text-ink-500">
         Import music you have the right to use: your own files, purchases, CD rips of discs you own, and downloads artists offer.
         Imported songs stay private to your account.

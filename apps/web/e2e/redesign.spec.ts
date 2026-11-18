@@ -85,3 +85,18 @@ test('genres: index with counts, genre page lists full songs', async ({ page }) 
   await expect(page).toHaveURL(/\/genre\/[a-z-]+$/);
   await expect(page.getByText(/Full songs, free to play: \d+/)).toBeVisible();
 });
+
+test('song list from another app becomes a playlist', async ({ page }) => {
+  test.setTimeout(90_000);
+  await signUp(page, 'Playlist Mover');
+  await page.goto('/import');
+  await page.getByLabel('Song list', { exact: true }).fill('Gloria Gaynor - I Will Survive\nStand by Me by Ben E. King\nZzqx Nonexistent Song Qqq');
+  await page.getByLabel('Playlist name').fill('Moved over');
+  await page.getByRole('button', { name: 'Make playlist' }).click();
+  const status = page.getByTestId('songlist-status');
+  await expect(status).toContainText('3 of 3 checked', { timeout: 60_000 });
+  await expect(status).toContainText('2 found');
+  await status.getByRole('link', { name: 'Open playlist' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Moved over' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'I Will Survive' })).toBeVisible();
+});
