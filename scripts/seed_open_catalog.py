@@ -23,6 +23,15 @@ QUERIES = [
     "night", "summer", "dream", "home", "rain", "fire", "road", "sky", "song", "vocal", "piano", "guitar", "latin",
     "gospel", "christmas", "lullaby", "classical", "symphony", "sonata", "opera", "choir",
 ]
+# second pass: moods, instruments, eras, languages, scenes
+MORE_QUERIES = [
+    "happy", "sad", "chill", "lofi", "party", "romantic", "epic", "uplifting", "melancholy", "energetic", "calm", "angry",
+    "duet", "female vocal", "male vocal", "a cappella", "harmony", "cover", "live", "unplugged", "orchestra", "violin",
+    "saxophone", "ukulele", "synth", "80s", "90s", "70s", "60s", "retro", "disco", "motown", "swing", "bossa nova",
+    "flamenco", "salsa", "samba", "afrobeat", "k-pop", "j-pop", "french", "spanish", "italian", "german", "portuguese",
+    "indie pop", "emo", "grunge", "ska", "trap", "drum and bass", "techno", "trance", "ambient", "cinematic", "anthem",
+    "wedding", "birthday", "friendship", "freedom",
+]
 
 
 def call(url: str, key: str, body: dict, timeout: int = 120) -> dict:
@@ -72,13 +81,15 @@ def main() -> int:
     ap.add_argument("--providers", default="openverse,audius")
     ap.add_argument("--per", type=int, default=20, help="results per provider per query (max 25)")
     ap.add_argument("--queries", type=int, default=len(QUERIES))
+    ap.add_argument("--more", action="store_true", help="use the second query list (moods, instruments, eras, languages)")
     ap.add_argument("--ia-albums", type=int, default=0, help="also import this many Internet Archive albums per query")
     a = ap.parse_args()
     url, key = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_KEY"]
     providers = a.providers.split(",")
     before = {p: rest_count(url, key, p) for p in providers}
     stats: collections.Counter[str] = collections.Counter()
-    for q in QUERIES[: a.queries]:
+    queries = MORE_QUERIES if a.more else QUERIES[: a.queries]
+    for q in queries:
         try:
             res = call(url, key, {"action": "search", "q": q, "providers": providers, "limit": a.per})
         except Exception as e:  # noqa: BLE001
@@ -97,7 +108,7 @@ def main() -> int:
         time.sleep(1.5)  # be gentle with Openverse's anonymous limits
     if a.ia_albums:
         ia_before = rest_count(url, key, "internet_archive")
-        seed_internet_archive(url, key, QUERIES[: a.queries], a.ia_albums)
+        seed_internet_archive(url, key, queries, a.ia_albums)
         print(f"internet_archive full-length sources in catalog: {ia_before} → {rest_count(url, key, 'internet_archive')}")
     after = {p: rest_count(url, key, p) for p in providers}
     print("\nimport results:", dict(stats))

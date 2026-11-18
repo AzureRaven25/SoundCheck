@@ -31,20 +31,23 @@ export function MoreSources({ q }: { q: string }) {
     let live = true; // the parent keys this component by query, so state starts fresh per search
     // one request per source, rendered as each arrives: fast sources (Audius ~0.4 s) don't wait for slow ones
     const rank = (c: SourceCandidate) => (c.availability === 'full' ? 0 : c.availability === 'preview' ? 1 : 2) * 2 + (c.karaoke_ok ? 0 : 1);
-    for (const p of SEARCH_PROVIDERS) {
-      void searchSources(q, 8, [p])
-        .then((r) => {
-          if (!live) return;
-          setResults((prev) => [...(prev ?? []), ...r.results].sort((a, b) => rank(a) - rank(b)));
-          setSources((prev) => [...prev, ...r.sources].sort((a, b) => SEARCH_PROVIDERS.indexOf(a.id) - SEARCH_PROVIDERS.indexOf(b.id)));
-        })
-        .catch(() => {
-          if (!live) return;
-          setResults((prev) => prev ?? []);
-          setSources((prev) => [...prev, { id: p, label: p, ok: false, count: 0, missing: [], error: 'unavailable' }]);
-        });
-    }
-    return () => { live = false; };
+    // wait until the query settles (typing in the top bar updates the URL every 300 ms)
+    const settle = setTimeout(() => {
+      for (const p of SEARCH_PROVIDERS) {
+        void searchSources(q, 8, [p])
+          .then((r) => {
+            if (!live) return;
+            setResults((prev) => [...(prev ?? []), ...r.results].sort((a, b) => rank(a) - rank(b)));
+            setSources((prev) => [...prev, ...r.sources].sort((a, b) => SEARCH_PROVIDERS.indexOf(a.id) - SEARCH_PROVIDERS.indexOf(b.id)));
+          })
+          .catch(() => {
+            if (!live) return;
+            setResults((prev) => prev ?? []);
+            setSources((prev) => [...prev, { id: p, label: p, ok: false, count: 0, missing: [], error: 'unavailable' }]);
+          });
+      }
+    }, 700);
+    return () => { live = false; clearTimeout(settle); };
   }, [q]);
 
   const key = (c: SourceCandidate) => `${c.provider}:${c.external_id}`;

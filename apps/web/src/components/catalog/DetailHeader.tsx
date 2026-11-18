@@ -27,19 +27,19 @@ export function DetailHeader({
   kind: string; title: string; artwork?: string | null; albumId?: string | null; artistId?: string | null; round?: boolean; meta: ReactNode; actions?: ReactNode;
 }) {
   return (
-    <header className="relative -mx-4 mb-6 overflow-hidden px-4 pb-6 pt-6 md:-mx-8 md:px-8">
+    <header className="@container relative -mx-4 mb-6 overflow-hidden px-4 pb-6 pt-6 md:-mx-8 md:px-8">
       {artwork && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={artwork} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30 blur-3xl [mask-image:linear-gradient(to_bottom,black_40%,transparent)]" />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-ink-900" aria-hidden />
-      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end">
-        <div className="w-48 shrink-0 shadow-lift md:w-56">
+      <div className="relative flex flex-col gap-6 @lg:flex-row @lg:items-end">
+        <div className="w-40 shrink-0 shadow-lift @3xl:w-56">
           <Artwork src={artwork} albumId={albumId} artistId={artistId} title={title} rounded={round ? 'rounded-full' : 'rounded-lg'} priority sizes="224px" />
         </div>
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-widest text-ink-300">{kind}</p>
-          <h1 className={clsx('mt-2 font-display font-extrabold leading-none tracking-tight', title.length > 30 ? 'text-3xl md:text-5xl' : 'text-4xl md:text-7xl')}>
+          <h1 className={clsx('mt-2 font-display font-extrabold leading-none tracking-tight', title.length > 30 ? 'text-3xl @3xl:text-5xl' : 'text-4xl @3xl:text-6xl @5xl:text-7xl')}>
             {title}
           </h1>
           <div className="mt-4 text-sm text-ink-300">{meta}</div>

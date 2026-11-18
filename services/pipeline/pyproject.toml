@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "demucs>=4.0.1",
+    "faster-whisper>=1.1",
     "httpx>=0.28.1",
     "librosa>=1.0.1",
     "mutagen>=1.48.1",

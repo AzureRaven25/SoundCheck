@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { PlayButton } from '@/components/catalog/Cards';
+import { PlayButton, Shelf, TrackCard } from '@/components/catalog/Cards';
+import { SingButton } from '@/components/catalog/SingButton';
 import { ArtistLine, DetailHeader, FavoriteButton } from '@/components/catalog/DetailHeader';
 import { Lyrics } from '@/components/catalog/Lyrics';
 import { UploadYourCopy } from '@/components/catalog/UploadYourCopy';
 import { SourceAvailability } from '@/components/catalog/SourceAvailability';
 import { ListenElsewhere } from '@/components/catalog/ListenElsewhere';
-import { getTrack } from '@/lib/catalog';
+import { getMoreByArtist, getTrack } from '@/lib/catalog';
 import { formatDuration } from '@/lib/format';
 
 /** Public catalog page: cached and refreshed hourly (user-specific parts load in the browser). */
@@ -28,6 +29,7 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
   if (!isUuid(id)) notFound();
   const t = await getTrack(id);
   if (!t) notFound();
+  const more = await getMoreByArtist(t.artist_credit, t.id);
   return (
     <div>
       <DetailHeader
@@ -43,7 +45,7 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
             {t.duration_ms && <> · {formatDuration(t.duration_ms)}</>}
           </span>
         }
-        actions={<><PlayButton tracks={[t]} size="lg" label={`Play ${t.title}`} /><FavoriteButton trackId={t.id} title={t.title} /></>}
+        actions={<><PlayButton tracks={[t]} size="lg" label={`Play ${t.title}`} /><SingButton trackId={t.id} /><FavoriteButton trackId={t.id} title={t.title} /></>}
       />
       <SourceAvailability trackId={t.id} />
       <UploadYourCopy trackId={t.id} title={t.title} />
@@ -52,6 +54,13 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
         <h2 id="lyrics-h" className="mb-4 font-display text-2xl font-bold">Lyrics</h2>
         <Lyrics trackId={t.id} />
       </section>
+      {more.length > 0 && (
+        <div className="mt-12">
+          <Shelf title={`More by ${t.artist_credit}`}>
+            {more.map((m) => <TrackCard key={m.id} t={m} list={more} />)}
+          </Shelf>
+        </div>
+      )}
     </div>
   );
 }

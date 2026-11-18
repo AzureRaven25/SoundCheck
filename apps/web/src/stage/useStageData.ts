@@ -16,6 +16,8 @@ export interface StageData {
   vocalRange: { low: number; high: number; min: number; max: number } | null;
   lines: StageLine[];
   lyricsGranularity: 'plain' | 'line' | 'word' | null;
+  /** true when the words were transcribed from the vocals (no published lyrics exist) */
+  lyricsTranscribed: boolean;
   instrumentalUrl: string;
   vocalsUrl: string;
 }
@@ -72,6 +74,7 @@ export function useStageData(trackId: string): StageLoad {
             // prefer word timing aligned to this exact recording; fall back to the shared synced lyrics
             lines: (a.word_lyrics as { lines: StageLine[] } | null)?.lines ?? lyricsRes.data?.lines ?? [],
             lyricsGranularity: a.word_lyrics ? 'word' : lyricsRes.data?.granularity ?? null,
+            lyricsTranscribed: String((a.word_lyrics as { source?: string } | null)?.source ?? '').startsWith('transcribed'),
             instrumentalUrl: iu.data.signedUrl,
             vocalsUrl: vu.data.signedUrl,
           },

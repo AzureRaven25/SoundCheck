@@ -360,6 +360,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
                   <>
                     <p className="mt-4 text-ink-300">
                       {data.lyricsGranularity === 'word' ? 'Word-by-word lyrics' : data.lines.length ? 'Synced lyrics' : 'Melody guide'}, vocals removed, and a live pitch guide.
+                      {data.lyricsTranscribed && ' Lyrics were transcribed automatically from the vocals and may contain mistakes.'}
                     </p>
                     <label className="mt-4 flex items-center justify-center gap-3 text-sm">
                       <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />

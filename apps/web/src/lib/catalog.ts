@@ -106,3 +106,11 @@ export async function getReadyToSing(limit = 12): Promise<TrackItem[]> {
   const { data } = await sb.rpc('ready_to_sing', { p_limit: limit });
   return tracksByIds((data ?? []).map((r: { track_id: string }) => r.track_id));
 }
+
+/** Other songs credited to the same artist, most popular first. */
+export async function getMoreByArtist(artistCredit: string, excludeId: string, limit = 12): Promise<TrackItem[]> {
+  const sb = supabasePublic();
+  const { data } = await sb.from('tracks').select(TRACK_SELECT).eq('artist_credit', artistCredit).neq('id', excludeId)
+    .order('popularity', { ascending: false }).limit(limit);
+  return withArtwork((data ?? []) as unknown as Row[]);
+}

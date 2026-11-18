@@ -168,7 +168,7 @@ def _lyric_lines(sb: Supabase, track_id: str) -> list[dict] | None:
     return synced[0]["content"]["lines"]
 
 
-def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = "full") -> str:
+def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = "full", asr_model: str = "small") -> str:
     """Run the full pipeline for one job. Returns the karaoke_analysis id."""
     from .analysis import analyze
     from .alignment import add_word_timing
@@ -210,12 +210,22 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
         _stage(sb, job, "lyrics", 0.65)
         lines = _lyric_lines(sb, job.track_id)
         word_stats = None
+        lyrics_source = None
         if lines:
             _stage(sb, job, "align", 0.7)
             lines, word_stats = add_word_timing(lines, stems.vocals, SAMPLE_RATE, notes)
-            phrases = phrases_from_lines(lines, notes)
-        else:
-            phrases = phrases_from_gaps(notes)
+            lyrics_source = "lrclib"
+        elif asr_model != "none":
+            # no published lyrics (indie / open-licensed / your own recordings): transcribe the vocal stem
+            _stage(sb, job, "transcribe", 0.7)
+            from .transcribe import transcribe_vocals
+
+            heard = transcribe_vocals(stems.vocals, SAMPLE_RATE, model_size=asr_model)
+            if heard:
+                lines, language = heard
+                word_stats = {"aligned": len(lines), "fallback": 0}
+                lyrics_source = f"transcribed:{language or 'unknown'}"
+        phrases = phrases_from_lines(lines, notes) if lines else phrases_from_gaps(notes)
 
         _stage(sb, job, "analyze", 0.8)
         info = analyze(stems.instrumental, SAMPLE_RATE)
@@ -243,7 +253,7 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
             "musical_key": info["key"]["name"], "tempo_bpm": _positive(info["tempo_bpm"]), "vocal_range": melody["range"],
             "notes": [{**n, "conf": 1.0} for n in notes], "phrases": phrases, "contour_path": f"{base}/contour.json",
             # word timing is specific to this upload's audio, so it lives on the analysis (not the shared lyrics)
-            "word_lyrics": {"lines": lines} if lines and word_stats and word_stats["aligned"] else None,
+            "word_lyrics": {"lines": lines, "source": lyrics_source} if lines and word_stats and word_stats["aligned"] else None,
         }, upsert_on="source_asset_id")[0]
         sb.update("audio_assets", {"id": job.asset_id}, {"duration_ms": duration_ms})
         return analysis["id"]
