@@ -114,3 +114,16 @@ export async function getMoreByArtist(artistCredit: string, excludeId: string, l
     .order('popularity', { ascending: false }).limit(limit);
   return withArtwork((data ?? []) as unknown as Row[]);
 }
+
+/** Full-length songs in a genre (open sources), newest first. */
+export async function getGenreTracks(slug: string, limit = 60): Promise<TrackItem[]> {
+  const sb = supabasePublic();
+  const { data } = await sb.rpc('genre_tracks', { p_genre: slug, p_limit: limit });
+  return tracksByIds((data ?? []).map((r: { track_id: string }) => r.track_id));
+}
+
+export async function getGenreCounts(): Promise<{ genre: string; songs: number }[]> {
+  const sb = supabasePublic();
+  const { data } = await sb.rpc('genre_counts');
+  return (data ?? []) as { genre: string; songs: number }[];
+}

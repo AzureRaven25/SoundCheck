@@ -6,7 +6,7 @@ test('home: actions, genres and shelves', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Find the song.');
   await expect(page.getByRole('link', { name: /Start a party/ })).toHaveAttribute('href', '/sing');
-  await expect(page.getByRole('navigation', { name: 'Genres' }).getByRole('link', { name: 'Jazz' })).toHaveAttribute('href', '/search?q=jazz');
+  await expect(page.getByRole('navigation', { name: 'Genres' }).getByRole('link', { name: 'Jazz' })).toHaveAttribute('href', '/genre/jazz');
   await expect(page.getByRole('heading', { name: 'Karaoke classics' })).toBeVisible();
 });
 
@@ -74,4 +74,14 @@ test('covers load straight from their hosts (no image optimizer)', async ({ page
     (imgs as HTMLImageElement[]).filter((i) => i.complete && i.naturalWidth > 0).length), { timeout: 30_000 }).toBeGreaterThan(5);
   const srcs = await page.locator('main img').evaluateAll((imgs) => (imgs as HTMLImageElement[]).map((i) => i.src));
   expect(srcs.some((s) => s.includes('/_next/image'))).toBe(false);
+});
+
+test('genres: index with counts, genre page lists full songs', async ({ page }) => {
+  await page.goto('/genre');
+  await expect(page.getByRole('heading', { name: 'Browse by genre' })).toBeVisible();
+  const first = page.getByRole('main').getByRole('list').getByRole('link').first();
+  await expect(first).toContainText(/\d+ songs/);
+  await first.click();
+  await expect(page).toHaveURL(/\/genre\/[a-z-]+$/);
+  await expect(page.getByText(/Full songs, free to play: \d+/)).toBeVisible();
 });

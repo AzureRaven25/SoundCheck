@@ -109,7 +109,7 @@ async function importOne(provider: AcqProvider, externalId: string, userId: stri
     }
     const { error: te } = await db.from('tracks').upsert({
       id: trackId, title: c.title.slice(0, 500), artist_credit: c.artist.slice(0, 500), album_id: albumId,
-      duration_ms: c.duration_ms, release_year: c.year, isrcs: c.isrc ? [c.isrc] : [], created_by: userId,
+      duration_ms: c.duration_ms, release_year: c.year, isrcs: c.isrc ? [c.isrc] : [], created_by: userId, genres: c.genres ?? [],
     }, { ignoreDuplicates: true });
     if (te) throw te;
     created = true;

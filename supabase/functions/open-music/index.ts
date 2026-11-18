@@ -10,6 +10,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import { adminClient, cors, json, USER_AGENT } from '../_shared/runtime.ts';
 import { licenseAllowsKaraoke, pickCover, pickTracks, stableUuid, type IaFile } from '../_shared/openmusic.ts';
+import { toGenres } from '../_shared/genres.ts';
 
 const IA = 'https://archive.org';
 const ID_RE = /^[A-Za-z0-9._-]{1,100}$/;
@@ -54,6 +55,7 @@ async function album(identifier: string) {
   if (!files.length) throw new Error('no playable audio in this item');
   const karaokeOk = licenseAllowsKaraoke(license);
   const page = `${IA}/details/${identifier}`;
+  const genres = toGenres(m.subject, m.genre, title);
 
   const db = adminClient();
   const albumId = await stableUuid(identifier);
@@ -76,7 +78,7 @@ async function album(identifier: string) {
   }
   const { error: te } = await db.from('tracks').upsert(tracks.map((t) => ({
     id: t.id, title: t.title.slice(0, 500), artist_credit: creator, album_id: albumId, duration_ms: t.durationMs,
-    release_year: year >= 1800 && year <= 2200 ? year : null,
+    release_year: year >= 1800 && year <= 2200 ? year : null, genres,
   })), { ignoreDuplicates: true });
   if (te) throw te;
   const { error: se } = await db.from('track_sources').upsert(tracks.map((t) => ({

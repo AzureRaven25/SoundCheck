@@ -4,21 +4,11 @@ import { Shelf, TrackCard } from '@/components/catalog/Cards';
 import { RecentlyPlayed } from '@/components/catalog/RecentlyPlayed';
 import { ForYou } from '@/components/catalog/ForYou';
 import { getFullLengthTracks, getPopularTracks, getReadyToSing } from '@/lib/catalog';
+import { GENRE_INFO } from '@/lib/genres';
 
 export const revalidate = 300; // shelves refresh every 5 minutes; the page itself is served from cache
 
-const GENRES = [
-  { q: 'pop', label: 'Pop', from: '#ff3d9a', to: '#8b5cff' },
-  { q: 'rock', label: 'Rock', from: '#ff5e5e', to: '#ff8a3d' },
-  { q: 'acoustic', label: 'Acoustic', from: '#3ddc97', to: '#38e1ff' },
-  { q: 'jazz', label: 'Jazz', from: '#ffc94d', to: '#ff8a3d' },
-  { q: 'hip hop', label: 'Hip-hop', from: '#8b5cff', to: '#3d7bff' },
-  { q: 'soul', label: 'Soul & R&B', from: '#ff8a3d', to: '#ff3d9a' },
-  { q: 'electronic', label: 'Electronic', from: '#38e1ff', to: '#8b5cff' },
-  { q: 'country', label: 'Country', from: '#ffc94d', to: '#3ddc97' },
-  { q: 'classical', label: 'Classical', from: '#a7a2bd', to: '#3d7bff' },
-  { q: 'ballad', label: 'Ballads', from: '#ff6bb3', to: '#ffc94d' },
-];
+const GENRES = ['pop', 'rock', 'hip-hop', 'electronic', 'acoustic', 'jazz', 'soul', 'folk', 'ambient', 'world', 'classical', 'latin'];
 
 const ACTIONS = [
   { href: '/sing', icon: PartyPopper, title: 'Start a party', text: 'TV on the big screen, phones as mics' },
@@ -71,13 +61,17 @@ export default async function HomePage() {
       </section>
 
       <nav aria-label="Genres" className="scrollbar-thin -mx-1 mb-8 flex gap-2 overflow-x-auto px-1 pb-1">
-        {GENRES.map((g) => (
-          <Link key={g.q} href={`/search?q=${encodeURIComponent(g.q)}`}
-            className="shrink-0 rounded-full px-4 py-2 text-sm font-bold text-white shadow-lift transition hover:scale-105"
-            style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}>
-            {g.label}
-          </Link>
-        ))}
+        {GENRES.map((slug) => {
+          const g = GENRE_INFO[slug]!;
+          return (
+            <Link key={slug} href={`/genre/${slug}`}
+              className="shrink-0 rounded-full px-4 py-2 text-sm font-bold text-white shadow-lift transition hover:scale-105"
+              style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}>
+              {g.label}
+            </Link>
+          );
+        })}
+        <Link href="/genre" className="shrink-0 rounded-full bg-ink-800 px-4 py-2 text-sm font-bold text-ink-50 hover:bg-ink-700">All genres</Link>
       </nav>
 
       <RecentlyPlayed />

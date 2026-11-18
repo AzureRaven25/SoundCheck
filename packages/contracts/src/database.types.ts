@@ -1178,6 +1178,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           duration_ms: number | null
+          genres: string[]
           id: string
           isrcs: string[]
           mbid: string | null
@@ -1195,6 +1196,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           duration_ms?: number | null
+          genres?: string[]
           id?: string
           isrcs?: string[]
           mbid?: string | null
@@ -1212,6 +1214,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           duration_ms?: number | null
+          genres?: string[]
           id?: string
           isrcs?: string[]
           mbid?: string | null
@@ -1357,6 +1360,19 @@ export type Database = {
           p_track_id: string
         }
         Returns: string
+      }
+      genre_counts: {
+        Args: never
+        Returns: {
+          genre: string
+          songs: number
+        }[]
+      }
+      genre_tracks: {
+        Args: { p_genre: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          track_id: string
+        }[]
       }
       global_leaderboard: {
         Args: { p_limit?: number; p_scope?: string }

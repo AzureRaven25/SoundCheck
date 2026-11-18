@@ -9,6 +9,7 @@
  * adapters here, by design (research.md §8.3).
  */
 import { licenseAllowsKaraoke } from './openmusic.ts';
+import { toGenres } from './genres.ts';
 
 export type AcqProvider = 'audius' | 'ccmixter' | 'jamendo' | 'openverse' | 'deezer';
 export type Availability = 'full' | 'preview' | 'metadata';
@@ -34,6 +35,8 @@ export interface Candidate {
   format: string | null;
   bitrate_kbps: number | null;
   attribution: string;
+  /** canonical genre slugs (genres.ts) */
+  genres: string[];
 }
 
 export interface Adapter {
@@ -98,7 +101,7 @@ export function audiusToCandidate(t: AudiusTrack): Candidate | null {
     page_url: t.permalink ? `https://audius.co${t.permalink}` : null,
     stream_url: `${AUDIUS}/tracks/${encodeURIComponent(t.id)}/stream?app_name=${AUDIUS_APP}`,
     availability: 'full', license_url: license, karaoke_ok: licenseAllowsKaraoke(license),
-    format: 'mp3', bitrate_kbps: 320, attribution: `${t.user.name} on Audius`,
+    format: 'mp3', bitrate_kbps: 320, attribution: `${t.user.name} on Audius`, genres: toGenres(t.genre, (t as { mood?: string }).mood),
   };
 }
 const audius: Adapter = {
@@ -134,6 +137,7 @@ export function ccmixterToCandidate(u: CcUpload): Candidate | null {
     page_url: u.file_page_url ?? `https://ccmixter.org/files/${encodeURIComponent(u.user_name)}/${u.upload_id}`,
     stream_url: null, availability: 'metadata', license_url: license, karaoke_ok: false,
     format: f.file_format_info?.['default-ext'] ?? null, bitrate_kbps: null, attribution: `${artist} (ccMixter)`,
+    genres: toGenres((u as { upload_tags?: string }).upload_tags?.split(',') ?? []),
   };
 }
 const ccmixter: Adapter = {
@@ -164,7 +168,7 @@ export function jamendoToCandidate(t: JamTrack): Candidate | null {
     duration_ms: t.duration ? t.duration * 1000 : null, year: year >= 1800 && year <= 2200 ? year : null, artwork: t.image || null,
     isrc: null, page_url: t.shareurl ?? `https://www.jamendo.com/track/${t.id}`, stream_url: t.audio, availability: 'full',
     license_url: license, karaoke_ok: !!t.audiodownload_allowed && licenseAllowsKaraoke(license),
-    format: 'mp3', bitrate_kbps: 96, attribution: `${t.artist_name} (Jamendo)`,
+    format: 'mp3', bitrate_kbps: 96, attribution: `${t.artist_name} (Jamendo)`, genres: [],
   };
 }
 const jamendoKey = () => Deno.env.get('JAMENDO_CLIENT_ID') ?? '';
@@ -209,7 +213,7 @@ export function openverseToCandidate(a: OvAudio): Candidate | null {
     artwork: wiki ? null : a.thumbnail ?? null, isrc: null, page_url: a.foreign_landing_url ?? null,
     stream_url: wiki ? commonsMp3(a.url) : a.url, availability: 'full', license_url: license,
     karaoke_ok: licenseAllowsKaraoke(license), format: wiki ? 'mp3' : 'mp3', bitrate_kbps: a.bit_rate ? Math.round(a.bit_rate / 1000) : null,
-    attribution: `${artist} (${wiki ? 'Wikimedia Commons' : 'Jamendo'}, via Openverse)`,
+    attribution: `${artist} (${wiki ? 'Wikimedia Commons' : 'Jamendo'}, via Openverse)`, genres: toGenres(a.genres ?? []),
   };
 }
 const OV = 'https://api.openverse.org/v1/audio';
@@ -237,7 +241,7 @@ export function deezerToCandidate(t: DzTrack): Candidate {
     duration_ms: t.duration ? t.duration * 1000 : null, year: year >= 1800 && year <= 2200 ? year : null,
     artwork: t.album?.cover_xl ?? null, isrc: t.isrc ?? null, page_url: t.link ?? `https://www.deezer.com/track/${t.id}`,
     stream_url: null, availability: 'metadata', license_url: null, karaoke_ok: false, format: null, bitrate_kbps: null,
-    attribution: 'Metadata from Deezer',
+    attribution: 'Metadata from Deezer', genres: [],
   };
 }
 const deezer: Adapter = {
