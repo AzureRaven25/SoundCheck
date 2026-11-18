@@ -156,3 +156,18 @@ the listed length; previews and metadata never count.
   3 files in parallel, pause/resume and "retry failed" (all steps idempotent), optional karaoke for every file.
 - The worker downloads open originals only from an allow-list (archive.org, api.audius.co → Audius content
   nodes on public hosts, storage.jamendo.com, upload.wikimedia.org).
+
+### 8.4 Catalog growth (cloud, 2026-11-17)
+
+Seeded with `scripts/seed_open_catalog.py` (45 genre/mood queries) and verified by decoding random samples
+(12/12 Openverse + Audius, 5/5 Internet Archive complete at their listed length):
+
+| Source | Full-length songs in the catalog before → after |
+|---|---|
+| Openverse (Jamendo + Wikimedia Commons) | 0 → 793 |
+| Audius | 0 → 1,008 |
+| Internet Archive | 0 → 4,305 |
+
+Any search also finds more on demand ("Full songs from open sources"), and played results join the catalog.
+Caveat: Internet Archive and Audius licenses are declared by the uploader; both sites handle takedowns, and
+SoundCheck shows the declared license and source next to every song.

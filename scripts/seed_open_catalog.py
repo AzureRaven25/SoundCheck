@@ -32,6 +32,33 @@ def call(url: str, key: str, body: dict, timeout: int = 120) -> dict:
         return json.load(r)
 
 
+def call_fn(url: str, key: str, fn: str, body: dict, timeout: int = 180) -> dict:
+    req = urllib.request.Request(f"{url}/functions/v1/{fn}", data=json.dumps(body).encode(),
+                                 headers={"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def seed_internet_archive(url: str, key: str, queries: list[str], per: int) -> int:
+    """Internet Archive albums (open-music function): each import adds every track of the album."""
+    added = 0
+    for q in queries:
+        try:
+            albums = call_fn(url, key, "open-music", {"action": "search", "q": q, "limit": per})["albums"]
+        except Exception as e:  # noqa: BLE001
+            print(f"IA {q!r}: search failed: {e}")
+            continue
+        n = 0
+        for a in albums:
+            try:
+                n += len(call_fn(url, key, "open-music", {"action": "album", "identifier": a["identifier"]})["tracks"])
+            except Exception as e:  # noqa: BLE001
+                print(f"  IA {a['identifier']}: {e}")
+        added += n
+        print(f"IA {q!r}: {len(albums)} albums, {n} tracks", flush=True)
+    return added
+
+
 def rest_count(url: str, key: str, provider: str) -> int:
     req = urllib.request.Request(
         f"{url}/rest/v1/track_sources?select=id&provider=eq.{provider}&stream_url=not.is.null",
@@ -45,6 +72,7 @@ def main() -> int:
     ap.add_argument("--providers", default="openverse,audius")
     ap.add_argument("--per", type=int, default=20, help="results per provider per query (max 25)")
     ap.add_argument("--queries", type=int, default=len(QUERIES))
+    ap.add_argument("--ia-albums", type=int, default=0, help="also import this many Internet Archive albums per query")
     a = ap.parse_args()
     url, key = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_KEY"]
     providers = a.providers.split(",")
@@ -67,6 +95,10 @@ def main() -> int:
                 stats[f"{it['provider']} failed"] += 1
         print(f"{q!r}: {len(full)} new full-length results" + (f" (unavailable: {[s['id'] for s in bad]})" if bad else ""), flush=True)
         time.sleep(1.5)  # be gentle with Openverse's anonymous limits
+    if a.ia_albums:
+        ia_before = rest_count(url, key, "internet_archive")
+        seed_internet_archive(url, key, QUERIES[: a.queries], a.ia_albums)
+        print(f"internet_archive full-length sources in catalog: {ia_before} → {rest_count(url, key, 'internet_archive')}")
     after = {p: rest_count(url, key, p) for p in providers}
     print("\nimport results:", dict(stats))
     for p in providers:

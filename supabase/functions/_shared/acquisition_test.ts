@@ -1,6 +1,6 @@
 import { assert, assertEquals } from 'jsr:@std/assert@1';
 import {
-  audiusLicenseUrl, audiusToCandidate, ccmixterToCandidate, clockToMs, commonsMp3, deezerToCandidate, jamendoToCandidate,
+  audiusLicenseUrl, unescapeHtml, audiusToCandidate, ccmixterToCandidate, clockToMs, commonsMp3, deezerToCandidate, jamendoToCandidate,
   openverseToCandidate,
 } from './acquisition.ts';
 
@@ -73,4 +73,10 @@ Deno.test('Deezer is metadata only', () => {
   assertEquals(d.stream_url, null);
   assertEquals(d.isrc, 'USAT21205862');
   assertEquals(d.year, 1961);
+});
+
+Deno.test('HTML entities in titles are decoded', () => {
+  assertEquals(unescapeHtml('Pop &amp; Deep House'), 'Pop & Deep House');
+  assertEquals(unescapeHtml('Don&#39;t &quot;Stop&quot; &#233;'), 'Don\'t "Stop" é');
+  assertEquals(unescapeHtml('AT&T'), 'AT&T');
 });

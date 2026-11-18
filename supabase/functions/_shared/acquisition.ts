@@ -52,6 +52,12 @@ async function getJson(url: string): Promise<unknown> {
   return r.json();
 }
 
+/** Openverse and others return HTML-escaped titles ("Pop &amp; Deep House"). */
+export function unescapeHtml(s: string): string {
+  return s.replace(/&(amp|lt|gt|quot|apos|#39|#x27|#(\d{1,6}));/g, (m, name: string, num?: string) =>
+    num ? String.fromCodePoint(Number(num)) : ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", '#x27': "'" } as Record<string, string>)[name] ?? m);
+}
+
 /** "4:54" / "1:02:03" → ms */
 export function clockToMs(v: string | null | undefined): number | null {
   if (!v || !/^\d+(:\d{1,2}){1,2}$/.test(v)) return null;
@@ -196,8 +202,8 @@ export function openverseToCandidate(a: OvAudio): Candidate | null {
   if (a.duration != null && a.duration < 45_000) return null; // clips, pronunciations, jingles: not songs
   const license = (a.license_url ?? '').replace(/^http:/, 'https:') || null;
   const wiki = a.source === 'wikimedia_audio';
-  const title = (a.title ?? 'Untitled').replace(/\.(ogg|oga|ogx|flac|wav|mp3|opus)$/i, '').replace(/_/g, ' ');
-  const artist = a.creator?.trim() || 'Unknown artist';
+  const title = unescapeHtml(a.title ?? 'Untitled').replace(/\.(ogg|oga|ogx|flac|wav|mp3|opus)$/i, '').replace(/_/g, ' ');
+  const artist = unescapeHtml(a.creator?.trim() || 'Unknown artist');
   return {
     provider: 'openverse', external_id: a.id, title, artist, album: null, duration_ms: a.duration ?? null, year: null,
     artwork: wiki ? null : a.thumbnail ?? null, isrc: null, page_url: a.foreign_landing_url ?? null,
