@@ -4,6 +4,7 @@ import { loadYouTubeApi, type YTPlayer } from './youtube';
 import { resolveAudio } from '@/lib/audio';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { usePlayer, useCurrentTrack } from './store';
+import { suggestAfter } from './autoplay';
 
 /**
  * Owns the single <audio> element: loads the current track's best source, mirrors play/pause/seek/
@@ -25,6 +26,18 @@ export function PlayerHost() {
   const [ytId, setYtId] = useState<string | null>(null);
   const yt = useRef<YTPlayer | null>(null);
   const ytHost = useRef<HTMLDivElement | null>(null);
+
+  // A song finished: at the end of the queue (repeat off) top it up with similar songs first, if autoplay is on.
+  const endOfSong = async () => {
+    const s = usePlayer.getState();
+    const q = s.queue;
+    const cur = q.pos >= 0 ? q.items[q.order[q.pos]!] : undefined;
+    if (s.autoplay && cur && q.repeat === 'off' && q.pos + 1 >= q.order.length) {
+      const more = await suggestAfter(cur, q.items.map((i) => i.id)).catch(() => []);
+      for (const t of more) usePlayer.getState().addToQueue(t);
+    }
+    usePlayer.getState().nextTrack(true);
+  };
 
   // Flush listening history for the song that's ending.
   const flushHistory = () => {
@@ -110,7 +123,7 @@ export function PlayerHost() {
             report({ load: 'ready' });
           },
           onStateChange: (e: { data: number }) => {
-            if (e.data === window.YT!.PlayerState.ENDED) usePlayer.getState().nextTrack(true);
+            if (e.data === window.YT!.PlayerState.ENDED) void endOfSong();
             if (e.data === window.YT!.PlayerState.PLAYING) report({ load: 'ready', playing: true });
           },
         },
@@ -208,7 +221,7 @@ export function PlayerHost() {
         report({ position: t });
       }}
       onDurationChange={(e) => isFinite(e.currentTarget.duration) && report({ duration: e.currentTarget.duration })}
-      onEnded={() => usePlayer.getState().nextTrack(true)}
+      onEnded={() => void endOfSong()}
       onError={() => !yt.current && usePlayer.getState().load !== 'idle' && report({ load: 'error', playing: false })}
     />
     </>

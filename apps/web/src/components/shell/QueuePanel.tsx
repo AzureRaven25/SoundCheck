@@ -10,6 +10,8 @@ export function QueuePanel() {
   const jump = usePlayer((s) => s.jump);
   const remove = usePlayer((s) => s.remove);
   const toggle = usePlayer((s) => s.toggleQueue);
+  const autoplay = usePlayer((s) => s.autoplay);
+  const setAutoplay = usePlayer((s) => s.setAutoplay);
   const current = useCurrentTrack();
   if (!open) return null;
   const upcoming = upNext(queue);
@@ -22,6 +24,13 @@ export function QueuePanel() {
           <X size={18} />
         </button>
       </div>
+      <label className="mb-5 flex items-center justify-between gap-3 rounded-lg bg-ink-850 px-3 py-2 text-sm">
+        <span>
+          <span className="block font-bold">Autoplay</span>
+          <span className="block text-xs text-ink-500">Keep going with similar songs when the queue ends</span>
+        </span>
+        <input type="checkbox" role="switch" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} className="size-4 accent-pink-500" />
+      </label>
       <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-ink-500">Now playing</h3>
       {current ? (
         <div className="mb-6 flex items-center gap-3">

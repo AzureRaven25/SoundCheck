@@ -39,6 +39,9 @@ interface PlayerStore {
   seek: (to: number) => void;
   setVolume: (v: number) => void;
   toggleMute: () => void;
+  /** keep playing similar songs when the queue runs out */
+  autoplay: boolean;
+  setAutoplay: (on: boolean) => void;
   toggleQueue: () => void;
   retry: () => void;
   _report: (p: Partial<Pick<PlayerStore, 'position' | 'duration' | 'load' | 'sourceKind' | 'attributionUrl' | 'sourceLabel' | 'playing'>>) => void;
@@ -46,6 +49,8 @@ interface PlayerStore {
 
 export const usePlayer = create<PlayerStore>((set) => ({
   queue: emptyQueue,
+  autoplay: true,
+  setAutoplay: (on) => set({ autoplay: on }),
   playing: false,
   load: 'idle',
   position: 0,

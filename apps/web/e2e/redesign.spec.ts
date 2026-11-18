@@ -48,3 +48,20 @@ test('keyboard: space toggles playback, not while typing', async ({ page }) => {
   await page.keyboard.press('Space');
   await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible(); // typing a space didn't play
 });
+
+test('autoplay continues with similar songs when the queue ends', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/search?q=love');
+  const row = page.getByTestId('source-results').locator('li').filter({ hasText: ' · Openverse' }).first();
+  await expect(row).toBeVisible({ timeout: 45_000 });
+  await row.getByRole('button', { name: /^Play / }).click();
+  const audio = page.getByTestId('player-audio');
+  await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.duration), { timeout: 30_000 }).toBeGreaterThan(60);
+  const player = page.getByRole('contentinfo', { name: 'Player' });
+  const first = await player.getByRole('link').first().textContent();
+  await audio.evaluate((a: HTMLAudioElement) => { a.currentTime = a.duration - 1.5; });
+  await expect(player.getByRole('link').first()).not.toHaveText(first!, { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Queue' }).click();
+  await expect(page.getByRole('switch')).toBeChecked();
+  await expect(page.getByRole('complementary', { name: 'Queue' }).getByRole('button', { name: /^Play / }).first()).toBeVisible();
+});
