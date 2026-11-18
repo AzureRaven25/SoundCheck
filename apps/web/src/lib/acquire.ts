@@ -23,9 +23,11 @@ export interface SourceCandidate {
 }
 export interface SourceStatus { id: string; label: string; ok: boolean; count: number; missing: string[]; error?: string }
 
-export async function searchSources(q: string, limit = 8): Promise<{ results: SourceCandidate[]; sources: SourceStatus[] }> {
+export const SEARCH_PROVIDERS = ['audius', 'openverse', 'jamendo', 'ccmixter', 'deezer'];
+
+export async function searchSources(q: string, limit = 8, providers?: string[]): Promise<{ results: SourceCandidate[]; sources: SourceStatus[] }> {
   const { data, error } = await supabaseBrowser().functions.invoke<{ results: SourceCandidate[]; sources: SourceStatus[] }>('acquire', {
-    body: { action: 'search', q, limit },
+    body: { action: 'search', q, limit, ...(providers ? { providers } : {}) },
   });
   if (error) throw error;
   return { results: data?.results ?? [], sources: data?.sources ?? [] };

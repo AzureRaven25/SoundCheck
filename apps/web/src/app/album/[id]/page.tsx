@@ -6,6 +6,11 @@ import { TrackList } from '@/components/catalog/TrackList';
 import { getAlbum } from '@/lib/catalog';
 import { plural } from '@/lib/format';
 
+/** Public catalog page: cached and refreshed hourly (user-specific parts load in the browser). */
+export const revalidate = 3600;
+/** No pages at build time; each one is rendered on first visit and then served from cache. */
+export async function generateStaticParams() { return []; }
+
 const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s);
 const TYPES: Record<string, string> = { album: 'Album', single: 'Single', ep: 'EP', other: 'Release' };
 

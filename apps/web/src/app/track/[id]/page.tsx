@@ -10,6 +10,11 @@ import { ListenElsewhere } from '@/components/catalog/ListenElsewhere';
 import { getTrack } from '@/lib/catalog';
 import { formatDuration } from '@/lib/format';
 
+/** Public catalog page: cached and refreshed hourly (user-specific parts load in the browser). */
+export const revalidate = 3600;
+/** No pages at build time; each one is rendered on first visit and then served from cache. */
+export async function generateStaticParams() { return []; }
+
 const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s);
 
 export async function generateMetadata({ params }: PageProps<'/track/[id]'>): Promise<Metadata> {

@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { Clock3, Heart, ListEnd, ListPlus, ListStart, MoreHorizontal, Pause, Play } from 'lucide-react';
+import { Clock3, Heart, ListEnd, ListPlus, ListStart, Mic2, MoreHorizontal, Pause, Play } from 'lucide-react';
+import { trackAvailability, type Availability } from '@/lib/acquire';
 import { Artwork } from '@/components/ui/Artwork';
 import { formatDuration } from '@/lib/format';
 import { useLibrary } from '@/lib/hooks/useLibrary';
@@ -21,6 +22,18 @@ function ArtistLinks({ t }: { t: TrackItem }) {
       ))}
     </>
   );
+}
+
+/** Tiny tag after a title: "Sing" when a karaoke version is ready, "Full" when the whole song plays here. */
+function AvailabilityTag({ a }: { a: Availability | undefined }) {
+  if (!a) return null;
+  if (a.karaoke_ready) {
+    return <span className="stage-gradient inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-px text-[10px] font-bold uppercase text-white" title="Karaoke version ready"><Mic2 size={10} aria-hidden />Sing</span>;
+  }
+  if (a.full_sources.length) {
+    return <span className="inline-flex shrink-0 rounded border border-ink-500 px-1 py-px text-[10px] font-bold uppercase text-ink-300" title="Plays in full">Full</span>;
+  }
+  return null;
 }
 
 function RowMenu({ t, onClose }: { t: TrackItem; onClose: () => void }) {
@@ -65,6 +78,13 @@ export function TrackList({
   const current = useCurrentTrack();
   const { userId, favorites, toggleFavorite } = useLibrary();
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  const [avail, setAvail] = useState<Map<string, Availability>>(new Map());
+  const idKey = tracks.map((t) => t.id).join(',');
+  useEffect(() => {
+    let live = true;
+    void trackAvailability(idKey ? idKey.split(',') : []).then((m) => { if (live) setAvail(m); }).catch(() => {});
+    return () => { live = false; };
+  }, [idKey]);
 
   if (!tracks.length) return null;
   return (
@@ -101,12 +121,15 @@ export function TrackList({
             </div>
             <div role="cell" className="flex min-w-0 items-center gap-3">
               {showArtwork && (
-                <div className="w-10 shrink-0"><Artwork src={t.artwork_url} albumId={t.album_id} title={t.album_title ?? t.title} resolve={false} /></div>
+                <div className="w-10 shrink-0"><Artwork src={t.artwork_url} albumId={t.album_id} title={t.album_title ?? t.title} sizes="40px" /></div>
               )}
               <div className="min-w-0">
-                <Link href={`/track/${t.id}`} className={clsx('block truncate font-medium hover:underline', isCurrent ? 'text-pink-400' : 'text-ink-50')}>
-                  {t.title}
-                </Link>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Link href={`/track/${t.id}`} className={clsx('truncate font-medium hover:underline', isCurrent ? 'text-pink-400' : 'text-ink-50')}>
+                    {t.title}
+                  </Link>
+                  <AvailabilityTag a={avail.get(t.id)} />
+                </div>
                 <p className="truncate text-ink-300"><ArtistLinks t={t} /></p>
               </div>
             </div>

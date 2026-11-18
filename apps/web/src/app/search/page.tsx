@@ -1,7 +1,7 @@
 'use client';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { EntityCard } from '@/components/catalog/Cards';
+import { EntityCard, Shelf } from '@/components/catalog/Cards';
 import { TrackList } from '@/components/catalog/TrackList';
 import { OpenMusicResults } from '@/components/catalog/OpenMusicResults';
 import { MoreSources } from '@/components/catalog/MoreSources';
@@ -77,16 +77,6 @@ function Results() {
       {state === 'done' && !tracks.length && !artists.length && (
         <p className="text-ink-300">No results for “{q}”. Check the spelling or try fewer words.</p>
       )}
-      {artists.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-4 font-display text-2xl font-bold">Artists</h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {artists.map((a) => (
-              <EntityCard key={a.id} href={`/artist/${a.id}`} artistId={a.id} title={a.name} subtitle={a.disambiguation ?? 'Artist'} round />
-            ))}
-          </div>
-        </section>
-      )}
       {tracks.length > 0 && (
         <section>
           <h2 className="mb-4 font-display text-2xl font-bold">Songs</h2>
@@ -95,6 +85,15 @@ function Results() {
             <p className="mt-4 text-xs text-ink-500">Some results were added from the extended catalog just now.</p>
           )}
         </section>
+      )}
+      {artists.length > 0 && (
+        <div className="mt-8">
+          <Shelf title="Artists">
+            {artists.map((a) => (
+              <EntityCard key={a.id} href={`/artist/${a.id}`} artistId={a.id} title={a.name} subtitle={a.disambiguation ?? 'Artist'} round />
+            ))}
+          </Shelf>
+        </div>
       )}
       {q && <ServerResults q={q} />}
       {q && <MoreSources key={q} q={q} />}

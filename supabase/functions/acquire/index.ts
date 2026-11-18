@@ -34,6 +34,11 @@ function isProvider(p: unknown): p is AcqProvider {
   return typeof p === 'string' && p in ADAPTERS;
 }
 
+const PROVIDER_TIMEOUT_MS = 8000;
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timed out')), ms))]);
+}
+
 async function search(q: string, providers: AcqProvider[], limit: number) {
   const db = adminClient();
   const statuses: { id: string; label: string; ok: boolean; count: number; missing: string[]; error?: string }[] = [];
@@ -42,8 +47,21 @@ async function search(q: string, providers: AcqProvider[], limit: number) {
     const a = ADAPTERS[id];
     const missing = a.missing();
     if (missing.length) return statuses.push({ id, label: a.label, ok: false, count: 0, missing, error: 'not configured' });
+    // whole result lists are cached per query for 6 h (Openverse alone takes 4–8 s)
+    const ck = `search:${id}:${limit}:${q.toLowerCase()}`;
     try {
-      const found = await a.search(q, limit);
+      const hit = await cacheGet('acquire', ck).catch(() => null);
+      const found = hit?.status === 'hit' ? hit.value as Candidate[] : await withTimeout(a.search(q, limit), PROVIDER_TIMEOUT_MS);
+      if (hit?.status !== 'hit') {
+        await Promise.all([
+          cachePut('acquire', ck, 'hit', found, 6 * 3600).catch(() => {}),
+          // each result individually too, so importing one never asks the provider again
+          db.rpc('provider_cache_put_many', {
+            p_provider: 'acquire', p_ttl_seconds: DAY,
+            p_items: found.map((c) => ({ key: `${c.provider}:${c.external_id}`, value: c })),
+          }).then(() => {}, () => {}),
+        ]);
+      }
       results.push(...found);
       statuses.push({ id, label: a.label, ok: true, count: found.length, missing: [] });
     } catch (e) {
@@ -58,8 +76,6 @@ async function search(q: string, providers: AcqProvider[], limit: number) {
     const map = new Map((data ?? []).map((r) => [r.external_id, r.track_id]));
     for (const r of results) if (r.provider === id) r.track_id = map.get(r.external_id) ?? null;
   }
-  // remember results for a day: importing one later doesn't need another provider request
-  await Promise.all(results.map((r) => cachePut('acquire', `${r.provider}:${r.external_id}`, 'hit', r, DAY).catch(() => {})));
   // full-length first, then karaoke-ready, then provider order
   const order = (c: Candidate) => (c.availability === 'full' ? 0 : c.availability === 'preview' ? 1 : 2) * 2 + (c.karaoke_ok ? 0 : 1);
   results.sort((a, b) => order(a) - order(b));

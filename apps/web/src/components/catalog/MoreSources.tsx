@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2, Mic2, Play } from 'lucide-react';
 import { licenseLabel } from '@soundcheck/contracts';
-import { importCandidate, PROVIDER_LABEL, searchSources, type SourceCandidate, type SourceStatus } from '@/lib/acquire';
+import { importCandidate, PROVIDER_LABEL, SEARCH_PROVIDERS, searchSources, type SourceCandidate, type SourceStatus } from '@/lib/acquire';
 import { formatDuration } from '@/lib/format';
 import { usePlayer } from '@/player/store';
 
@@ -29,9 +29,21 @@ export function MoreSources({ q }: { q: string }) {
 
   useEffect(() => {
     let live = true; // the parent keys this component by query, so state starts fresh per search
-    void searchSources(q, 8)
-      .then((r) => { if (live) { setResults(r.results); setSources(r.sources); } })
-      .catch(() => { if (live) setResults([]); });
+    // one request per source, rendered as each arrives: fast sources (Audius ~0.4 s) don't wait for slow ones
+    const rank = (c: SourceCandidate) => (c.availability === 'full' ? 0 : c.availability === 'preview' ? 1 : 2) * 2 + (c.karaoke_ok ? 0 : 1);
+    for (const p of SEARCH_PROVIDERS) {
+      void searchSources(q, 8, [p])
+        .then((r) => {
+          if (!live) return;
+          setResults((prev) => [...(prev ?? []), ...r.results].sort((a, b) => rank(a) - rank(b)));
+          setSources((prev) => [...prev, ...r.sources].sort((a, b) => SEARCH_PROVIDERS.indexOf(a.id) - SEARCH_PROVIDERS.indexOf(b.id)));
+        })
+        .catch(() => {
+          if (!live) return;
+          setResults((prev) => prev ?? []);
+          setSources((prev) => [...prev, { id: p, label: p, ok: false, count: 0, missing: [], error: 'unavailable' }]);
+        });
+    }
     return () => { live = false; };
   }, [q]);
 
@@ -51,6 +63,7 @@ export function MoreSources({ q }: { q: string }) {
   }
 
   if (results === null) return <p className="mt-10 text-sm text-ink-500" aria-live="polite">Looking for full songs in open sources…</p>;
+  const pendingSources = SEARCH_PROVIDERS.length - sources.length;
   const full = results.filter((r) => r.availability === 'full');
   const info = results.filter((r) => r.availability !== 'full');
   if (!results.length && !sources.length) return null;
@@ -68,6 +81,7 @@ export function MoreSources({ q }: { q: string }) {
             {s.label}: {s.ok ? `${s.count}` : s.missing.length ? 'not set up' : 'unavailable'}
           </li>
         ))}
+        {pendingSources > 0 && <li className="rounded-full bg-ink-850 px-2.5 py-1 text-ink-500">searching {pendingSources} more…</li>}
       </ul>
       {full.length > 0 && (
         <ol className="divide-y divide-ink-800 rounded-xl bg-ink-900/60" data-testid="source-results">

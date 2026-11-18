@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 import { useUser } from '@/lib/hooks/useUser';
 import { PlayerHost } from '@/player/PlayerHost';
+import { MobileNav } from './MobileNav';
 import { PlayerBar } from './PlayerBar';
 import { QueuePanel } from './QueuePanel';
 import { Sidebar } from './Sidebar';
@@ -24,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="grid h-full grid-cols-[auto_1fr] grid-rows-[1fr_auto] gap-2 p-2">
+    <div className="grid h-full grid-cols-[auto_1fr] grid-rows-[1fr_auto] gap-2 p-2 max-md:gap-0 max-md:p-0 max-md:[&>div:nth-child(2)]:rounded-none">
       <Sidebar user={user ?? null} />
       <div className="relative flex min-w-0 overflow-hidden rounded-xl bg-ink-900">
         <main id="main" className="scrollbar-thin min-w-0 flex-1 overflow-y-auto">
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <div className="col-span-2">
         <PlayerBar signedIn={!!user} />
+        <MobileNav />
       </div>
       <PlayerHost />
     </div>

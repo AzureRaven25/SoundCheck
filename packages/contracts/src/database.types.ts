@@ -1469,9 +1469,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      provider_cache_put_many: {
+        Args: { p_items: Json; p_provider: string; p_ttl_seconds: number }
+        Returns: undefined
+      }
       provider_reserve_slot: {
         Args: { p_max_wait_ms?: number; p_provider: string }
         Returns: number
+      }
+      ready_to_sing: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          processed_at: string
+          track_id: string
+        }[]
       }
       request_processing: {
         Args: { p_asset_id: string }
