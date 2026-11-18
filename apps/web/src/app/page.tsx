@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Mic2, PartyPopper, Search, Upload } from 'lucide-react';
 import { Shelf, TrackCard } from '@/components/catalog/Cards';
 import { RecentlyPlayed } from '@/components/catalog/RecentlyPlayed';
+import { ForYou } from '@/components/catalog/ForYou';
 import { getFullLengthTracks, getPopularTracks, getReadyToSing } from '@/lib/catalog';
 
 export const revalidate = 300; // shelves refresh every 5 minutes; the page itself is served from cache
@@ -80,6 +81,7 @@ export default async function HomePage() {
       </nav>
 
       <RecentlyPlayed />
+      <ForYou />
 
       {ready.length > 0 && (
         <Shelf title="Ready to sing" subtitle="Karaoke versions anyone can sing right now">

@@ -1331,6 +1331,10 @@ export type Database = {
         Args: { p_artist: string; p_duration_ms: number; p_title: string }
         Returns: string
       }
+      admin_request_processing: {
+        Args: { p_asset_id: string }
+        Returns: string
+      }
       advance_queue: {
         Args: { p_session_id: string; p_skip?: boolean }
         Returns: {
@@ -1532,6 +1536,7 @@ export type Database = {
           track_id: string
         }[]
       }
+      shared_word_lyrics: { Args: { p_track_id: string }; Returns: Json }
       track_availability: {
         Args: { p_ids: string[] }
         Returns: {

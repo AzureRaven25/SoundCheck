@@ -99,3 +99,19 @@ M2 leftovers:
 - Apple Developer account, for physical Apple TV/iPhone testing.
 - Fire TV ADB debugging turned on, for physical Fire TV testing.
 - Auth providers (Sign in with Apple / Google): need OAuth client IDs from your Apple/Google developer accounts.
+
+## Acquisition, redesign and speed (2026-11-17)
+
+- **Acquisition layer** (research.md §8): Audius, Openverse (Jamendo + Wikimedia Commons), Internet Archive, Jamendo
+  (needs `JAMENDO_CLIENT_ID`), ccMixter (links), Deezer (metadata). Catalog: ~6,100+ full-length songs, seeded and
+  sample-verified by decoding. `/import` brings in folders, Bandcamp ZIPs, CD rips (AccurateRip) and playlists.
+- **Lyrics by ear**: songs without published lyrics get word-timed lyrics transcribed from the vocal stem (Whisper,
+  local). Shared karaoke versions of open-licensed songs are curated with `scripts/process_open_catalog.py`.
+- **Redesign**: new home (actions, genres, Ready to sing / Full songs / independent artists shelves), `/sing` hub,
+  scrolling shelves with Full/Sing badges, availability tags in every song list, Sing button on song pages,
+  "More by" shelves, phone tab bar, library "Your music".
+- **Speed**: cached (ISR) home/song/album/artist pages via a cookie-less catalog client; batched artwork reads;
+  open-source searches cached per query, rendered per source as they arrive, and only fired once typing settles.
+
+Next: genre data on tracks for real genre pages; more curated karaoke versions (storage permitting); native TV
+apps showing "Ready to sing"; recommendations from listening history.

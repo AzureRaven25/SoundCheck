@@ -38,16 +38,28 @@ function LyricsInner({ trackId }: { trackId: string }) {
 
   useEffect(() => {
     let live = true;
-    void supabaseBrowser().functions.invoke<LyricsResponse>('fetch-lyrics', { body: { track_id: trackId } })
-      .then(({ data: d, error }) => {
+    const sb = supabaseBrowser();
+    void sb.functions.invoke<LyricsResponse>('fetch-lyrics', { body: { track_id: trackId } })
+      .then(async ({ data: d, error }) => {
         if (!live) return;
-        if (error) setState('error');
+        if (!error && d?.lines?.length) { setData(d); setState('done'); return; }
+        // no published lyrics: use the words timed on a shared karaoke version (often transcribed from the vocals)
+        const { data: w } = await sb.rpc('shared_word_lyrics', { p_track_id: trackId });
+        const wl = w as { lines?: Line[]; source?: string } | null;
+        if (!live) return;
+        if (wl?.lines?.length) {
+          setData({ granularity: 'word', provider: wl.source?.startsWith('transcribed') ? 'transcribed' : 'aligned', lines: wl.lines });
+          setState('done');
+        } else if (error) setState('error');
         else { setData(d); setState('done'); }
       });
     return () => { live = false; };
   }, [trackId]);
 
-  const synced = !!data && data.granularity !== 'plain' && current?.id === trackId && sourceKind === 'original';
+  const sourceLabel = usePlayer((s) => s.sourceLabel);
+  // timing matches complete recordings (your copy or an open full-length file); YouTube videos often have intros
+  const synced = !!data && data.granularity !== 'plain' && current?.id === trackId
+    && (sourceKind === 'original' || (sourceKind === 'full' && sourceLabel !== 'YouTube'));
   const lines = useMemo(() => data?.lines ?? [], [data]);
   const idx = useMemo(() => (synced ? activeLine(lines, position) : -1), [synced, lines, position]);
 
@@ -79,7 +91,8 @@ function LyricsInner({ trackId }: { trackId: string }) {
         ))}
       </div>
       <p className="mt-4 text-xs text-ink-500">
-        Lyrics via {data?.provider === 'lrclib' ? <a className="underline" href="https://lrclib.net" target="_blank" rel="noreferrer">LRCLIB</a> : 'SoundCheck'}
+        {data?.provider === 'transcribed' ? 'Lyrics transcribed automatically from the vocals (may contain mistakes)'
+          : <>Lyrics via {data?.provider === 'lrclib' ? <a className="underline" href="https://lrclib.net" target="_blank" rel="noreferrer">LRCLIB</a> : 'SoundCheck'}</>}
         {data?.granularity === 'word' ? ' · word-synced' : data?.granularity === 'line' ? ' · line-synced' : ''}
         {data?.granularity !== 'plain' && sourceKind === 'preview' && current?.id === trackId ? ' · sync follows full-length playback only' : ''}
       </p>

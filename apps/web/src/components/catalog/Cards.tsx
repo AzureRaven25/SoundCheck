@@ -94,7 +94,7 @@ export function Shelf({ title, subtitle, href, layout = 'row', children }: {
   title: string; subtitle?: string; href?: string; layout?: 'row' | 'grid'; children: React.ReactNode;
 }) {
   return (
-    <section className="mb-9">
+    <section className="mb-9" aria-label={title}>
       <div className="mb-3 flex items-end justify-between gap-4 px-0.5">
         <div className="min-w-0">
           <h2 className="font-display text-xl font-bold tracking-tight md:text-2xl">{title}</h2>
