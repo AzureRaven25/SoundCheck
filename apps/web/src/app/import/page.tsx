@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, CircleAlert, Copy, FolderOpen, Loader2, Mic2, RotateCcw, Server, Upload } from 'lucide-react';
 import { SignInGate } from '@/components/social/SignInGate';
 import { SongListImport } from '@/components/catalog/SongListImport';
+import { QueueNotice } from '@/components/catalog/QueueNotice';
 import { loadServers, type ServerConfig } from '@/lib/personal/servers';
 import { expandZips, filesFromDrop, filesFromInput, planImport, planServerImport, runImport, type ImportItem, type InputFile, type PlaylistResult } from '@/lib/import/engine';
 
@@ -183,6 +184,7 @@ function Importer() {
             </p>
           </div>
 
+          {phase === 'finished' && items.some((i) => i.karaoke === 'queued') && <QueueNotice queuedOnly={false} />}
           {playlists.length > 0 && (
             <ul className="mt-3 space-y-1 text-sm">
               {playlists.map((p) => (

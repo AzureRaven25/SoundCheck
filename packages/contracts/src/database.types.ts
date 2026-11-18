@@ -1472,6 +1472,16 @@ export type Database = {
           tracks_sung: number
         }[]
       }
+      processing_status: {
+        Args: { p_job_id?: string }
+        Returns: {
+          ahead: number
+          online: boolean
+          queued: number
+          running: number
+          workers: number
+        }[]
+      }
       provider_cache_get: {
         Args: { p_key: string; p_provider: string }
         Returns: {
@@ -1598,6 +1608,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      worker_heartbeat: { Args: { p_worker: string }; Returns: undefined }
       worker_update_job: {
         Args: { p_job_id: string; p_progress: number; p_stage: string }
         Returns: undefined

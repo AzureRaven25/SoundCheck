@@ -7,6 +7,7 @@ import { useUser } from '@/lib/hooks/useUser';
 import { loadServers, searchAllServers, type ServerTrack } from '@/lib/personal/servers';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { FULL_SOURCE_ORDER, PROVIDER_LABEL } from '@/lib/acquire';
+import { QueueNotice } from './QueueNotice';
 
 const STAGES: Record<string, string> = {
   download: 'Fetching your upload', separate: 'Separating vocals from the band', melody: 'Mapping the melody',
@@ -17,7 +18,7 @@ type State =
   | { kind: 'loading' }
   | { kind: 'none' }
   | { kind: 'uploading'; pct: number }
-  | { kind: 'processing'; stage: string | null; progress: number }
+  | { kind: 'processing'; stage: string | null; progress: number; jobId?: string | null }
   | { kind: 'ready' }
   | { kind: 'failed'; error: string; assetId: string };
 
@@ -72,12 +73,12 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
     if (!asset) return setState({ kind: 'none' });
     const [{ data: analysis }, { data: job }] = await Promise.all([
       sb.from('karaoke_analysis').select('id').eq('source_asset_id', asset.id).maybeSingle(),
-      sb.from('processing_jobs').select('status, stage, progress, error').eq('asset_id', asset.id)
+      sb.from('processing_jobs').select('id, status, stage, progress, error').eq('asset_id', asset.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (analysis) return setState({ kind: 'ready' });
     if (job?.status === 'failed') return setState({ kind: 'failed', error: job.error ?? 'Processing failed', assetId: asset.id });
-    setState({ kind: 'processing', stage: job?.stage ?? null, progress: job?.progress ?? 0 });
+    setState({ kind: 'processing', stage: job?.stage ?? null, progress: job?.progress ?? 0, jobId: job?.id ?? null });
   }, [trackId, user]);
 
   useEffect(() => {
@@ -187,7 +188,8 @@ export function UploadYourCopy({ trackId, title }: { trackId: string; title: str
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
             <div className="stage-gradient h-full transition-all" style={{ width: `${Math.max(4, state.progress * 100)}%` }} />
           </div>
-          <p className="mt-2 text-xs text-ink-500">Usually 1–2 minutes. You can keep browsing.</p>
+          <p className="mt-2 text-xs text-ink-500">Usually 1–2 minutes once it starts. You can keep browsing.</p>
+          {!state.stage && <QueueNotice jobId={state.jobId} />}
         </div>
       )}
       {state.kind === 'ready' && (

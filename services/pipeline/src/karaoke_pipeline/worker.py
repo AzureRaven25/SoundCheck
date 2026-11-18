@@ -269,7 +269,14 @@ def run(once: bool = False, poll_seconds: float = 5.0, visibility: int = 1800, *
     worker = f"{socket.gethostname()}:{os.getpid()}"
     done = 0
     print(f"worker {worker} polling {url}", flush=True)
+    last_beat = 0.0
     while True:
+        if time.monotonic() - last_beat > 60:  # tell the site processing is available (shown to users waiting)
+            try:
+                sb.rpc("worker_heartbeat", {"p_worker": worker})
+            except Exception:  # noqa: BLE001  older databases without the function: keep working
+                pass
+            last_beat = time.monotonic()
         claimed = sb.rpc("worker_claim_jobs", {"p_worker": worker, "p_visibility_seconds": visibility, "p_qty": 1}) or []
         if not claimed:
             if once:
