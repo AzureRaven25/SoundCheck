@@ -61,4 +61,7 @@ test('sing on Stage and get a SoundCheck Score', async ({ page }) => {
   await expect(progress.getByText('1-day streak')).toBeVisible();
   await expect(progress.getByRole('list', { name: 'Challenges' }).getByRole('listitem')).toHaveCount(2);
   await expect(page.getByText('Opening Act')).toBeVisible();
+  // the score is on the song's leaderboard, marked as yours
+  await page.goto(`/track/${FIXTURE_TRACK}`);
+  await expect(page.getByRole('region', { name: 'Top singers' }).getByText('(you)')).toBeVisible({ timeout: 15_000 });
 });

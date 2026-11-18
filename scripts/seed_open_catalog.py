@@ -82,13 +82,14 @@ def main() -> int:
     ap.add_argument("--per", type=int, default=20, help="results per provider per query (max 25)")
     ap.add_argument("--queries", type=int, default=len(QUERIES))
     ap.add_argument("--more", action="store_true", help="use the second query list (moods, instruments, eras, languages)")
+    ap.add_argument("--terms", default="", help="comma-separated search terms to use instead of the built-in lists")
     ap.add_argument("--ia-albums", type=int, default=0, help="also import this many Internet Archive albums per query")
     a = ap.parse_args()
     url, key = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_KEY"]
     providers = a.providers.split(",")
     before = {p: rest_count(url, key, p) for p in providers}
     stats: collections.Counter[str] = collections.Counter()
-    queries = MORE_QUERIES if a.more else QUERIES[: a.queries]
+    queries = [t.strip() for t in a.terms.split(",") if t.strip()] if a.terms else MORE_QUERIES if a.more else QUERIES[: a.queries]
     for q in queries:
         try:
             res = call(url, key, {"action": "search", "q": q, "providers": providers, "limit": a.per})

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { PlayButton, Shelf, TrackCard } from '@/components/catalog/Cards';
 import { SingButton } from '@/components/catalog/SingButton';
+import { TrackLeaderboard } from '@/components/catalog/TrackLeaderboard';
 import { ArtistLine, DetailHeader, FavoriteButton } from '@/components/catalog/DetailHeader';
 import { Lyrics } from '@/components/catalog/Lyrics';
 import { UploadYourCopy } from '@/components/catalog/UploadYourCopy';
@@ -50,6 +51,7 @@ export default async function TrackPage({ params }: PageProps<'/track/[id]'>) {
       <SourceAvailability trackId={t.id} />
       <UploadYourCopy trackId={t.id} title={t.title} />
       <ListenElsewhere trackId={t.id} title={t.title} artist={t.artist_credit} isrcs={(t as { isrcs?: string[] }).isrcs ?? []} />
+      <TrackLeaderboard trackId={t.id} />
       <section aria-labelledby="lyrics-h" className="max-w-3xl">
         <h2 id="lyrics-h" className="mb-4 font-display text-2xl font-bold">Lyrics</h2>
         <Lyrics trackId={t.id} />
