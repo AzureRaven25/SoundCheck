@@ -116,9 +116,9 @@ export async function getMoreByArtist(artistCredit: string, excludeId: string, l
 }
 
 /** Full-length songs in a genre (open sources), newest first. */
-export async function getGenreTracks(slug: string, limit = 60): Promise<TrackItem[]> {
+export async function getGenreTracks(slug: string, limit = 60, offset = 0): Promise<TrackItem[]> {
   const sb = supabasePublic();
-  const { data } = await sb.rpc('genre_tracks', { p_genre: slug, p_limit: limit });
+  const { data } = await sb.rpc('genre_tracks', { p_genre: slug, p_limit: limit, p_offset: offset });
   return tracksByIds((data ?? []).map((r: { track_id: string }) => r.track_id));
 }
 
