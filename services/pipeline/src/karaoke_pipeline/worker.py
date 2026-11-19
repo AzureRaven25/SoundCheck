@@ -30,6 +30,9 @@ PIPELINE_VERSION = f"karaoke-pipeline/{__version__}"
 
 
 # Hosts the worker may download open-licensed originals from (acquire / open-music Edge Functions).
+# The backing track is what people hear; the vocal stem is only a quiet guide. These rates are transparent for
+# playback and fit about twice as many karaoke songs in the same storage as the old 256k/256k.
+STEM_BITRATE = {"instrumental": "160k", "vocals": "96k"}
 ALLOWED_HOSTS = ("archive.org", "api.audius.co", "storage.jamendo.com", "upload.wikimedia.org")
 
 
@@ -235,7 +238,7 @@ def process(sb: Supabase, job: Job, model: str = "htdemucs", crepe_model: str = 
         _stage(sb, job, "upload", 0.85)
         for kind, data in (("instrumental", stems.instrumental), ("vocals", stems.vocals)):
             out = tmp / f"{kind}.m4a"
-            encode_aac(data, out)
+            encode_aac(data, out, bitrate=STEM_BITRATE[kind])
             sb.upload("audio", f"{base}/{kind}.m4a", out.read_bytes(), "audio/mp4")
         contour = {"hop": melody["hop"], "contour": melody["contour"]}
         sb.upload("audio", f"{base}/contour.json", json.dumps(contour, separators=(",", ":")).encode(), "application/json")

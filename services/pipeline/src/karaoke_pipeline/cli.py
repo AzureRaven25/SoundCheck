@@ -77,8 +77,8 @@ def process_file(src: Path, library: Path, *, model: str, crepe_model: str, skip
     with step("separate"):
         stems = separate(audio, SAMPLE_RATE, model_name=model)
     with step("encode"):
-        encode_aac(stems.instrumental, out / "instrumental.m4a")
-        encode_aac(stems.vocals, out / "vocals.m4a")
+        encode_aac(stems.instrumental, out / "instrumental.m4a", bitrate="160k")
+        encode_aac(stems.vocals, out / "vocals.m4a", bitrate="96k")
     with step("melody"):
         melody = extract_melody(stems.vocals, SAMPLE_RATE, crepe_model=crepe_model)
         (out / "melody.json").write_text(json.dumps(melody, separators=(",", ":")))
