@@ -570,6 +570,11 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                     </div>
                   </div>
                 )}
+                {!data.signedIn && (
+                  <p className="mt-3 text-sm text-ink-300">
+                    Sing along without an account, or <Link href={`/login?next=${encodeURIComponent(`/stage/${data.track.id}`)}`} className="font-bold text-ink-50 underline">log in</Link> to get scored and keep your history.
+                  </p>
+                )}
                 {host.error && <p role="alert" className="mt-3 text-sm text-danger-400">{host.error}</p>}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
                 {syncNote && <p role="status" className="mt-3 text-sm text-success-400">{syncNote}</p>}

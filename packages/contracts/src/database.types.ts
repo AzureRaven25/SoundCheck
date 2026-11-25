@@ -1723,6 +1723,7 @@ export type Database = {
           title: string
         }[]
       }
+      session_code_active: { Args: { p_code: string }; Returns: boolean }
       session_queue_list: {
         Args: { p_session_id: string }
         Returns: {

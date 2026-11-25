@@ -123,5 +123,5 @@ function Friends() {
 }
 
 export default function FriendsPage() {
-  return <SignInGate next="/friends" what="your friends"><Friends /></SignInGate>;
+  return <SignInGate next="/friends" what="your friends" title="Friends" why="Add friends to compare scores and see what they’re singing. Log in to find them."><Friends /></SignInGate>;
 }

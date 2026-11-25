@@ -27,7 +27,7 @@ export default function SettingsPage() {
   }, [user]);
 
   if (user === undefined || (user && !profile)) return <p className="pt-6 text-ink-300">Loading…</p>;
-  if (!user || !profile) return <p className="pt-6 text-ink-300">Sign in to change your settings.</p>;
+  if (!user || !profile) return <p className="pt-6 text-ink-300">Log in to change your settings.</p>;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();

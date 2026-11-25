@@ -4,15 +4,19 @@ import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useUser } from '@/lib/hooks/useUser';
 
-/** Renders children only for signed-in (non-guest) users; otherwise a sign-in prompt. */
-export function SignInGate({ next, what, children }: { next: string; what: string; children: ReactNode }) {
+/** Renders children only for signed-in (non-guest) users; otherwise what the page is for and how to get in. */
+export function SignInGate({ next, what, title, why, children }: { next: string; what: string; title?: string; why?: string; children: ReactNode }) {
   const user = useUser();
   if (user === undefined) return <p className="flex items-center gap-2 p-8 text-ink-300"><Loader2 className="animate-spin" size={18} /> Loading…</p>;
   if (!user || user.is_anonymous) {
     return (
       <div className="mx-auto max-w-md p-10 text-center">
-        <p className="font-display text-2xl font-bold">Sign in to see {what}</p>
-        <Link href={`/login?next=${encodeURIComponent(next)}`} className="mt-5 inline-block rounded-full bg-ink-50 px-6 py-2.5 font-bold text-ink-950">Sign in</Link>
+        {title && <h1 className="font-display text-3xl font-extrabold tracking-tight">{title}</h1>}
+        <p className={title ? 'mt-3 text-ink-300' : 'font-display text-2xl font-bold'}>{why ?? `Log in to see ${what}.`}</p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link href={`/login?next=${encodeURIComponent(next)}`} className="rounded-full bg-ink-50 px-6 py-2.5 font-bold text-ink-950">Log in</Link>
+          <Link href={`/signup?next=${encodeURIComponent(next)}`} className="rounded-full border border-ink-700 px-6 py-2.5 font-bold hover:border-ink-300">Create a free account</Link>
+        </div>
       </div>
     );
   }

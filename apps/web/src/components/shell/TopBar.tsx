@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { ChevronLeft, ChevronRight, LogOut, Search, Settings, User as UserIcon } from 'lucide-react';
+import { Award, ChevronLeft, ChevronRight, LogOut, Search, Settings, Trophy, User as UserIcon, Users } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 
 function SearchBox() {
@@ -79,13 +79,17 @@ export function TopBar({ user }: { user: User | null }) {
             </button>
             {menu && (
               <div role="menu" className="absolute right-0 mt-2 w-52 overflow-hidden rounded-md bg-ink-800 py-1 shadow-lift" onMouseLeave={() => setMenu(false)}>
-                <p className="truncate px-3 py-2 text-xs text-ink-300">{user.email ?? 'Guest'}</p>
-                <Link role="menuitem" href="/settings" onClick={() => setMenu(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-ink-700">
-                  <Settings size={16} /> Settings
-                </Link>
-                <Link role="menuitem" href="/library" onClick={() => setMenu(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-ink-700">
-                  <UserIcon size={16} /> Your library
-                </Link>
+                <div className="border-b border-ink-700 px-3 py-2">
+                  <p className="truncate text-sm font-bold">{(user.user_metadata?.display_name as string | undefined) ?? 'Singer'}</p>
+                  <p className="truncate text-xs text-ink-300">{user.email ?? 'Guest'}</p>
+                </div>
+                {/* everything the sidebar has that the phone's bottom bar doesn't */}
+                {([['/library', 'Your library', UserIcon], ['/leaderboards', 'Leaderboards', Trophy], ['/friends', 'Friends', Users],
+                   ['/achievements', 'Achievements', Award], ['/settings', 'Settings', Settings]] as const).map(([href, label, Icon]) => (
+                  <Link key={href} role="menuitem" href={href} onClick={() => setMenu(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-ink-700">
+                    <Icon size={16} /> {label}
+                  </Link>
+                ))}
                 <button
                   role="menuitem"
                   type="button"

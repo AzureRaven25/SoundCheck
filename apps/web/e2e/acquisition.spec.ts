@@ -110,7 +110,7 @@ test('open-licensed song: lyrics by ear, listed on /sing, opens on Stage', async
   test.setTimeout(120_000);
   await signUp(page, 'Busker');
   await page.goto('/sing');
-  const everyone = page.getByRole('region', { name: 'Ready for everyone' }).or(page.locator('section').filter({ has: page.getByRole('heading', { name: 'Ready for everyone' }) }));
+  const everyone = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scored note by note' }) });
   const sing = everyone.first().getByRole('link', { name: /^Sing / }).first();
   test.skip(!(await sing.isVisible().catch(() => false)), 'no shared karaoke version with lyrics yet');
   const title = (await sing.getAttribute('aria-label'))!.replace(/^Sing /, '');

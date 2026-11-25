@@ -70,13 +70,17 @@ export function MoreSources({ q }: { q: string }) {
   const full = results.filter((r) => r.availability === 'full');
   const info = results.filter((r) => r.availability !== 'full');
   if (!results.length && !sources.length) return null;
+  // per-source counters are diagnostics: development builds only; visitors just see progress
+  const debug = process.env.NODE_ENV !== 'production';
+  if (!debug && !full.length && !info.length && pendingSources === 0) return null;
   return (
     <section className="mt-10" aria-label="More sources">
       <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="font-display text-2xl font-bold">Full songs from open sources</h2>
         <p className="text-sm text-ink-500">Independent artists and openly licensed recordings, playable in full</p>
       </div>
-      <ul className="mb-4 flex flex-wrap gap-2 text-[11px]" aria-label="Source status">
+      {!debug && pendingSources > 0 && <p className="mb-3 text-xs text-ink-500" role="status">Searching more sources…</p>}
+      {debug && <ul className="mb-4 flex flex-wrap gap-2 text-[11px]" aria-label="Source status">
         {sources.map((s) => (
           <li key={s.id} data-testid={`source-${s.id}`}
             className={`rounded-full px-2.5 py-1 ${s.ok ? 'bg-ink-800 text-ink-300' : 'bg-ink-850 text-ink-500'}`}
@@ -85,7 +89,7 @@ export function MoreSources({ q }: { q: string }) {
           </li>
         ))}
         {pendingSources > 0 && <li className="rounded-full bg-ink-850 px-2.5 py-1 text-ink-500">searching {pendingSources} more…</li>}
-      </ul>
+      </ul>}
       {full.length > 0 && (
         <ol className="divide-y divide-ink-800 rounded-xl bg-ink-900/60" data-testid="source-results">
           {full.map((c) => {

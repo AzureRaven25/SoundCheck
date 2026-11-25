@@ -244,5 +244,5 @@ function Importer() {
 }
 
 export default function ImportPage() {
-  return <SignInGate next="/import" what="your music import"><Importer /></SignInGate>;
+  return <SignInGate next="/import" what="your music import" title="Import your music" why="Bring in songs you own (folders, Bandcamp ZIPs, CD rips) and play them in full or turn them into karaoke. Your files stay private. Log in to start."><Importer /></SignInGate>;
 }

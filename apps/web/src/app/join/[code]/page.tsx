@@ -52,6 +52,11 @@ export default function JoinSessionPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [queueVersion, setQueueVersion] = useState(0);
   const [voiceLive, setVoiceLive] = useState(false);
+  // check the code straight away, before asking for a stage name
+  const [codeOk, setCodeOk] = useState<boolean | null>(null);
+  useEffect(() => {
+    void supabaseBrowser().rpc('session_code_active', { p_code: code }).then(({ data, error: err }) => setCodeOk(err ? true : data === true));
+  }, [code]);
   // a signed-in phone keeps its scores and sing history on its own account; otherwise it joins as a guest
   const [account, setAccount] = useState<{ name: string | null; guest: boolean } | null>(null);
   useEffect(() => {
@@ -268,6 +273,16 @@ export default function JoinSessionPage() {
   useEffect(() => () => { sender.current?.stop(); mic.current?.stop(); void ch.current?.close(); }, []);
 
   const shell = 'flex h-full flex-col items-center justify-center gap-6 p-6 text-center';
+  if (codeOk === false && step === 'name') {
+    return (
+      <main className={shell}>
+        <p className="font-display text-sm font-bold uppercase tracking-[0.3em] text-pink-400">SoundCheck Party · {code}</p>
+        <h1 className="font-display text-3xl font-extrabold tracking-tight">That code isn’t active</h1>
+        <p className="max-w-xs text-ink-300">Check the 6-character code on the TV. Codes end when the host closes the party.</p>
+        <Link href="/join" className="rounded-full bg-ink-50 px-6 py-3 font-bold text-ink-950">Enter another code</Link>
+      </main>
+    );
+  }
   if (step === 'name' || step === 'joining') {
     return (
       <main className={shell}>

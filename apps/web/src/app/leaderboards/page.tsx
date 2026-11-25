@@ -73,5 +73,5 @@ function Boards() {
 }
 
 export default function LeaderboardsPage() {
-  return <SignInGate next="/leaderboards" what="leaderboards"><Boards /></SignInGate>;
+  return <SignInGate next="/leaderboards" what="leaderboards" title="Leaderboards" why="See the top singers and how your scores stack up. Log in to compete."><Boards /></SignInGate>;
 }

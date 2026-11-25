@@ -59,7 +59,7 @@ function Activate() {
 
 function ActivateRoute() {
   const code = useSearchParams().get('code') ?? '';
-  return <SignInGate next={`/activate${code ? `?code=${code}` : ''}`} what="this page"><Activate /></SignInGate>;
+  return <SignInGate next={`/activate${code ? `?code=${code}` : ''}`} what="this page" title="Sign in on your TV" why="Your TV shows a code to link it to your account. Log in here first, then enter the code."><Activate /></SignInGate>;
 }
 
 export default function ActivatePage() {

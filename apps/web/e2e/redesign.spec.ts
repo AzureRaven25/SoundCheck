@@ -115,6 +115,7 @@ test('empty search shows recent searches and genres', async ({ page }) => {
   await signUp(page, 'Searcher');
   await page.goto('/search?q=queen');
   await expect(page.getByRole('heading', { name: 'Songs' })).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(3_500);   // a search is remembered once you stay on it for a moment
   await page.goto('/search');
   await expect(page.getByRole('region', { name: 'Recent searches' }).getByRole('link', { name: 'queen' })).toBeVisible();
   await page.getByRole('region', { name: 'Browse genres' }).getByRole('link', { name: 'Jazz' }).click();
@@ -155,6 +156,6 @@ test('a song can be added to a playlist only once', async ({ page }) => {
     await expect(page.getByRole('menu')).toHaveCount(0, { timeout: 5_000 });
   }
   await page.goto('/library?tab=playlists');
-  await page.getByRole('link', { name: /My Playlist #1/ }).click();
+  await page.getByRole('main').getByRole('link', { name: /My Playlist #1/ }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Ben E. King' })).toHaveCount(1);
 });

@@ -75,9 +75,9 @@ export function Sidebar({ user }: { user: User | null }) {
         {!user ? (
           <div className="rounded-lg bg-ink-850 p-4">
             <p className="text-sm font-bold">Make it yours</p>
-            <p className="mt-1 text-xs text-ink-300">Sign in to save favorites, build playlists and track your scores.</p>
-            <Link href="/login" className="mt-3 inline-block rounded-full bg-ink-50 px-4 py-1.5 text-xs font-bold text-ink-950 hover:scale-105">
-              Sign in
+            <p className="mt-1 text-xs text-ink-300">Create a free account to save favorites, build playlists and keep your scores.</p>
+            <Link href="/signup" className="mt-3 inline-block rounded-full bg-ink-50 px-4 py-1.5 text-xs font-bold text-ink-950 hover:scale-105">
+              Sign up free
             </Link>
           </div>
         ) : playlists.length === 0 ? (

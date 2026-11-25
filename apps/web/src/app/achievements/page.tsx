@@ -21,9 +21,9 @@ function Badges() {
   const earned = badges?.filter((b) => b.earned_at).length ?? 0;
   return (
     <div className="mx-auto max-w-5xl p-6 md:p-8">
-      <ProgressPanel />
       <h1 className="font-display text-4xl font-extrabold tracking-tight">Achievements</h1>
-      <p className="mt-1 text-ink-300">{badges ? `${earned} of ${badges.length} earned` : 'Loading…'}</p>
+      <p className="mt-1 mb-6 text-ink-300">{badges ? `${earned} of ${badges.length} earned` : 'Loading…'}</p>
+      <ProgressPanel />
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {badges?.map((b) => {
           const Icon = ICONS[b.icon] ?? Award;
@@ -46,5 +46,5 @@ function Badges() {
 }
 
 export default function AchievementsPage() {
-  return <SignInGate next="/achievements" what="your achievements"><Badges /></SignInGate>;
+  return <SignInGate next="/achievements" what="your achievements" title="Achievements" why="Earn badges, level up and keep a singing streak. Log in to start collecting."><Badges /></SignInGate>;
 }

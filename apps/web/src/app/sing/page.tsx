@@ -5,18 +5,18 @@ import { MyKaraoke, SingRows } from '@/components/catalog/SingList';
 import { JoinCodeForm } from '@/components/catalog/JoinCodeForm';
 import { SurpriseMe } from '@/components/catalog/SurpriseMe';
 import { HeroSearch } from '@/components/catalog/HeroSearch';
-import { getReadyToSing } from '@/lib/catalog';
+import { getPopularTracks, getReadyToSing } from '@/lib/catalog';
 
 export const metadata: Metadata = { title: 'Sing' };
 export const revalidate = 300;
 
 export default async function SingPage() {
-  const ready = await getReadyToSing(60);
+  const [ready, popular] = await Promise.all([getReadyToSing(60), getPopularTracks(24)]);
   return (
     <div className="pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-4xl font-extrabold tracking-tight">Sing</h1>
-        <SurpriseMe ids={ready.map((t) => t.id)} />
+        <SurpriseMe ids={[...popular, ...ready].map((t) => t.id)} />
       </div>
       <p className="mt-2 max-w-2xl text-ink-300">
         Pick a song to open SoundCheck Stage. Put it on a TV or laptop for a party: everyone joins with their phone as the mic and
@@ -44,10 +44,25 @@ export default async function SingPage() {
 
       <div className="mt-10"><MyKaraoke /></div>
 
+      {popular.length > 0 && (
+        <section className="mb-10">
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <h2 className="font-display text-2xl font-bold">Karaoke favorites</h2>
+              <p className="text-sm text-ink-300">The songs everyone knows: sing along to the karaoke video with synced lyrics</p>
+            </div>
+            <Link href="/search" className="text-xs font-bold text-ink-300 hover:underline">Find any song</Link>
+          </div>
+          <SingRows tracks={popular} />
+        </section>
+      )}
+
       <section className="mb-10">
         <div className="mb-3 flex items-end justify-between">
-          <h2 className="font-display text-2xl font-bold">Ready for everyone</h2>
-          <Link href="/search" className="text-xs font-bold text-ink-300 hover:underline">Find more songs</Link>
+          <div>
+            <h2 className="font-display text-2xl font-bold">Scored note by note</h2>
+            <p className="text-sm text-ink-300">Open-licensed songs with full karaoke tracks: vocals removed and every note scored</p>
+          </div>
         </div>
         {ready.length ? <SingRows tracks={ready} /> : (
           <p className="text-sm text-ink-300">Shared karaoke versions appear here as open-licensed songs are processed.</p>

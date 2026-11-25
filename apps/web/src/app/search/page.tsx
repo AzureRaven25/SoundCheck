@@ -56,10 +56,18 @@ function Results() {
         setTracks(items);
         setSource(data?.source ?? null);
         setState('done');
-        // ask the session directly: on a fresh page load the user hook may not have resolved yet
-        void sb.auth.getSession().then(({ data }) => {
-          if (data.session && !data.session.user.is_anonymous) void sb.from('search_history').insert({ query: q.slice(0, 200) }).then(() => {}, () => {}); // builders only run when awaited/then'd
-        });
+        // Remember the search only once it "settles": live search runs on every pause while typing, so save it if the
+        // person stays on it for a moment, it found something, and it's a sensible length.
+        const query = q.trim();
+        if (items.length && query.length >= 2 && query.length <= 80) {
+          setTimeout(() => {
+            if (id !== req.current) return;
+            // ask the session directly: on a fresh page load the user hook may not have resolved yet
+            void sb.auth.getSession().then(({ data }) => {
+              if (data.session && !data.session.user.is_anonymous) void sb.from('search_history').insert({ query }).then(() => {}, () => {}); // builders only run when awaited/then'd
+            });
+          }, 2500);
+        }
       } catch {
         if (id === req.current) setState('error');
       }
@@ -107,7 +115,15 @@ function SearchHome() {
   useEffect(() => {
     if (!user) return;
     void supabaseBrowser().from('search_history').select('query').order('created_at', { ascending: false }).limit(40)
-      .then(({ data }) => setRecent([...new Set((data ?? []).map((r) => r.query as string))].slice(0, 10)));
+      .then(({ data }) => {
+        // newest first; drop repeats (any case) and fragments of a longer search made later
+        const out: string[] = [];
+        for (const r of (data ?? []).map((x) => String(x.query).trim()).filter((x) => x.length >= 2 && x.length <= 80)) {
+          const l = r.toLowerCase();
+          if (!out.some((o) => o.toLowerCase().startsWith(l))) out.push(r);
+        }
+        setRecent(out.slice(0, 10));
+      });
   }, [user]);
   return (
     <div className="pt-8">

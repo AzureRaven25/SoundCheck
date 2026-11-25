@@ -73,6 +73,8 @@ export function PlayerBar({ signedIn }: { signedIn: boolean }) {
   const VolumeIcon = p.muted || p.volume === 0 ? VolumeX : p.volume < 0.5 ? Volume1 : Volume2;
   const pct = p.duration ? (p.position / p.duration) * 100 : 0;
   useMediaKeys();
+  // nothing playing or queued yet: no empty player taking up the bottom of the screen
+  if (!track) return null;
 
   return (
     <footer className="grid h-[76px] grid-cols-[1fr_auto] items-center gap-4 px-2 md:grid-cols-[minmax(180px,1fr)_minmax(320px,2fr)_minmax(180px,1fr)]" aria-label="Player">
