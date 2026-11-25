@@ -159,3 +159,16 @@ test('a song can be added to a playlist only once', async ({ page }) => {
   await page.getByRole('main').getByRole('link', { name: /My Playlist #1/ }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Ben E. King' })).toHaveCount(1);
 });
+
+test('new accounts get a welcome with songs to try, and can dismiss it', async ({ page }) => {
+  await signUp(page, 'Fresh Face');
+  await page.goto('/');
+  const welcome = page.getByRole('region', { name: 'Welcome' });
+  await expect(welcome).toContainText('Welcome, Fresh Face!');
+  await expect(welcome.getByRole('link').first()).toHaveAttribute('href', /\/stage\//);
+  await welcome.getByRole('button', { name: 'Dismiss welcome' }).click();
+  await expect(welcome).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('heading', { level: 1 }).waitFor();
+  await expect(page.getByRole('region', { name: 'Welcome' })).toHaveCount(0);
+});

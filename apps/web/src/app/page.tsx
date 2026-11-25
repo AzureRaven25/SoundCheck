@@ -3,6 +3,7 @@ import { Mic2, PartyPopper, Search, Upload } from 'lucide-react';
 import { Shelf, TrackCard } from '@/components/catalog/Cards';
 import { RecentlyPlayed } from '@/components/catalog/RecentlyPlayed';
 import { ForYou } from '@/components/catalog/ForYou';
+import { Welcome } from '@/components/catalog/Welcome';
 import { Equalizer, FloatingNotes, HeroSearch } from '@/components/catalog/HeroSearch';
 import { getFullLengthTracks, getPopularTracks, getReadyToSing } from '@/lib/catalog';
 import { GENRE_INFO } from '@/lib/genres';
@@ -79,6 +80,7 @@ export default async function HomePage() {
         <Link href="/genre" className="shrink-0 rounded-full bg-ink-800 px-4 py-2 text-sm font-bold text-ink-50 hover:bg-ink-700">All genres</Link>
       </nav>
 
+      <Welcome picks={classics.slice(0, 3)} />
       <RecentlyPlayed />
       <ForYou />
 
