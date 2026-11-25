@@ -14,7 +14,8 @@ import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
 import { VoiceReceiver } from '@/session/voice';
 import { StageEngine } from '@/stage/engine';
 import { startMic, type MicHandle } from '@/stage/mic';
-import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
+import type { SingerTrail } from '@/stage/PitchHud';
+import { VoiceVisualizer, type SingerLevel } from '@/stage/VoiceVisualizer';
 import { Results, type ScoreView } from '@/stage/Results';
 import { StageLyrics } from '@/stage/StageLyrics';
 import { LineCheers, rateLine } from '@/stage/Cheers';
@@ -56,6 +57,8 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const [group, setGroup] = useState<{ score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const noiseFloor = useRef<number | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const lastDb = useRef(-90);
   const noteAt = useRef<(t: number) => number | null>(() => null);
   const keyShiftRef = useRef(0);
   const host = useHostSession(data.track.id, resume);
@@ -147,6 +150,14 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     });
   }, [mode]);
 
+  const getLevels = useCallback((): SingerLevel[] => {
+    if (mode === 'solo') return useMic ? [{ color: SOLO_COLOR, db: lastDb.current }] : [];
+    return hostRef.current.singers().map((sg) => {
+      const f = hostRef.current.framesOf(sg.memberId);
+      return { color: sg.color, db: f.length >= 4 ? f[f.length - 1]! : -90 };
+    });
+  }, [mode, useMic]);
+
   const publish = useCallback((state: 'playing' | 'paused' | 'ended', pos: number) => {
     if (mode === 'party') hostRef.current.publishTransport(state, pos, keyShiftRef.current, singerIds());
   }, [mode]);
@@ -166,6 +177,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       if (mode === 'solo' && useMic && !mic.current) {
         try {
           mic.current = await startMic((f) => {
+            lastDb.current = f.rmsDb;
             const eng = engine.current;
             if (!eng || !eng.isPlaying()) return;
             // the frame describes audio heard ~input latency ago
@@ -180,6 +192,11 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
               if (liveHit(f.f0, ref, keyShiftRef.current)) hits.current.hit++;
             }
           }, e.ctx);
+          const an = e.ctx.createAnalyser();
+          an.fftSize = 2048;
+          an.smoothingTimeConstant = 0.78;
+          e.ctx.createMediaStreamSource(mic.current.stream).connect(an);
+          setAnalyser(an);
         } catch (err) {
           setMicError(err instanceof Error && err.name === 'NotAllowedError' ? 'Microphone access was blocked, so singing won’t be scored.' : 'No microphone available, so singing won’t be scored.');
           setUseMic(false);
@@ -347,8 +364,8 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         </div>
       ) : (
         <>
-          <div className="relative mx-6 mt-6 h-40 overflow-hidden rounded-2xl bg-ink-900/60 ring-1 ring-ink-800">
-            <PitchHud notes={data.notes} keyShift={keyShift} getTime={getTime} getTrails={getTrails} range={data.vocalRange} />
+          <div className="relative mx-6 mt-6 h-48 overflow-hidden rounded-2xl bg-ink-900/60 ring-1 ring-ink-800 md:h-56">
+            <VoiceVisualizer notes={data.notes} keyShift={keyShift} getTime={getTime} getTrails={getTrails} analyser={mode === 'solo' ? analyser : null} getLevels={getLevels} />
           </div>
           <div className="relative flex flex-1 items-center justify-center px-8">
             {phase === 'intro' ? (

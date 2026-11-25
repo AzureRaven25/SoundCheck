@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import clsx from 'clsx';
-import { ArrowLeft, Hand, ListMusic, Mic, MicOff, Pause, Play, RotateCcw, SkipForward, Smartphone, Square, Users } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Hand, ListMusic, Mic, MicOff, Pause, Play, RotateCcw, SkipForward, Smartphone, Square, Users } from 'lucide-react';
 import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
@@ -18,7 +18,8 @@ import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue } from '@/session/queue';
 import { VoiceReceiver } from '@/session/voice';
 import { startMic, type MicHandle } from './mic';
-import { PitchHud, type SingerTrail } from './PitchHud';
+import type { SingerTrail } from './PitchHud';
+import { VoiceVisualizer, type SingerLevel } from './VoiceVisualizer';
 import { Results, type ScoreView } from './Results';
 import { LineCheers, rateLine } from './Cheers';
 import { LyricsSyncer } from './LyricsSyncer';
@@ -132,13 +133,17 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   useEffect(() => { clock.current.mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0; }, [mainVid, offsets]);
   useEffect(() => { clock.current.guideOffset = guideVid ? offsets[guideVid.id] ?? 0 : 0; }, [guideVid, offsets]);
   useEffect(() => { try { clock.current.main?.setVolume(Math.round(music * 100)); } catch { /* not ready */ } }, [music, ready.main]);
+  useEffect(() => { clock.current.setGuideVolume(guide); }, [guide, ready.guide]);
+  // a karaoke track re-recorded at a slightly different tempo keeps drifting from the original: say so
+  const [driftWarn, setDriftWarn] = useState(false);
   useEffect(() => {
-    try {
-      const g = clock.current.guide;
-      if (!g) return;
-      if (guide <= 0) g.mute(); else { g.unMute(); g.setVolume(Math.round(guide * 100)); }
-    } catch { /* not ready */ }
-  }, [guide, ready.guide]);
+    if (phase !== 'singing' || !guideVid) return;
+    const iv = setInterval(() => setDriftWarn(guide > 0 && clock.current.driftCorrections() >= 3), 2000);
+    return () => clearInterval(iv);
+  }, [phase, guideVid, guide]);
+  // the solo mic, for the visualiser's waveform and spectrum, and everyone's levels for the meters
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const lastDb = useRef(-90);
 
   // the video's own controls can start or pause the song too
   useEffect(() => {
@@ -167,6 +172,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       return { ...o, [v.id]: next };
     });
     if (which === 'main' && clock.current.isPlaying()) setTimeout(() => publish('playing'), 50);
+    clock.current.resetDrift();
   };
   /** "Tap on the first word": the nearest line (within 6 s) starts right now. */
   const tapSync = () => {
@@ -190,6 +196,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     setScores(null); setScoreError(null);
     // start the video inside the click, before any await
     clock.current.seekLyric(-mainOffset);   // from the top of the video
+    clock.current.resetDrift();
     clock.current.play();
     setPhase('singing');
     if (mode === 'solo' && useMic && !mic.current) {
@@ -197,12 +204,18 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
         mic.current = await startMic((f) => {
           const c = clock.current;
           if (!c.isPlaying()) return;
+          lastDb.current = f.rmsDb;
           const t = c.lyricTime() - (mic.current?.inputLatencyMs ?? 0) / 1000;
           frames.current.push(+t.toFixed(3), f.f0, +f.conf.toFixed(3), +f.rmsDb.toFixed(1));
           const voiced = f.f0 > 0 && f.conf >= 0.6 && (noiseFloor.current == null || f.rmsDb >= noiseFloor.current + 10);
           trail.current.push([t, voiced ? midiOf(f.f0) : null]);
           if (trail.current.length > 400) trail.current.splice(0, trail.current.length - 400);
         }, ac);
+        const an = ac.createAnalyser();
+        an.fftSize = 2048;
+        an.smoothingTimeConstant = 0.78;
+        ac.createMediaStreamSource(mic.current.stream).connect(an);
+        setAnalyser(an);
         // most videos open with an instrumental lead-in: measure the room's level during its first second
         noiseFloor.current = await mic.current.calibrate(1000);
       } catch (err) {
@@ -225,6 +238,14 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       return { id: s.memberId, color: s.color, points: pts };
     });
   }, [mode]);
+
+  const getLevels = useCallback((): SingerLevel[] => {
+    if (mode === 'solo') return useMic ? [{ color: SOLO_COLOR, db: lastDb.current }] : [];
+    return hostRef.current.singers().map((sg) => {
+      const f = hostRef.current.framesOf(sg.memberId);
+      return { color: sg.color, db: f.length >= 4 ? f[f.length - 1]! : -90 };
+    });
+  }, [mode, useMic]);
 
   // the song ends with the video
   const finishRef = useRef<() => void>(() => {});
@@ -332,29 +353,31 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0;
   const hasLyrics = lines.some((l) => l.start != null);
 
+  const showStage = phase !== 'results' && phase !== 'scoring';
+  // YouTube asks for embedded players of at least 200×200 px
+  const tile = 'h-[200px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-700/80';
   return (
     <div className="relative flex h-full flex-col overflow-y-auto [&>*]:shrink-0">
       {data.track.artworkUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.track.artworkUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-25 blur-3xl" />
+        <img src={data.track.artworkUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />
       )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/75 to-ink-950" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-950/50 via-ink-950/80 to-ink-950" aria-hidden />
 
-      <header className="relative flex items-center gap-4 px-4 pt-4 md:px-6">
+      <header className="relative flex items-center gap-3 px-4 pt-4 md:px-6">
         <Link href={`/track/${data.track.id}`} aria-label="Leave Stage" className="rounded-full bg-ink-900/70 p-2 hover:bg-ink-800"><ArrowLeft size={20} /></Link>
-        <div className="w-12"><Artwork src={data.track.artworkUrl} title={data.track.title} resolve={false} sizes="48px" /></div>
+        <div className="w-11 shrink-0"><Artwork src={data.track.artworkUrl} title={data.track.title} resolve={false} sizes="44px" /></div>
         <div className="min-w-0">
-          <p className="truncate font-display text-lg font-bold">{data.track.title}</p>
+          <p className="truncate font-display text-lg font-bold leading-tight">{data.track.title}</p>
           <p className="truncate text-sm text-ink-300">{data.track.artist}</p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-widest">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-[11px] font-bold uppercase tracking-widest">
           <span className="stage-gradient rounded-md px-3 py-1.5 text-white">{mode === 'party' ? 'SoundCheck Party' : 'SoundCheck Stage'}</span>
           {host.session && <span className="rounded-md bg-ink-800 px-3 py-1.5">Code {host.session.code}</span>}
-          <span className="rounded-md bg-ink-800 px-3 py-1.5">{mainVid?.kind === 'karaoke' ? 'Karaoke video' : 'Original video'}</span>
         </div>
       </header>
 
-      {phase === 'results' || phase === 'scoring' ? (
+      {!showStage && (
         <div className="relative flex flex-1 items-center py-8">
           <div className="w-full">
             <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError}
@@ -368,34 +391,88 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
             )}
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* The players stay mounted (and visible) through the whole song; results replace them only visually below. */}
-      <div className={clsx('relative mx-4 mt-4 gap-4 md:mx-6', phase === 'results' || phase === 'scoring' ? 'hidden' : 'flex flex-col lg:flex-row')}>
-        <div className="flex-1">
-          {mainVid ? (
-            <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black ring-1 ring-ink-800 lg:max-h-[46vh]" ref={mainEl} data-testid="main-video" />
-          ) : (
-            <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-ink-900/70 p-6 text-center text-ink-300 lg:max-h-[46vh]">
-              {data.quotaExhausted ? 'We’ve hit today’s YouTube search limit. Paste a YouTube link below (it’s saved for everyone), or try again tomorrow.'
-                : data.configured ? 'No video found for this song. Paste a YouTube link below.' : 'Paste a YouTube link for this song below to sing along.'}
+      {/* Stage: lyrics and the visualiser are the show; YouTube's players sit in a side rail as compact tiles (they must
+          stay visible while playing, so they're kept mounted and are only hidden on the results screen, paused). */}
+      <div className={clsx('relative flex-1 gap-5 px-4 pt-4 md:px-6', showStage ? 'flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr]' : 'hidden')}>
+        <aside className="order-1 -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 lg:col-start-2 lg:row-start-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0" aria-label="Videos">
+          <div className="w-[260px] shrink-0 lg:w-full">
+            <p className="mb-1 truncate text-[11px] font-bold uppercase tracking-widest text-ink-300">
+              Backing · {mainVid?.kind === 'karaoke' ? (mainVid.title.match(/instrumental/i) && !mainVid.title.match(/karaoke/i) ? 'instrumental' : 'karaoke version') : 'original'}
+            </p>
+            {mainVid ? <div className={tile} ref={mainEl} data-testid="main-video" /> : (
+              <div className={clsx(tile, 'flex items-center justify-center p-3 text-center text-xs text-ink-300')}>
+                {data.quotaExhausted ? 'Today’s YouTube search limit is used up. Paste a link below (it’s saved for everyone).'
+                  : data.configured ? 'No video found. Paste a YouTube link below.' : 'Paste a YouTube link below to sing along.'}
+              </div>
+            )}
+          </div>
+          {guideVid && (
+            <div className="w-[260px] shrink-0 lg:w-full">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-ink-300">Guide vocal · original</p>
+              <div className={tile} ref={guideEl} data-testid="guide-video" />
             </div>
           )}
-        </div>
-        {guideVid && (
-          <div className="w-full shrink-0 lg:w-[360px]">
-            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-ink-300">Guide vocal · original</p>
-            <div className="h-[203px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-800" ref={guideEl} data-testid="guide-video" />
-          </div>
-        )}
-      </div>
+        </aside>
+          {showStage && (
+            <div className="order-3 space-y-3 self-start rounded-xl bg-ink-900/70 p-3 ring-1 ring-ink-800 lg:col-start-2 lg:row-start-2 lg:w-full" role="group" aria-label="Mix">
+              {karaokeVid && originalVid && (
+                <div role="radiogroup" aria-label="Backing track" className="grid grid-cols-2 rounded-full bg-ink-850 p-1 text-xs font-bold">
+                  {(['karaoke', 'original'] as const).map((b) => (
+                    <button key={b} type="button" role="radio" aria-checked={backing === b} onClick={() => setBacking(b)} disabled={phase === 'singing'}
+                      className={clsx('rounded-full px-3 py-1.5', backing === b ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
+                      {b === 'karaoke' ? 'Karaoke version' : 'Original song'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <label className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-widest text-ink-300">
+                Music
+                <input type="range" min={0} max={1} step={0.05} value={music} onChange={(e) => setMusic(Number(e.target.value))} className="w-40" />
+              </label>
+              {guideVid && (
+                <>
+                  <label className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-widest text-ink-300">
+                    Guide vocal
+                    <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-40" aria-label="Guide vocal volume" />
+                  </label>
+                  <div className="flex items-center justify-between gap-2 text-xs" role="group" aria-label="Guide timing">
+                    <span className="font-bold uppercase tracking-widest text-ink-300">Guide timing</span>
+                    <span className="flex gap-1">
+                      <button type="button" onClick={() => nudge(-0.1, 'guide')} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Guide earlier">Earlier</button>
+                      <button type="button" onClick={() => nudge(0.1, 'guide')} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Guide later">Later</button>
+                    </span>
+                  </div>
+                  {driftWarn && phase === 'singing' && (
+                    <p role="status" className="flex gap-2 rounded-lg bg-gold-400/10 p-2 text-xs text-gold-400">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                      This karaoke version is a re-recording with slightly different timing, so the guide keeps slipping. Try another karaoke version, or lower the guide.
+                    </p>
+                  )}
+                </>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs" role="group" aria-label="Lyrics timing">
+                <span className="font-bold uppercase tracking-widest text-ink-300">Lyrics</span>
+                <span className="flex items-center gap-1">
+                  <button type="button" onClick={() => nudge(0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics later">Later</button>
+                  <span className="w-14 text-center font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
+                  <button type="button" onClick={() => nudge(-0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics earlier">Earlier</button>
+                </span>
+                <button type="button" onClick={tapSync} disabled={phase !== 'singing' || !hasLyrics}
+                  className="flex w-full items-center justify-center gap-1 rounded-full bg-ink-800 px-3 py-1.5 font-bold disabled:opacity-30" title="Tap the moment a line starts being sung">
+                  <Hand size={14} /> Tap when a line starts
+                </button>
+              </div>
+              {mode === 'party' && voiceOn && <VoiceKnobs vol={voiceVol} setVol={setVoiceVol} echo={echo} setEcho={setEcho} />}
+            </div>
+          )}
 
-      {phase !== 'results' && phase !== 'scoring' && (
-        <>
-          <div className="relative mx-4 mt-3 h-16 overflow-hidden rounded-xl bg-ink-900/60 ring-1 ring-ink-800 md:mx-6" aria-hidden>
-            <PitchHud notes={[]} keyShift={0} getTime={getTime} getTrails={getTrails} range={null} />
+        <section className="order-2 flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-span-2 lg:row-start-1" aria-label="Lyrics">
+          <div className="relative h-44 overflow-hidden rounded-2xl bg-ink-900/70 ring-1 ring-ink-800 md:h-56">
+            <VoiceVisualizer getTime={getTime} getTrails={getTrails} analyser={mode === 'solo' ? analyser : null} getLevels={getLevels} />
           </div>
-          <div className="relative flex min-h-[14rem] flex-auto items-center justify-center px-6">
+          <div className="relative flex min-h-[16rem] flex-auto items-center justify-center">
             {phase === 'intro' && syncing ? (
               <LyricsSyncer trackId={data.track.id} videoId={mainVid?.id ?? null} signedIn={data.signedIn}
                 initial={data.lyricsGranularity === 'plain' ? data.lines.map((l) => l.text).filter((t) => t.trim()) : []}
@@ -407,8 +484,9 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   setSyncNote(applied ? 'Thanks! These lyrics are now synced for everyone.' : 'Lyrics timed for this session.');
                 }} />
             ) : phase === 'intro' ? (
-              <div className="w-full max-w-3xl py-6 text-center">
-                <div role="radiogroup" aria-label="Microphones" className="mx-auto inline-flex rounded-full bg-ink-850 p-1">
+              <div className="w-full max-w-2xl py-4 text-center">
+                <h1 className="font-display text-4xl font-extrabold tracking-tight">Ready to sing?</h1>
+                <div role="radiogroup" aria-label="Microphones" className="mx-auto mt-5 inline-flex rounded-full bg-ink-850 p-1">
                   {(['solo', 'party'] as const).map((m) => (
                     <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
                       className={clsx('flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold', mode === m ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
@@ -427,7 +505,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   </button>
                 ) : (
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-left">
-                    <div className="rounded-2xl bg-white p-3"><QRCodeSVG value={joinUrl} size={140} aria-label={`QR code to join ${host.session.code}`} /></div>
+                    <div className="rounded-2xl bg-white p-3"><QRCodeSVG value={joinUrl} size={132} aria-label={`QR code to join ${host.session.code}`} /></div>
                     <div>
                       <p className="text-sm text-ink-300">Scan, or open <b className="text-ink-50">{joinUrl.replace(/^https?:\/\//, '').replace(/\/join\/.*/, '/join')}</b> and enter</p>
                       <p className="font-display text-5xl font-black tracking-[0.25em]" data-testid="pairing-code">{host.session.code}</p>
@@ -443,7 +521,6 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                       <label className="mt-2 flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={voiceOn} onChange={(e) => toggleVoice(e.target.checked)} /> Hear singers through the speakers
                       </label>
-                      {voiceOn && <VoiceKnobs vol={voiceVol} setVol={setVoiceVol} echo={echo} setEcho={setEcho} />}
                     </div>
                   </div>
                 )}
@@ -464,6 +541,23 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   className="stage-gradient mt-6 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
+                <details className="mx-auto mt-6 max-w-2xl text-left text-sm">
+                  <summary className="cursor-pointer text-center text-xs font-bold uppercase tracking-widest text-ink-300 hover:text-ink-50">Choose videos</summary>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <VideoPicker label="Karaoke versions" list={karaokeList} idx={karaokeIdx} onPick={setKaraokeIdx} offsets={offsets} />
+                    <VideoPicker label="Original recordings" list={originalList} idx={originalIdx} onPick={setOriginalIdx} offsets={offsets} />
+                  </div>
+                </details>
+                <form className="mx-auto mt-3 flex max-w-2xl gap-2" onSubmit={(e) => { e.preventDefault(); addPasted(); }}>
+                  <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as StageVideo['kind'])} aria-label="Kind of video"
+                    className="rounded-full bg-ink-850 px-3 py-2 text-sm">
+                    <option value="karaoke">Karaoke version</option>
+                    <option value="original">Original song</option>
+                  </select>
+                  <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste a YouTube link"
+                    className="min-w-0 flex-1 rounded-full bg-ink-850 px-4 py-2 text-sm placeholder:text-ink-500" aria-label="YouTube link" />
+                  <button type="submit" disabled={!videoIdFrom(paste)} className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950 disabled:opacity-40">Use video</button>
+                </form>
               </div>
             ) : (
               <div className="relative w-full">
@@ -476,79 +570,23 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
               </div>
             )}
           </div>
+        </section>
+      </div>
 
-          <footer className="relative flex flex-wrap items-center justify-center gap-3 px-4 pb-6 md:px-6">
-            <button type="button" aria-label={playing ? 'Pause' : 'Play'} disabled={phase !== 'singing'}
-              onClick={() => (clock.current.isPlaying() ? clock.current.pause() : clock.current.play())}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50 text-ink-950 disabled:opacity-30">
-              {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="translate-x-0.5" />}
-            </button>
-            <button type="button" aria-label="Restart" disabled={phase !== 'singing'}
-              onClick={() => { frames.current = []; trail.current = []; host.resetTake(); clock.current.seekLyric(-mainOffset); clock.current.play(); }}
-              className="rounded-full bg-ink-800 p-3 disabled:opacity-30"><RotateCcw size={18} /></button>
-            <button type="button" aria-label="Finish and score" disabled={phase !== 'singing'} onClick={() => void finish()}
-              className="flex items-center gap-2 rounded-full bg-ink-800 px-4 py-3 text-sm font-bold disabled:opacity-30"><Square size={14} fill="currentColor" /> Finish</button>
-            <div className="mx-1 h-8 w-px bg-ink-700" />
-
-            <div className="flex items-center gap-1.5" role="group" aria-label="Lyrics timing">
-              <span className="text-xs font-bold uppercase tracking-widest text-ink-300">Lyrics</span>
-              <button type="button" onClick={() => nudge(0.25)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold" aria-label="Lyrics later">Later</button>
-              <span className="w-14 text-center text-xs font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
-              <button type="button" onClick={() => nudge(-0.25)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold" aria-label="Lyrics earlier">Earlier</button>
-              <button type="button" onClick={tapSync} disabled={phase !== 'singing' || !hasLyrics}
-                className="flex items-center gap-1 rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold disabled:opacity-30" title="Tap the moment a line starts being sung">
-                <Hand size={14} /> Tap on a line
-              </button>
-            </div>
-            <div className="mx-1 h-8 w-px bg-ink-700" />
-
-            {karaokeVid && originalVid && (
-              <div role="radiogroup" aria-label="Backing track" className="inline-flex rounded-full bg-ink-850 p-1 text-xs font-bold">
-                {(['karaoke', 'original'] as const).map((b) => (
-                  <button key={b} type="button" role="radio" aria-checked={backing === b} onClick={() => setBacking(b)} disabled={phase === 'singing'}
-                    className={clsx('rounded-full px-3 py-1.5', backing === b ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
-                    {b === 'karaoke' ? 'Karaoke version' : 'Original song'}
-                  </button>
-                ))}
-              </div>
-            )}
-            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
-              Music
-              <input type="range" min={0} max={1} step={0.05} value={music} onChange={(e) => setMusic(Number(e.target.value))} className="w-24" />
-            </label>
-            {guideVid && (
-              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
-                Guide vocal
-                <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-24" aria-label="Guide vocal volume" />
-              </label>
-            )}
-            {guideVid && (
-              <div className="flex items-center gap-1" role="group" aria-label="Guide timing">
-                <button type="button" onClick={() => nudge(-0.1, 'guide')} className="rounded-full bg-ink-800 px-2 py-1 text-xs font-bold" aria-label="Guide earlier">Guide −</button>
-                <button type="button" onClick={() => nudge(0.1, 'guide')} className="rounded-full bg-ink-800 px-2 py-1 text-xs font-bold" aria-label="Guide later">Guide +</button>
-              </div>
-            )}
-            {phase === 'singing' && mode === 'party' && voiceOn && <VoiceKnobs vol={voiceVol} setVol={setVoiceVol} echo={echo} setEcho={setEcho} />}
-            {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
-          </footer>
-
-          {phase === 'intro' && (
-            <div className="relative mx-auto mb-8 grid w-full max-w-4xl gap-3 px-4 text-sm md:grid-cols-2">
-              <VideoPicker label="Karaoke versions" list={karaokeList} idx={karaokeIdx} onPick={setKaraokeIdx} offsets={offsets} />
-              <VideoPicker label="Original recordings" list={originalList} idx={originalIdx} onPick={setOriginalIdx} offsets={offsets} />
-              <form className="flex gap-2 md:col-span-2" onSubmit={(e) => { e.preventDefault(); addPasted(); }}>
-                <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as StageVideo['kind'])} aria-label="Kind of video"
-                  className="rounded-full bg-ink-850 px-3 py-2 text-sm">
-                  <option value="karaoke">Karaoke version</option>
-                  <option value="original">Original song</option>
-                </select>
-                <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste a YouTube link"
-                  className="min-w-0 flex-1 rounded-full bg-ink-850 px-4 py-2 text-sm placeholder:text-ink-500" aria-label="YouTube link" />
-                <button type="submit" disabled={!videoIdFrom(paste)} className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950 disabled:opacity-40">Use video</button>
-              </form>
-            </div>
-          )}
-        </>
+      {showStage && (
+        <footer className="sticky bottom-0 z-10 mt-2 flex items-center justify-center gap-3 border-t border-ink-800/70 bg-ink-950/85 px-4 py-3 backdrop-blur md:px-6">
+          <button type="button" aria-label={playing ? 'Pause' : 'Play'} disabled={phase !== 'singing'}
+            onClick={() => (clock.current.isPlaying() ? clock.current.pause() : clock.current.play())}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50 text-ink-950 disabled:opacity-30">
+            {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="translate-x-0.5" />}
+          </button>
+          <button type="button" aria-label="Restart" disabled={phase !== 'singing'}
+            onClick={() => { frames.current = []; trail.current = []; host.resetTake(); clock.current.seekLyric(-mainOffset); clock.current.resetDrift(); clock.current.play(); }}
+            className="rounded-full bg-ink-800 p-3 disabled:opacity-30"><RotateCcw size={18} /></button>
+          <button type="button" aria-label="Finish and score" disabled={phase !== 'singing'} onClick={() => void finish()}
+            className="flex items-center gap-2 rounded-full bg-ink-800 px-4 py-3 text-sm font-bold disabled:opacity-30"><Square size={14} fill="currentColor" /> Finish</button>
+          {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
+        </footer>
       )}
     </div>
   );

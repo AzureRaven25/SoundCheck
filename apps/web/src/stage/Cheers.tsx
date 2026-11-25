@@ -62,12 +62,13 @@ export function LineCheers({ lines, getTime, rate }: { lines: StageLine[]; getTi
 }
 
 /** A burst of confetti (decorative, skipped for reduced motion). */
+const CONFETTI_COLORS = ['#ff3d9a', '#8b5cff', '#38e1ff', '#ffc94d', '#3ddc97', '#f6f4ff'];
 export function Confetti({ pieces = 90 }: { pieces?: number }) {
-  const colors = ['#ff3d9a', '#8b5cff', '#38e1ff', '#ffc94d', '#3ddc97', '#f6f4ff'];
+  const colors = CONFETTI_COLORS;
   const items = useMemo(() => Array.from({ length: pieces }, (_, i) => {
     const r = (k: number) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;   // stable pseudo-random
     return { left: r(1) * 100, delay: r(2) * 0.8, dur: 2.4 + r(3) * 1.8, dx: `${(r(4) - 0.5) * 240}px`, rot: `${360 + r(5) * 720}deg`, color: colors[i % colors.length]!, w: 6 + r(6) * 6, h: 10 + r(7) * 8 };
-  }), [pieces]);
+  }), [pieces, colors]);
   return (
     <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
       {items.map((p, i) => (

@@ -33,7 +33,7 @@ test('sing on Stage and get a SoundCheck Score', async ({ page }) => {
   });
   // the test song's first line starts at 2 s; lyrics are word-timed by the worker
   await expect(page.getByText('Hello')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole('img', { name: 'Melody guide' })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Voice visualiser/ })).toBeVisible();
   await expect(page.getByText(/On pitch \d+%/)).toBeVisible({ timeout: 15_000 });   // live HUD from the mic
   await page.waitForTimeout(4_000);
   console.log('E2E wipe', await page.evaluate(() => {

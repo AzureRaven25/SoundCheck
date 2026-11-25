@@ -4,7 +4,11 @@
  * without the lead vocal. Pure functions, tested in youtube_rank_test.ts.
  */
 export interface YtVideo { id: string; title: string; channel: string; durationS: number | null }
-export interface RankedVideo extends YtVideo { kind: 'original' | 'karaoke'; offsetGuessMs: number; quality: number }
+export interface RankedVideo extends YtVideo {
+  kind: 'original' | 'karaoke'; offsetGuessMs: number; quality: number;
+  /** an official instrumental of the same recording: plays in exact step with the original (ideal for the guide) */
+  sameMaster?: boolean;
+}
 
 const KARAOKE = /\b(karaoke|instrumental|backing track|sing ?along|no vocals?|without vocals?|minus one|off ?vocal)\b/i;
 const NOT_ORIGINAL = /\b(cover|live|remix|sped ?up|slowed|reverb|nightcore|reaction|8d|piano version|acoustic version|tutorial|lesson|8 ?bit)\b/i;
@@ -51,10 +55,19 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
     if (KARAOKE.test(v.title)) {
       if (NOT_KARAOKE.test(v.title)) continue;
       if (durDiff != null && (durDiff < -25 || durDiff > 45)) continue;
-      let q = match + (KARAOKE_CHANNELS.test(v.channel) ? 0.6 : 0) + (/karaoke/i.test(v.title) ? 0.3 : 0)
-        + (/lyrics?/i.test(v.title) ? 0.1 : 0) - (durDiff == null ? 0.2 : Math.abs(durDiff) / 60);
+      // Best: the artist's own instrumental (same master as the original, so the guide vocal stays in step, and no
+      // lyrics on screen competing with ours). Then backing tracks without on-screen lyrics, then lyric karaoke videos.
+      const official = /instrumental/i.test(v.title) && !/karaoke/i.test(v.title)
+        && (topic || titleMatch(v.channel, song.artist) >= 0.5);
+      const sameMaster = official && durDiff != null && Math.abs(durDiff) <= 2;
+      let q = match + (official ? 1.2 : 0) + (sameMaster ? 0.5 : 0) + (KARAOKE_CHANNELS.test(v.channel) ? 0.3 : 0)
+        + (/backing track|no vocals?|off ?vocal|minus one/i.test(v.title) ? 0.3 : 0)
+        - (/lyrics?|sing ?along/i.test(v.title) ? 0.35 : 0)
+        - (/guide (melody|vocal)|with melody|melody guide/i.test(v.title) && !/no guide/i.test(v.title) ? 0.4 : 0)
+        - (durDiff == null ? 0.2 : Math.abs(durDiff) / 60);
       if (/female key|male key|lower key|higher key|key of|[+-]\d ?(key|semitone)/i.test(v.title)) q -= 0.5;
-      karaoke.push({ ...v, kind: 'karaoke', quality: +q.toFixed(3), offsetGuessMs: offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
+      karaoke.push({ ...v, kind: 'karaoke', quality: +q.toFixed(3), sameMaster,
+                     offsetGuessMs: sameMaster ? 0 : offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
     } else {
       if (NOT_ORIGINAL.test(v.title) && !NOT_ORIGINAL.test(song.title)) continue;
       const artistHit = titleMatch(`${v.title} ${v.channel}`, song.artist) >= 0.5;

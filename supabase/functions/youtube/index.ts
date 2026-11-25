@@ -18,7 +18,7 @@ async function videosFor(trackId: string, key: string): Promise<{ songS: number 
   const { data: t } = await adminClient().from('tracks').select('id, title, artist_credit, duration_ms').eq('id', trackId).maybeSingle();
   if (!t) return 'missing';
   const songS = t.duration_ms ? Math.round(t.duration_ms / 1000) : null;
-  const stored = await storedVideos(trackId);
+  const stored = await storedVideos(t);
   if (stored) return { songS, ...stored };
   try {
     return { songS, ...(await searchAndStore(t, key, dailyUnits())) };

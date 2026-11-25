@@ -59,7 +59,7 @@ export async function searchAndStore(song: Song, key: string, limit: number, fet
   const songS = song.duration_ms ? Math.round(song.duration_ms / 1000) : null;
   const [orig, kar] = await Promise.all([
     search(`${song.artist_credit} ${song.title} audio`, key, limit, 8, fetcher),
-    search(`${song.artist_credit} ${song.title} karaoke`, key, limit, 8, fetcher),
+    search(`${song.artist_credit} ${song.title} instrumental karaoke`, key, limit, 8, fetcher),
   ]);
   const ids = [...new Set([...orig, ...kar].map((v) => v.id))];
   const details = ids.length ? await videoDetails(ids, key, limit, fetcher) : new Map<string, VideoDetails>();
@@ -79,14 +79,21 @@ export async function searchAndStore(song: Song, key: string, limit: number, fet
   return ranked;
 }
 
-/** Stored videos for a song, best first, in the shape the Stage expects. */
-export async function storedVideos(trackId: string): Promise<{ originals: RankedVideo[]; karaoke: RankedVideo[] } | null> {
+/**
+ * Stored videos for a song, best first, in the shape the Stage expects. Searched rows are re-ranked with the current
+ * rules (so ranking improvements apply to songs searched earlier); links singers shared come first.
+ */
+export async function storedVideos(song: Song): Promise<{ originals: RankedVideo[]; karaoke: RankedVideo[] } | null> {
   const { data } = await adminClient().from('song_videos')
-    .select('video_id, kind, title, channel, duration_s, quality, offset_guess_ms').eq('track_id', trackId).order('quality', { ascending: false });
+    .select('video_id, kind, title, channel, duration_s, quality, offset_guess_ms, source').eq('track_id', song.id).order('quality', { ascending: false });
   if (!data?.length) return null;
-  const toRanked = (r: typeof data[number]): RankedVideo => ({
+  const shared = (kind: string): RankedVideo[] => data.filter((r) => r.source === 'user' && r.kind === kind).map((r) => ({
     id: r.video_id, kind: r.kind as RankedVideo['kind'], title: r.title ?? 'Shared video', channel: r.channel ?? 'YouTube',
     durationS: r.duration_s, quality: r.quality, offsetGuessMs: r.offset_guess_ms,
-  });
-  return { originals: data.filter((r) => r.kind === 'original').map(toRanked), karaoke: data.filter((r) => r.kind === 'karaoke').map(toRanked) };
+  }));
+  const ranked = rankVideos(
+    data.filter((r) => r.source === 'search' && r.title).map((r) => ({ id: r.video_id, title: r.title!, channel: r.channel ?? '', durationS: r.duration_s })),
+    { title: song.title, artist: song.artist_credit, durationS: song.duration_ms ? Math.round(song.duration_ms / 1000) : null },
+  );
+  return { originals: [...shared('original'), ...ranked.originals], karaoke: [...shared('karaoke'), ...ranked.karaoke] };
 }

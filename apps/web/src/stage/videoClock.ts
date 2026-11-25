@@ -19,6 +19,11 @@ export class VideoClock {
   private anchor = { yt: 0, at: 0, playing: false };
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastSeek = 0;
+  /** recent corrective seeks of the guide (ms timestamps): many means this pair of videos doesn't line up */
+  private seeks: number[] = [];
+  /** guide volume 0–1, owned here so a correction can dip it without fighting the slider */
+  private guideVol = 0.25;
+  private dipped = false;
   /** Called when the main video starts, pauses or ends (so a party's phones can follow). */
   onState: ((s: 'playing' | 'paused' | 'ended') => void) | null = null;
   private lastState: number | null = null;
@@ -72,13 +77,28 @@ export class VideoClock {
       if (target < 0) { if (gs === PLAYING) g.pauseVideo(); return; }
       if (gs !== PLAYING && gs !== BUFFERING) g.playVideo();
       const drift = g.getCurrentTime() - target;
-      // seeking stutters, so allow a little drift and don't re-seek while the last seek is still settling
-      if (Math.abs(drift) > 0.2 && performance.now() - this.lastSeek > 1500) {
-        this.lastSeek = performance.now();
-        g.seekTo(target + 0.15, true);
+      // seeking stutters: allow a little drift, don't re-seek while the last seek settles, and fade the guide out
+      // across the jump so it's heard as a short gap rather than a glitch
+      if (Math.abs(drift) > 0.18 && performance.now() - this.lastSeek > 1500) {
+        const now = performance.now();
+        this.lastSeek = now;
+        this.seeks = [...this.seeks.filter((x) => now - x < 30_000), now];
+        if (this.guideVol > 0) { g.mute(); this.dipped = true; }
+        g.seekTo(target + 0.12, true);
+        setTimeout(() => { if (this.dipped) { this.dipped = false; this.applyGuideVolume(); } }, 450);
       }
     } catch { /* player not ready */ }
   }
+
+  setGuideVolume(v: number) { this.guideVol = v; if (!this.dipped) this.applyGuideVolume(); }
+  private applyGuideVolume() {
+    const g = this.guide;
+    if (!g?.setVolume) return;
+    try { if (this.guideVol <= 0) g.mute(); else { g.unMute(); g.setVolume(Math.round(this.guideVol * 100)); } } catch { /* not ready */ }
+  }
+  /** Corrections in the last 30 s: 3+ means the two videos have different timing (a re-recorded karaoke track). */
+  driftCorrections(): number { const now = performance.now(); return this.seeks.filter((x) => now - x < 30_000).length; }
+  resetDrift() { this.seeks = []; }
 
   play() { this.main?.playVideo(); }
   pause() { this.main?.pauseVideo(); this.guide?.pauseVideo(); }
