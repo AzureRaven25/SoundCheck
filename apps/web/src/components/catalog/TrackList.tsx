@@ -41,8 +41,15 @@ function RowMenu({ t, onClose }: { t: TrackItem; onClose: () => void }) {
   const addToQueue = usePlayer((s) => s.addToQueue);
   const { userId, playlists, addToPlaylist } = useLibrary();
   const item = 'flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-700';
+  const [note, setNote] = useState<string | null>(null);
+  const add = async (id: string, title: string) => {
+    const r = await addToPlaylist(id, t.id);
+    setNote(r === 'added' ? `Added to ${title}` : r === 'exists' ? `Already in ${title}` : 'Couldn’t add it. Try again.');
+    setTimeout(onClose, 1200);
+  };
   return (
     <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md bg-ink-800 py-1 shadow-lift" onMouseLeave={onClose}>
+      {note && <p role="status" className="px-3 py-2 text-sm font-bold text-success-400">{note}</p>}
       <button role="menuitem" type="button" className={item} onClick={() => { playNext(toQueueTrack(t)); onClose(); }}>
         <ListStart size={16} /> Play next
       </button>
@@ -53,7 +60,7 @@ function RowMenu({ t, onClose }: { t: TrackItem; onClose: () => void }) {
         <div className="border-t border-ink-700 py-1">
           <p className="px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-ink-500">Add to playlist</p>
           {playlists.slice(0, 8).map((p) => (
-            <button key={p.id} role="menuitem" type="button" className={item} onClick={async () => { await addToPlaylist(p.id, t.id); onClose(); }}>
+            <button key={p.id} role="menuitem" type="button" className={item} onClick={() => void add(p.id, p.title)}>
               <ListPlus size={16} /> <span className="truncate">{p.title}</span>
             </button>
           ))}

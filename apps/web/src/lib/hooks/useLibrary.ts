@@ -18,7 +18,8 @@ interface LibraryStore {
   toggleFavorite: (trackId: string) => Promise<boolean>;
   refreshPlaylists: () => Promise<void>;
   createPlaylist: (title: string) => Promise<string | null>;
-  addToPlaylist: (playlistId: string, trackId: string) => Promise<void>;
+  /** 'exists' when the song is already in that playlist (each song appears once) */
+  addToPlaylist: (playlistId: string, trackId: string) => Promise<'added' | 'exists' | 'error'>;
 }
 
 /** The signed-in user's favorites + playlists, shared by every component that shows a heart or a playlist menu. */
@@ -77,6 +78,10 @@ export const useLibrary = create<LibraryStore>((set, get) => ({
     const sb = supabaseBrowser();
     const { data: last } = await sb.from('playlist_tracks').select('position').eq('playlist_id', playlistId)
       .order('position', { ascending: false }).limit(1).maybeSingle();
-    await sb.from('playlist_tracks').insert({ playlist_id: playlistId, track_id: trackId, position: (last?.position ?? 0) + 1 });
+    const { count } = await sb.from('playlist_tracks').select('id', { count: 'exact', head: true }).eq('playlist_id', playlistId).eq('track_id', trackId);
+    if (count) return 'exists';
+    const { error } = await sb.from('playlist_tracks').insert({ playlist_id: playlistId, track_id: trackId, position: (last?.position ?? 0) + 1 });
+    if (error) return error.code === '23505' ? 'exists' : 'error';   // unique (playlist, song): added twice at once
+    return 'added';
   },
 }));

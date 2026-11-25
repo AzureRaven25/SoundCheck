@@ -52,7 +52,7 @@ export function SongListImport() {
       const { data: pl } = await sb.from('playlists').insert({ title: name.slice(0, 100) || 'Imported playlist', description: 'Imported from a song list' }).select('id').single();
       if (pl) {
         playlistId = pl.id;
-        await sb.from('playlist_tracks').insert(found.map((track_id, n) => ({ playlist_id: pl.id, track_id, position: n + 1 })));
+        await sb.from('playlist_tracks').insert([...new Set(found)].map((track_id, n) => ({ playlist_id: pl.id, track_id, position: n + 1 })));
       }
     }
     setState({ done, total: wanted.length, matched: found.length, missing, playlistId });

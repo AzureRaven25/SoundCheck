@@ -137,3 +137,24 @@ test('listening history is recorded and shows as Recently played', async ({ page
   await expect(recent).toBeVisible({ timeout: 20_000 });
   await expect(recent).toContainText(title.slice(0, 15));
 });
+
+test('a song can be added to a playlist only once', async ({ page }) => {
+  test.setTimeout(90_000);
+  await signUp(page, 'Playlist Keeper');
+  await page.goto('/library?tab=playlists');
+  await page.getByRole('button', { name: 'New playlist' }).click();
+  await expect(page).toHaveURL(/\/playlist\//);
+  await page.goto('/search?q=stand%20by%20me');
+  const row = page.getByRole('row').filter({ hasText: 'Ben E. King' }).first();
+  for (const expected of ['Added to My Playlist #1', 'Already in My Playlist #1']) {
+    await row.hover();
+    await row.getByRole('button', { name: /More options for/ }).click();
+    await page.getByRole('menuitem', { name: 'My Playlist #1' }).click();
+    await expect(page.getByRole('status').filter({ hasText: expected })).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole('menu')).toHaveCount(0, { timeout: 5_000 });
+  }
+  await page.goto('/library?tab=playlists');
+  await page.getByRole('link', { name: /My Playlist #1/ }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Ben E. King' })).toHaveCount(1);
+});

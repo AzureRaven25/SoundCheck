@@ -230,7 +230,7 @@ export async function runImport(
       const { data: pl } = await sb.from('playlists').insert({ title: parsed.name.slice(0, 100) || 'Imported playlist', description: 'Imported playlist' }).select('id').single();
       if (pl) {
         playlistId = pl.id;
-        await sb.from('playlist_tracks').insert(ids.map((track_id, n) => ({ playlist_id: pl.id, track_id, position: n + 1 })));
+        await sb.from('playlist_tracks').insert([...new Set(ids)].map((track_id, n) => ({ playlist_id: pl.id, track_id, position: n + 1 })));
       }
     }
     results.push({ name: parsed.name, playlistId, matched: ids.length, total: parsed.entries.length });
