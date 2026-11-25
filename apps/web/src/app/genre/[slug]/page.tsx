@@ -27,7 +27,7 @@ export default async function GenrePage({ params }: PageProps<'/genre/[slug]'>) 
         <div className="relative">
           <Link href="/genre" className="text-xs font-bold uppercase tracking-widest text-white/80 hover:underline">Genres</Link>
           <h1 className="mt-2 font-display text-5xl font-extrabold tracking-tight text-white">{info.label}</h1>
-          <p className="mt-2 text-white/85">{total.toLocaleString()} full songs, free to play: openly licensed and independent recordings</p>
+          <p className="mt-2 text-white/85">{total.toLocaleString()} songs: the hits to sing along to, plus full-length independent recordings free to play</p>
           <div className="mt-5"><PlayButton tracks={tracks} size="lg" label={`Play ${info.label}`} /></div>
         </div>
       </header>
