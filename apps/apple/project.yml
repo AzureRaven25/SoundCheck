@@ -39,6 +39,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.soundcheck.tv
         TARGETED_DEVICE_FAMILY: "3"
+        ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
   SoundCheckMobile:
     type: application
     platform: iOS
@@ -68,6 +69,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.soundcheck.mobile
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   SoundCheckMobileUITests:
     type: bundle.ui-testing
     platform: iOS

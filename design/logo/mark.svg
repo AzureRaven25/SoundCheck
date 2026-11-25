@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="steel" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#eef3ff"/>
+      <stop offset="0.45" stop-color="#9fb6e3"/>
+      <stop offset="1" stop-color="#3f63a8"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#6f93d6"/>
+      <stop offset="1" stop-color="#2c4a8a"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2b477f"/>
+      <stop offset="0.5" stop-color="#5b80c6"/>
+      <stop offset="1" stop-color="#22396a"/>
+    </linearGradient>
+    <clipPath id="grille"><circle cx="0" cy="0" r="60"/></clipPath>
+  </defs>
+  <!-- the hub: a ring the S and the mic live in -->
+  <circle cx="256" cy="256" r="196" fill="none" stroke="url(#steel)" stroke-width="22"/>
+  <!-- the microphone, tilted -->
+  <g transform="translate(272 268) rotate(20)">
+    <path d="M-30 -48 L30 -48 L20 150 Q20 168 0 168 Q-20 168 -20 150 Z" fill="url(#body)"/>
+    <rect x="-10" y="20" width="20" height="44" rx="10" fill="#e8eefc" opacity="0.9"/>
+    <g transform="translate(0 -110)">
+      <circle r="66" fill="url(#head)"/>
+      <g clip-path="url(#grille)" stroke="#c9d7f3" stroke-width="5" opacity="0.55">
+        <path d="M-70 -40 H70 M-70 -20 H70 M-70 0 H70 M-70 20 H70 M-70 40 H70"/>
+        <path d="M-40 -70 V70 M-20 -70 V70 M0 -70 V70 M20 -70 V70 M40 -70 V70"/>
+      </g>
+      <circle r="66" fill="none" stroke="#dbe5fa" stroke-width="6"/>
+      <ellipse cx="-22" cy="-30" rx="22" ry="12" fill="#fff" opacity="0.35" transform="rotate(-30 -22 -30)"/>
+    </g>
+  </g>
+  <!-- the S: loops over the mic head and around its handle, ending in the cable -->
+  <path d="M318 104 C250 64 150 92 152 168 C154 236 262 238 312 280 C366 326 330 414 246 412 C196 410 176 388 172 368"
+        fill="none" stroke="url(#steel)" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="172" cy="368" r="12" fill="none" stroke="url(#steel)" stroke-width="8"/>
+</svg>

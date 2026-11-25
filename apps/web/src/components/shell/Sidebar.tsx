@@ -27,7 +27,8 @@ export function Sidebar({ user }: { user: User | null }) {
     <aside className="hidden w-64 flex-col gap-2 md:flex" aria-label="Primary">
       <nav className="rounded-xl bg-ink-900 p-4">
         <Link href="/" className="mb-5 flex items-center gap-2 px-2" aria-label="SoundCheck home">
-          <span className="stage-gradient flex h-8 w-8 items-center justify-center rounded-full text-sm font-black">S</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="" width={34} height={34} className="h-[34px] w-[34px]" />
           <span className="font-display text-xl font-bold tracking-tight">
             Sound<span className="text-pink-500">Check</span>
           </span>
