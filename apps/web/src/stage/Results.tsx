@@ -72,26 +72,29 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
   }, [scores, trackId]);
 
   const celebrate = !!scores?.some((s) => s.grade === 'S' || s.grade === 'A');
+  const solo = (scores?.length ?? 1) <= 1;
   return (
     <div className="mx-auto w-full max-w-5xl px-4" role="dialog" aria-label="Results">
       {celebrate && <Confetti />}
-      <h2 className="mb-8 text-center font-display text-5xl font-extrabold tracking-tight">SoundCheck Score</h2>
+      <h2 className="mb-4 text-center font-display text-3xl font-extrabold tracking-tight md:text-4xl">SoundCheck Score</h2>
       {error && <p role="alert" className="mb-6 text-center text-danger-400">{error}</p>}
+      {/* one singer on a wide screen: the card beside XP, badges, leaderboard and actions, so it all fits on screen */}
+      <div className={clsx(solo && 'md:mx-auto md:grid md:max-w-4xl md:grid-cols-[minmax(0,1fr)_20rem] md:items-start md:gap-6')}>
       {!scores ? (
         <p className="text-center text-ink-300">Scoring your performance…</p>
       ) : (
-        <div className={clsx('grid gap-6', scores.length > 1 ? 'md:grid-cols-2' : 'mx-auto max-w-md')}>
+        <div className={clsx('grid gap-6', scores.length > 1 ? 'md:grid-cols-2' : 'mx-auto w-full max-w-md')}>
           {scores.map((s, i) => (
-            <div key={`${s.name}-${i}`} className="rounded-2xl bg-ink-850/90 p-6 shadow-lift ring-1 ring-ink-700">
+            <div key={`${s.name}-${i}`} className="rounded-2xl bg-ink-850/90 p-5 shadow-lift ring-1 ring-ink-700">
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-lg font-bold" style={{ color: s.color }}>{s.name}</p>
                 <span className={clsx('animate-stamp rounded-xl bg-gradient-to-br px-4 py-1 font-display text-3xl font-black text-ink-950', GRADE_COLOR[s.grade])} style={{ animationDelay: '1.3s' }}>{s.grade}</span>
               </div>
-              <p className="mb-6 flex items-end gap-3 font-display text-8xl font-black tabular-nums tracking-tight">
+              <p className="mb-4 flex items-end gap-3 font-display text-6xl font-black tabular-nums tracking-tight md:text-7xl">
                 <CountUp to={s.score} />
-                {!!s.bonus && s.bonus >= 0.5 && <span className="mb-4 rounded-full bg-gold-400/15 px-3 py-1 text-base font-bold tracking-normal text-gold-400">+{s.bonus.toFixed(1)} bonus</span>}
+                {!!s.bonus && s.bonus >= 0.5 && <span className="mb-2 rounded-full bg-gold-400/15 px-3 py-1 text-base font-bold tracking-normal text-gold-400">+{s.bonus.toFixed(1)} bonus</span>}
               </p>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2.5">
                 <Bar label={s.mode === 'lyrics' ? 'Intonation' : 'Pitch'} value={s.pitch} /><Bar label="Timing" value={s.timing} />
                 <Bar label="Rhythm" value={s.rhythm} />
                 {s.duration != null && <Bar label={s.mode === 'lyrics' ? 'Lines sung' : 'Duration'} value={s.duration} />}
@@ -99,12 +102,13 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
                 <Bar label="Stability" value={s.stability} />
                 {s.expression != null && <Bar label="Expression" value={s.expression} />}
               </div>
-              <ul className="mt-6 space-y-1 text-sm text-ink-300">{s.feedback.map((f) => <li key={f}>• {f}</li>)}</ul>
+              <ul className="mt-4 space-y-1 text-sm text-ink-300">{s.feedback.map((f) => <li key={f}>• {f}</li>)}</ul>
             </div>
           ))}
         </div>
       )}
-      {xp > 0 && <p className="mx-auto mt-6 w-fit rounded-full bg-pink-500/15 px-4 py-1.5 text-sm font-bold text-pink-400" role="status">+{xp} XP</p>}
+      <div className={clsx(solo && 'md:[&>*:first-child]:mt-0')}>
+      {xp > 0 && <p className="mx-auto mt-4 w-fit rounded-full bg-pink-500/15 px-4 py-1.5 text-sm font-bold text-pink-400" role="status">+{xp} XP</p>}
       {group && (
         <div className="mx-auto mt-6 flex max-w-md items-center justify-between rounded-2xl bg-ink-850/90 p-5 ring-1 ring-pink-500/40" role="status" aria-label="Group score">
           <div><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Group score · {group.singers} singers</p><p className="font-display text-5xl font-black tabular-nums">{group.score}</p></div>
@@ -112,14 +116,14 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
         </div>
       )}
       {badges.length > 0 && (
-        <div className="mx-auto mt-6 flex max-w-xl flex-wrap justify-center gap-2" role="status" aria-label="New achievements">
+        <div className="mx-auto mt-4 flex max-w-xl flex-wrap justify-center gap-2" role="status" aria-label="New achievements">
           {badges.map((b) => (
             <span key={b.title} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-sm font-bold text-gold-400"><Trophy size={14} /> New badge: {b.title}</span>
           ))}
         </div>
       )}
       {board.length > 0 && (
-        <div className="mx-auto mt-8 max-w-md rounded-2xl bg-ink-850/70 p-5">
+        <div className="mx-auto mt-5 max-w-md rounded-2xl bg-ink-850/70 p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-ink-300"><Trophy size={16} /> Top singers on this song</p>
           <ol className="space-y-1 text-sm">
             {board.map((r) => (
@@ -128,10 +132,12 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
           </ol>
         </div>
       )}
-      <div className="mt-8 flex justify-center gap-4">
+      <div className="mt-6 flex flex-wrap justify-center gap-3 pb-2">
         <button type="button" onClick={onAgain} className="flex items-center gap-2 rounded-full bg-pink-500 px-6 py-3 font-bold text-ink-950 hover:scale-105"><RotateCcw size={18} /> Sing again</button>
         {scores?.[0] && <ShareScore trackId={trackId} score={scores[0].score} grade={scores[0].grade} />}
         <Link href={`/track/${trackId}`} className="rounded-full border border-ink-700 px-6 py-3 font-bold hover:border-ink-300">Back to song</Link>
+      </div>
+      </div>
       </div>
     </div>
   );

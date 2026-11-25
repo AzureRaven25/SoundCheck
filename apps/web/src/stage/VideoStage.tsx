@@ -357,12 +357,13 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   // YouTube asks for embedded players of at least 200×200 px
   const tile = 'h-[200px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-700/80';
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto [&>*]:shrink-0">
+    <div className="relative h-full overflow-hidden">
       {data.track.artworkUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={data.track.artworkUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />
       )}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-950/50 via-ink-950/80 to-ink-950" aria-hidden />
+      <div className="absolute inset-0 flex flex-col overflow-y-auto [&>*]:shrink-0">
 
       <header className="relative flex items-center gap-3 px-4 pt-4 md:px-6">
         <Link href={`/track/${data.track.id}`} aria-label="Leave Stage" className="rounded-full bg-ink-900/70 p-2 hover:bg-ink-800"><ArrowLeft size={20} /></Link>
@@ -378,8 +379,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       </header>
 
       {!showStage && (
-        <div className="relative flex flex-1 items-center py-8">
-          <div className="w-full">
+        <div className="relative flex flex-1 flex-col py-6">
+          <div className="my-auto w-full">
             <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError}
               onAgain={() => { setScores(null); setGroup(null); setScoreError(null); setPhase('intro'); }} />
             {mode === 'party' && nextUp && phase === 'results' && (
@@ -588,6 +589,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
         </footer>
       )}
+      </div>
     </div>
   );
 }

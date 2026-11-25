@@ -322,12 +322,13 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const partySingers = host.singers();
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
+    <div className="relative h-full overflow-hidden">
       {data.track.artworkUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={data.track.artworkUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-125 object-cover opacity-25 blur-3xl" />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/70 to-ink-950" aria-hidden />
+      <div className="absolute inset-0 flex flex-col overflow-y-auto [&>*]:shrink-0">
 
       <header className="relative flex items-center gap-4 px-6 pt-5">
         <Link href={`/track/${data.track.id}`} aria-label="Leave Stage" className="rounded-full bg-ink-900/70 p-2 hover:bg-ink-800"><ArrowLeft size={20} /></Link>
@@ -350,8 +351,8 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       </header>
 
       {phase === 'results' || phase === 'scoring' ? (
-        <div className="relative flex flex-1 items-center overflow-y-auto py-8">
-          <div className="w-full">
+        <div className="relative flex flex-1 flex-col py-6">
+          <div className="my-auto w-full">
             <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setGroup(null); setScoreError(null); setPhase('intro'); }} />
             {mode === 'party' && nextUp && phase === 'results' && (
               <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
@@ -497,6 +498,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
           </footer>
         </>
       )}
+      </div>
     </div>
   );
 }
