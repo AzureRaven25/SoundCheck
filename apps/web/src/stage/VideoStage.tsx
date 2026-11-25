@@ -20,6 +20,7 @@ import { VoiceReceiver } from '@/session/voice';
 import { startMic, type MicHandle } from './mic';
 import { PitchHud, type SingerTrail } from './PitchHud';
 import { Results, type ScoreView } from './Results';
+import { LyricsSyncer } from './LyricsSyncer';
 import { lineAt, StageLyrics } from './StageLyrics';
 import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
 import { VideoClock } from './videoClock';
@@ -84,6 +85,11 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const [offsets, setOffsets] = useState<Record<string, number>>(() => Object.fromEntries([...data.karaoke, ...data.originals].map((v) => [v.id, v.offset])));
   const [paste, setPaste] = useState('');
   const [pasteKind, setPasteKind] = useState<StageVideo['kind']>('karaoke');
+  const [lines, setLines] = useState(data.lyricsGranularity === 'plain' ? [] : data.lines);
+  const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
+  useEffect(() => { syncingRef.current = syncing; }, [syncing]);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
   const [ready, setReady] = useState({ main: false, guide: false });
   const mic = useRef<MicHandle | null>(null);
   const ctx = useRef<AudioContext | null>(null);
@@ -138,7 +144,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     clock.current.onState = (s) => {
       setPlaying(s === 'playing');
       publish(s);
-      if (s === 'playing') setPhase((p) => (p === 'intro' ? 'singing' : p));
+      if (s === 'playing' && !syncingRef.current) setPhase((p) => (p === 'intro' ? 'singing' : p));
     };
   }, [publish]);
   // keep phones' clocks honest (YouTube can buffer)
@@ -164,7 +170,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   /** "Tap on the first word": the nearest line (within 6 s) starts right now. */
   const tapSync = () => {
     if (!mainVid) return;
-    const sung = data.lines.filter((l) => l.start != null && l.text.trim());
+    const sung = lines.filter((l) => l.start != null && l.text.trim());
     const t = clock.current.lyricTime();
     const i = lineAt(sung, t);
     const cands = [sung[i], sung[i + 1]].filter(Boolean) as { start?: number }[];
@@ -233,7 +239,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     setPlaying(false);
     publish('ended');
     const sb = supabaseBrowser();
-    const scorable = data.lines.filter((l) => l.start != null).length >= 3;
+    const scorable = lines.filter((l) => l.start != null).length >= 3;
     if (!scorable) { setScoreError('This song has no synced lyrics, so it can’t be scored yet.'); setPhase('results'); return; }
     if (!data.signedIn) { setScoreError('Log in to get scored and appear on the leaderboard.'); setPhase('results'); return; }
     if (mode === 'party') {
@@ -315,10 +321,10 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const joinUrl = host.session ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${host.session.code}` : '';
   const partySingers = host.singers();
   const mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0;
-  const hasLyrics = data.lines.some((l) => l.start != null);
+  const hasLyrics = lines.some((l) => l.start != null);
 
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
+    <div className="relative flex h-full flex-col overflow-y-auto [&>*]:shrink-0">
       {data.track.artworkUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={data.track.artworkUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-25 blur-3xl" />
@@ -379,8 +385,18 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           <div className="relative mx-4 mt-3 h-16 overflow-hidden rounded-xl bg-ink-900/60 ring-1 ring-ink-800 md:mx-6" aria-hidden>
             <PitchHud notes={[]} keyShift={0} getTime={getTime} getTrails={getTrails} range={null} />
           </div>
-          <div className="relative flex min-h-[14rem] flex-1 items-center justify-center px-6">
-            {phase === 'intro' ? (
+          <div className="relative flex min-h-[14rem] flex-auto items-center justify-center px-6">
+            {phase === 'intro' && syncing ? (
+              <LyricsSyncer trackId={data.track.id} videoId={mainVid?.id ?? null} signedIn={data.signedIn}
+                initial={data.lyricsGranularity === 'plain' ? data.lines.map((l) => l.text).filter((t) => t.trim()) : []}
+                getTime={getTime} playFromTop={() => { clock.current.seekLyric(-mainOffset); clock.current.play(); }} pause={() => clock.current.pause()}
+                onCancel={() => setSyncing(false)}
+                onDone={(synced, applied) => {
+                  setLines(synced);
+                  setSyncing(false);
+                  setSyncNote(applied ? 'Thanks! These lyrics are now synced for everyone.' : 'Lyrics timed for this session.');
+                }} />
+            ) : phase === 'intro' ? (
               <div className="w-full max-w-3xl py-6 text-center">
                 <div role="radiogroup" aria-label="Microphones" className="mx-auto inline-flex rounded-full bg-ink-850 p-1">
                   {(['solo', 'party'] as const).map((m) => (
@@ -422,14 +438,24 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                 )}
                 {host.error && <p role="alert" className="mt-3 text-sm text-danger-400">{host.error}</p>}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
-                {!hasLyrics && <p className="mt-3 text-sm text-ink-300">No synced lyrics for this song yet, so you can sing along but it won’t be scored.</p>}
+                {syncNote && <p role="status" className="mt-3 text-sm text-success-400">{syncNote}</p>}
+                {!hasLyrics && (
+                  <div className="mt-4 rounded-xl bg-ink-850/80 p-3 text-sm text-ink-300">
+                    {data.lyricsGranularity === 'plain' ? 'This song’s lyrics aren’t timed yet.' : 'No lyrics found for this song yet.'} Without timed lyrics you can sing along, but it won’t be scored.
+                    <button type="button" disabled={!originalVid && !mainVid}
+                      onClick={() => { if (originalVid) setBacking('original'); setSyncing(true); }}
+                      className="ml-2 rounded-full bg-ink-50 px-3 py-1 text-xs font-bold text-ink-950 disabled:opacity-40">
+                      {data.lyricsGranularity === 'plain' ? 'Time them yourself' : 'Add and time them'}
+                    </button>
+                  </div>
+                )}
                 <button type="button" onClick={() => void start()} disabled={!mainVid || !ready.main || (mode === 'party' && !partySingers.some((s) => s.mic === 'ready'))}
                   className="stage-gradient mt-6 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
               </div>
             ) : (
-              <StageLyrics lines={data.lines} notes={[]} getTime={getTime} />
+              <StageLyrics lines={lines} notes={[]} getTime={getTime} />
             )}
           </div>
 

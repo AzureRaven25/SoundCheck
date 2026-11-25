@@ -19,8 +19,9 @@ test('Stage plays a pasted YouTube video with synced lyrics and saves the timing
   await expect(page.getByTestId('main-video').locator('iframe')).toBeVisible({ timeout: 30_000 });
   await page.getByLabel('Score me with this device’s microphone').uncheck();
   await page.getByRole('button', { name: 'Start singing' }).click({ timeout: 30_000 });
-  // the fixture's first line is at 2 s of the song
-  await expect(page.getByText('Hello from the testing stage')).toBeVisible({ timeout: 30_000 });
+  // the fixture's first line is at 2 s of the song (headless Chromium can't play the video: drive the clock)
+  await page.evaluate(() => { (window as unknown as { __soundcheckStage: { clock: { videoTime: () => number } } }).__soundcheckStage.clock.videoTime = () => 2.5; });
+  await expect(page.locator('[data-line="cur"]')).toHaveText('Hello from the testing stage', { timeout: 10_000 });
 
   await page.getByRole('button', { name: 'Lyrics later' }).click();
   await page.getByRole('button', { name: 'Lyrics later' }).click();
@@ -62,4 +63,37 @@ test('lyrics score: singing along to the lines is scored and stored', async () =
   expect(r.timing).toBeGreaterThan(0.8);
   const { data: perf } = await admin.from('performances').select('scoring_version, details').eq('id', r.performance_id).single();
   expect(perf!.scoring_version).toBe('lyrics-1.0.0');
+});
+
+test('no lyrics: paste them, tap along to time them, and they become the song’s synced lyrics', async ({ page }) => {
+  const { url, service } = env();
+  test.skip(!url || !service, 'set E2E_SB_URL / E2E_SB_SERVICE');
+  test.setTimeout(120_000);
+  const admin = createClient(url!, service!);
+  const id = crypto.randomUUID();
+  await admin.from('tracks').insert({ id, title: `Zzq Untimed Song ${Date.now()}`, artist_credit: 'Nobody Qqx', duration_ms: 183000 });
+  await signUp(page, 'Lyric Timer');
+  await page.goto(`/stage/${id}`);
+  await page.getByLabel('Kind of video').selectOption('original');
+  await page.getByLabel('YouTube link').fill('pKtLNYNWbBw');
+  await page.getByRole('button', { name: 'Use video' }).click();
+  await expect(page.getByTestId('main-video').locator('iframe')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Add and time them' }).click();
+  await page.getByRole('textbox', { name: 'Lyrics' }).fill('First line here\nSecond line here\nThird line here');
+  await page.getByRole('button', { name: 'Next: tap along' }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  const tap = page.getByRole('button', { name: 'Tap: this line starts now' });
+  // headless Chromium can't play YouTube's video, so drive the song clock through the dev-only Stage hook
+  for (const t of [3.2, 7.5, 12.25]) {
+    await page.evaluate((x) => { (window as unknown as { __soundcheckStage: { clock: { videoTime: () => number } } }).__soundcheckStage.clock.videoTime = () => x; }, t);
+    await tap.click();
+  }
+  await page.getByRole('button', { name: 'Save for everyone' }).click();
+  await expect(page.getByRole('status')).toContainText('synced for everyone');
+  const { data } = await admin.from('lyrics').select('provider, granularity, content').eq('track_id', id).eq('is_primary', true).single();
+  expect(data!.provider).toBe('manual');
+  const lines = (data!.content as { lines: { start: number; text: string }[] }).lines;
+  expect(lines.map((l) => l.text)).toEqual(['First line here', 'Second line here', 'Third line here']);
+  expect(lines.map((l) => l.start)).toEqual([3.2, 7.5, 12.25]);
+  await admin.from('tracks').delete().eq('id', id);
 });

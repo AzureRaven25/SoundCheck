@@ -663,6 +663,44 @@ export type Database = {
           },
         ]
       }
+      lyrics_submissions: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          status: string
+          track_id: string
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          id?: string
+          status?: string
+          track_id: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          status?: string
+          track_id?: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lyrics_submissions_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       performances: {
         Row: {
           created_at: string
@@ -1599,6 +1637,10 @@ export type Database = {
         Returns: undefined
       }
       shared_word_lyrics: { Args: { p_track_id: string }; Returns: Json }
+      submit_synced_lyrics: {
+        Args: { p_lines: Json; p_track_id: string; p_video_id?: string }
+        Returns: string
+      }
       track_availability: {
         Args: { p_ids: string[] }
         Returns: {

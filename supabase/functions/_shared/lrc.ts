@@ -74,3 +74,19 @@ export function parseLrc(lrc: string, songEnd?: number | null): ParsedLyrics {
 export function plainToContent(plain: string): { lines: { text: string }[] } {
   return { lines: plain.split(/\r?\n/).map((t) => ({ text: t.trim() })) };
 }
+
+/** Song title without versions and credits, for lyrics lookups: "Hey Jude - Remastered 2015" → "Hey Jude". */
+export function cleanTitle(title: string): string {
+  return title
+    .replace(/\s*[([](?:feat\.?|ft\.?|featuring|with)\s[^)\]]*[)\]]/gi, '')
+    .replace(/\s*[([][^)\]]*(?:remaster|version|edit|mix|mono|stereo|live|demo|acoustic|deluxe|bonus|single|explicit|clean|from\s)[^)\]]*[)\]]/gi, '')
+    .replace(/\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|single version|radio edit|mono|stereo|live|bonus track|explicit|from\s).*$/i, '')
+    .replace(/\s+(?:feat\.?|ft\.?|featuring)\s.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim() || title.trim();
+}
+
+/** The first credited artist: "Calvin Harris feat. Rihanna" / "Simon & Garfunkel" (kept: no split on &) → main act. */
+export function primaryArtist(artist: string): string {
+  return artist.split(/\s+(?:feat\.?|ft\.?|featuring|with|x|vs\.?)\s+|\s*[,;/]\s*/i)[0]!.trim() || artist.trim();
+}
