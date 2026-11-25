@@ -446,6 +446,10 @@ verify_jwt = false
 [functions.youtube]
 verify_jwt = false
 
+# hourly pg_cron job; protected by the x-crawl-token header (YOUTUBE_CRAWL_TOKEN)
+[functions.youtube-crawl]
+verify_jwt = false
+
 [functions.apple-music]
 verify_jwt = false
 

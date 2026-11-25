@@ -323,6 +323,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     else { setOriginalList((l) => [pasted(id, 'original'), ...l.filter((v) => v.id !== id)]); setOriginalIdx(0); }
     setOffsets((o) => ({ ...o, [id]: o[id] ?? 0 }));
     setPaste('');
+    // share it so the next singer of this song gets it without a YouTube search
+    if (data.signedIn) void supabaseBrowser().rpc('share_song_video', { p_track_id: data.track.id, p_video_id: id, p_kind: pasteKind }).then(() => {});
   }
 
   const joinUrl = host.session ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${host.session.code}` : '';
@@ -375,7 +377,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
             <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black ring-1 ring-ink-800 lg:max-h-[46vh]" ref={mainEl} data-testid="main-video" />
           ) : (
             <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-ink-900/70 p-6 text-center text-ink-300 lg:max-h-[46vh]">
-              {data.configured ? 'No video found for this song. Paste a YouTube link below.' : 'Paste a YouTube link for this song below to sing along.'}
+              {data.quotaExhausted ? 'We’ve hit today’s YouTube search limit. Paste a YouTube link below (it’s saved for everyone), or try again tomorrow.'
+                : data.configured ? 'No video found for this song. Paste a YouTube link below.' : 'Paste a YouTube link for this song below to sing along.'}
             </div>
           )}
         </div>

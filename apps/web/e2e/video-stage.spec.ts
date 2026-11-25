@@ -33,6 +33,10 @@ test('Stage plays a pasted YouTube video with synced lyrics and saves the timing
     return (data as { video_id: string; offset_ms: number }[] | null)?.find((r) => r.video_id === 'pKtLNYNWbBw')?.offset_ms;
   }, { timeout: 10_000 }).toBe(500);
   await page.getByRole('button', { name: 'Pause' }).click();
+  // the pasted link is shared, so the next singer needs no YouTube search
+  const { data: shared } = await createClient(env().url!, env().service!).from('song_videos')
+    .select('kind, source').eq('track_id', FIXTURE_TRACK).eq('video_id', 'pKtLNYNWbBw').maybeSingle();
+  expect(shared).toEqual({ kind: 'original', source: 'user' });
 });
 
 test('lyrics score: singing along to the lines is scored and stored', async () => {

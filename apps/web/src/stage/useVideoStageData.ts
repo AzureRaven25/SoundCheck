@@ -21,6 +21,8 @@ export interface VideoStageData {
   karaoke: StageVideo[];
   /** false when the server has no YouTube key (people can still paste links) */
   configured: boolean;
+  /** today's YouTube search quota is used up and nobody has stored videos for this song yet */
+  quotaExhausted: boolean;
   signedIn: boolean;
 }
 
@@ -43,7 +45,7 @@ export function useVideoStageData(trackId: string): VideoStageLoad {
         if (!track) throw new Error('song not found');
         const [lyricsRes, vids, offs, art] = await Promise.all([
           sb.functions.invoke<{ granularity: VideoStageData['lyricsGranularity']; lines: StageLine[] }>('fetch-lyrics', { body: { track_id: trackId } }),
-          sb.functions.invoke<{ configured: boolean; originals?: Ranked[]; karaoke?: Ranked[] }>('youtube', { body: { track_id: trackId, action: 'stage' } }),
+          sb.functions.invoke<{ configured: boolean; originals?: Ranked[]; karaoke?: Ranked[]; quotaExhausted?: boolean }>('youtube', { body: { track_id: trackId, action: 'stage' } }),
           sb.rpc('video_offsets', { p_track_id: trackId }),
           track.album_id
             ? sb.from('artwork').select('source_url, storage_path').eq('entity_type', 'album').eq('entity_id', track.album_id).eq('is_primary', true).maybeSingle()
@@ -66,6 +68,7 @@ export function useVideoStageData(trackId: string): VideoStageLoad {
             originals: (vids.data?.originals ?? []).map(toVideo),
             karaoke: (vids.data?.karaoke ?? []).map(toVideo),
             configured: vids.data?.configured ?? false,
+            quotaExhausted: !!vids.data?.quotaExhausted,
             signedIn: !!user,
           },
         });

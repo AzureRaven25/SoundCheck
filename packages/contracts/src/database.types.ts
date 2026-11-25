@@ -1091,6 +1091,59 @@ export type Database = {
           },
         ]
       }
+      song_videos: {
+        Row: {
+          added_by: string | null
+          channel: string | null
+          created_at: string
+          duration_s: number | null
+          kind: string
+          offset_guess_ms: number
+          quality: number
+          refreshed_at: string | null
+          source: string
+          title: string | null
+          track_id: string
+          video_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          channel?: string | null
+          created_at?: string
+          duration_s?: number | null
+          kind: string
+          offset_guess_ms?: number
+          quality?: number
+          refreshed_at?: string | null
+          source: string
+          title?: string | null
+          track_id: string
+          video_id: string
+        }
+        Update: {
+          added_by?: string | null
+          channel?: string | null
+          created_at?: string
+          duration_s?: number | null
+          kind?: string
+          offset_guess_ms?: number
+          quality?: number
+          refreshed_at?: string | null
+          source?: string
+          title?: string | null
+          track_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_videos_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       track_artists: {
         Row: {
           artist_id: string
@@ -1636,6 +1689,10 @@ export type Database = {
         Args: { p_offset_ms: number; p_track_id: string; p_video_id: string }
         Returns: undefined
       }
+      share_song_video: {
+        Args: { p_kind: string; p_track_id: string; p_video_id: string }
+        Returns: undefined
+      }
       shared_word_lyrics: { Args: { p_track_id: string }; Returns: Json }
       submit_synced_lyrics: {
         Args: { p_lines: Json; p_track_id: string; p_video_id?: string }
@@ -1699,6 +1756,24 @@ export type Database = {
         Args: { p_job_id: string; p_progress: number; p_stage: string }
         Returns: undefined
       }
+      youtube_crawl_candidates: {
+        Args: { p_limit: number }
+        Returns: {
+          artist_credit: string
+          duration_ms: number
+          id: string
+          title: string
+        }[]
+      }
+      youtube_mark_searched: {
+        Args: { p_found: number; p_track_id: string }
+        Returns: undefined
+      }
+      youtube_quota_take: {
+        Args: { p_limit: number; p_units: number }
+        Returns: boolean
+      }
+      youtube_quota_today: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never

@@ -1,57 +1,38 @@
 /**
- * YouTube for listening (research.md §3): find the song's video for the official embedded player.
+ * YouTube for listening and singing (research.md §3): videos for YouTube's official embedded player.
  *
- *   POST { track_id }  → { configured: boolean, videos: [{ id, title, channel }] }
- *   POST { track_id, action: 'stage' } → { configured, songS, originals: RankedVideo[], karaoke: RankedVideo[] }
- *     videos to sing along to: the original (for the guide vocal) and karaoke versions (no lead vocal), each with its
- *     length and a first guess at where the lyrics start. Two searches + one videos.list (≈201 quota units), cached
- *     for 14 days per song.
+ *   POST { track_id }  → { configured, videos: [{ id, title, channel }] }   (originals, for listening)
+ *   POST { track_id, action: 'stage' } → { configured, songS, originals: RankedVideo[], karaoke: RankedVideo[], quotaExhausted? }
  *
- * Needs YOUTUBE_API_KEY (YouTube Data API v3, server-side). Without it, the apps let people paste a link
- * instead. Results are cached for 7 days (search costs 100 of the 10,000 daily quota units). Audio is never
- * separated or downloaded: YouTube's developer policies restrict that, so YouTube is listen-only.
+ * Reads the shared song_videos table first (filled ahead of time by the hourly youtube-crawl, and by links singers
+ * share); only a song nobody has looked up yet costs a search (2 searches + 1 details call ≈ 201 units, counted in
+ * the quota ledger). Needs YOUTUBE_API_KEY (server-side). Audio is never separated or downloaded: YouTube's
+ * developer policies restrict that, so YouTube is listen and sing-along only.
  */
-import { adminClient, cacheGet, cachePut, handle, json } from '../_shared/runtime.ts';
-import { isoSeconds, rankVideos, type YtVideo } from '../_shared/youtube_rank.ts';
+import { adminClient, handle, json } from '../_shared/runtime.ts';
+import { dailyUnits, QuotaExhausted, searchAndStore, storedVideos } from '../_shared/youtube_api.ts';
+import type { RankedVideo } from '../_shared/youtube_rank.ts';
 
-type Item = { id: { videoId: string } | string; snippet: { title: string; channelTitle: string } };
-
-async function search(q: string, key: string, max = 8): Promise<{ id: string; title: string; channel: string }[]> {
-  const params = new URLSearchParams({ part: 'snippet', type: 'video', videoEmbeddable: 'true', maxResults: String(max), q, key });
-  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
-  if (!r.ok) throw new Error(`youtube ${r.status}`);
-  const d = await r.json();
-  return (d.items ?? []).map((i: Item) => ({ id: typeof i.id === 'string' ? i.id : i.id.videoId, title: decodeEntities(i.snippet.title), channel: i.snippet.channelTitle }));
+/** Stored videos, or a live search when the song has none (null when the day's quota is used up). */
+async function videosFor(trackId: string, key: string): Promise<{ songS: number | null; originals: RankedVideo[]; karaoke: RankedVideo[] } | null | 'missing'> {
+  const { data: t } = await adminClient().from('tracks').select('id, title, artist_credit, duration_ms').eq('id', trackId).maybeSingle();
+  if (!t) return 'missing';
+  const songS = t.duration_ms ? Math.round(t.duration_ms / 1000) : null;
+  const stored = await storedVideos(trackId);
+  if (stored) return { songS, ...stored };
+  try {
+    return { songS, ...(await searchAndStore(t, key, dailyUnits())) };
+  } catch (e) {
+    if (e instanceof QuotaExhausted) return null;
+    throw e;
+  }
 }
-const decodeEntities = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 
 async function stage(trackId: string, key: string) {
-  const cacheKey = `stage:${trackId}`;
-  const cached = await cacheGet('youtube', cacheKey);
-  if (cached?.status === 'hit') return json({ configured: true, ...(cached.value as object) });
-  const { data: t } = await adminClient().from('tracks').select('title, artist_credit, duration_ms').eq('id', trackId).maybeSingle();
-  if (!t) return json({ error: 'song not found' }, 404);
-  const songS = t.duration_ms ? Math.round(t.duration_ms / 1000) : null;
-  const [orig, kar] = await Promise.all([
-    search(`${t.artist_credit} ${t.title} audio`, key),
-    search(`${t.artist_credit} ${t.title} karaoke`, key),
-  ]);
-  const all = [...orig, ...kar];
-  const durations = new Map<string, number | null>();
-  if (all.length) {
-    const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?${new URLSearchParams({ part: 'contentDetails,status', id: [...new Set(all.map((v) => v.id))].join(','), key })}`);
-    if (r.ok) {
-      for (const v of (await r.json()).items ?? []) {
-        if (v.status?.embeddable === false) continue;
-        durations.set(v.id, isoSeconds(v.contentDetails?.duration));
-      }
-    }
-  }
-  const videos: YtVideo[] = all.filter((v) => durations.has(v.id)).map((v) => ({ ...v, durationS: durations.get(v.id) ?? null }));
-  const ranked = rankVideos(videos, { title: t.title, artist: t.artist_credit, durationS: songS });
-  const value = { songS, ...ranked };
-  await cachePut('youtube', cacheKey, 'hit', value, 14 * 86400);
-  return json({ configured: true, ...value });
+  const v = await videosFor(trackId, key);
+  if (v === 'missing') return json({ error: 'song not found' }, 404);
+  if (!v) return json({ configured: true, songS: null, originals: [], karaoke: [], quotaExhausted: true });
+  return json({ configured: true, ...v });
 }
 
 Deno.serve((req) => handle(req, async (body) => {
@@ -61,26 +42,13 @@ Deno.serve((req) => handle(req, async (body) => {
   if (!key) return json({ configured: false, videos: [], originals: [], karaoke: [] });
   if (body.action === 'stage') return stage(trackId, key);
 
-  const cached = await cacheGet('youtube', trackId);
-  if (cached?.status === 'hit') return json({ configured: true, videos: cached.value });
-
-  const { data: t } = await adminClient().from('tracks').select('title, artist_credit').eq('id', trackId).maybeSingle();
-  if (!t) return json({ error: 'song not found' }, 404);
-  const params = new URLSearchParams({
-    part: 'snippet', type: 'video', videoEmbeddable: 'true', videoCategoryId: '10', maxResults: '3',
-    q: `${t.artist_credit} ${t.title}`, key,
-  });
-  const r = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
-  if (!r.ok) return json({ configured: true, videos: [], error: `youtube ${r.status}` }, 502);
-  const d = await r.json();
-  const videos = (d.items ?? []).map((i: { id: { videoId: string }; snippet: { title: string; channelTitle: string } }) => ({
-    id: i.id.videoId, title: i.snippet.title, channel: i.snippet.channelTitle,
-  }));
-  await cachePut('youtube', trackId, 'hit', videos, 7 * 86400);
+  const v = await videosFor(trackId, key);
+  if (v === 'missing') return json({ error: 'song not found' }, 404);
+  const videos = (v?.originals ?? []).map((o) => ({ id: o.id, title: o.title, channel: o.channel }));
   if (videos[0]) {
     await adminClient().from('track_sources').upsert({
       track_id: trackId, provider: 'youtube', external_id: videos[0].id, url: `https://www.youtube.com/watch?v=${videos[0].id}`, karaoke_ok: false,
     }, { onConflict: 'provider,external_id' });
   }
-  return json({ configured: true, videos });
+  return json({ configured: true, videos, ...(v ? {} : { quotaExhausted: true }) });
 }));
