@@ -43,7 +43,7 @@ Deno.test('rankVideos: the artist’s official instrumental beats lyric karaoke 
   assertEquals(r.karaoke[0]!.id, 'k3kkkkkkkkk');
   assertEquals(r.karaoke[0]!.sameMaster, true);
   assertEquals(r.karaoke[0]!.offsetGuessMs, 0);
-  assertEquals(r.karaoke.at(-1)!.id, 'k1kkkkkkkkk');   // guide melody + lyrics on screen: last
+  assertEquals(r.karaoke.at(-1)!.id, 'k4kkkkkkkkk');   // a generic backing-track upload ranks below real karaoke producers
 });
 
 Deno.test('rankVideos: another act’s Topic instrumental or a re-recording is not the official instrumental', () => {
@@ -66,4 +66,18 @@ Deno.test('rankVideos: a karaoke video of another artist’s version ranks below
     { id: 'c1ccccccccc', title: 'Carl Perkins - Blue Suede Shoes (Karaoke)', channel: 'Some Karaoke', durationS: 135 },
   ], { title: 'Blue Suede Shoes', artist: 'Carl Perkins', durationS: 135 });
   assertEquals(r.karaoke[0]!.id, 'c1ccccccccc');
+});
+
+Deno.test('rankVideos: real karaoke only: acoustic/guitar re-takes and versions that stop early are dropped', () => {
+  const song = { title: 'Man I Need', artist: 'Olivia Dean', durationS: 184 };
+  const r = rankVideos([
+    { id: 'g1ggggggggg', title: 'Olivia Dean - Man I Need (Acoustic Guitar Karaoke)', channel: 'Sam Backing Tracks', durationS: 186 },
+    { id: 's1sssssssss', title: 'Olivia Dean - Man I Need (Karaoke Version)', channel: 'Sing King', durationS: 189 },
+    { id: 'c1ccccccccc', title: 'Olivia Dean - Man I Need Karaoke', channel: 'Some Uploader', durationS: 168 },   // cut before the outro
+    { id: 'i1iiiiiiiii', title: 'Man I Need (Instrumental)', channel: 'beatsbyx', durationS: 184 },
+  ], song);
+  const ids = r.karaoke.map((v) => v.id);
+  assertEquals(ids[0], 's1sssssssss');
+  assertEquals(ids.includes('g1ggggggggg'), false);
+  assertEquals(ids.includes('c1ccccccccc'), false);
 });

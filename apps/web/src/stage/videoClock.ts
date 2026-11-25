@@ -26,6 +26,8 @@ export class VideoClock {
   private dipped = false;
   /** Called when the main video starts, pauses or ends (so a party's phones can follow). */
   onState: ((s: 'playing' | 'paused' | 'ended') => void) | null = null;
+  /** The backing video ended before the song did (a karaoke cut that drops the outro): the original took over. */
+  onHandoff: ((player: YTPlayer) => void) | null = null;
   private lastState: number | null = null;
 
   start() {
@@ -55,6 +57,7 @@ export class VideoClock {
     const predicted = this.videoTime();
     // re-anchor only on a real jump (seek, buffering, pause); small differences are API granularity
     if (!playing || !this.anchor.playing || Math.abs(predicted - yt) > 0.12) this.anchor = { yt, at: performance.now(), playing };
+    if (state === 0 && this.handoff()) return;
     if (state !== this.lastState) {
       this.lastState = state;
       if (state === PLAYING) this.onState?.('playing');
@@ -88,6 +91,26 @@ export class VideoClock {
         setTimeout(() => { if (this.dipped) { this.dipped = false; this.applyGuideVolume(); } }, 450);
       }
     } catch { /* player not ready */ }
+  }
+
+  /**
+   * When the backing ends but the original (guide) still has song left, keep going on the original so the singer
+   * reaches the real end (outros, ad-libs). Returns true when it took over.
+   */
+  private handoff(): boolean {
+    const g = this.guide;
+    if (!g?.getDuration) return false;
+    try {
+      const left = g.getDuration() - g.getCurrentTime();
+      if (!(left > 1.5)) return false;
+      this.main = g;
+      this.mainOffset = this.guideOffset;
+      this.guide = null;
+      this.anchor = { yt: g.getCurrentTime(), at: performance.now(), playing: true };
+      if (g.getPlayerState() !== PLAYING) g.playVideo();
+      this.onHandoff?.(g);
+      return true;
+    } catch { return false; }
   }
 
   setGuideVolume(v: number) { this.guideVol = v; if (!this.dipped) this.applyGuideVolume(); }

@@ -31,7 +31,7 @@ export function wordsOf(line: StageLine, next: StageLine | undefined, notes: Sta
 
 const Line = memo(function Line({ words, id }: { words: { text: string }[]; id: string }) {
   return (
-    <p data-line={id} className="font-display text-[clamp(2rem,5.2vw,4.75rem)] font-extrabold leading-tight tracking-tight">
+    <p data-line={id} className="font-display text-[clamp(1.75rem,min(4.6vw,7.5vh),4.75rem)] font-extrabold leading-tight tracking-tight">
       {words.map((w, i) => (
         <span key={i} data-w={i} className="stage-word">{w.text}{i < words.length - 1 ? ' ' : ''}</span>
       ))}
@@ -87,15 +87,15 @@ export function StageLyrics({ lines, notes, getTime }: { lines: StageLine[]; not
   const cur = idx >= 0 ? timed[idx] : null;
   const next = timed[idx + 1];
   return (
-    <div ref={box} className="flex min-h-[16rem] flex-col items-center justify-center text-center" aria-live="off">
-      <div className="mb-6 flex h-6 gap-4" aria-hidden>
+    <div ref={box} className="flex flex-col items-center justify-center text-center" aria-live="off">
+      <div className="mb-3 flex h-5 gap-4" aria-hidden>
         {countdown != null && [3, 2, 1].map((n) => (
           <span key={n} className={`h-5 w-5 rounded-full transition-colors ${countdown >= n ? 'bg-pink-500' : 'bg-ink-700'}`} />
         ))}
       </div>
       {cur ? <Line key={`c${idx}`} id="cur" words={cur} /> : <p className="font-display text-4xl font-bold text-ink-500">{idx < 0 ? 'Get ready…' : ''}</p>}
-      <div className="mt-8 min-h-[3.5rem] text-ink-500">
-        {next && <p className="font-display text-[clamp(1.25rem,3vw,2.6rem)] font-bold leading-tight">{next.map((w) => w.text).join(' ')}</p>}
+      <div className="mt-4 min-h-[2.5rem] text-ink-500">
+        {next && <p className="font-display text-[clamp(1.1rem,min(2.6vw,4.2vh),2.6rem)] font-bold leading-tight">{next.map((w) => w.text).join(' ')}</p>}
       </div>
     </div>
   );

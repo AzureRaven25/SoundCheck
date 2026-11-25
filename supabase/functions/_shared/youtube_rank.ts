@@ -13,6 +13,10 @@ export interface RankedVideo extends YtVideo {
 const KARAOKE = /\b(karaoke|instrumental|backing track|sing ?along|no vocals?|without vocals?|minus one|off ?vocal)\b/i;
 const NOT_ORIGINAL = /\b(cover|live|remix|sped ?up|slowed|reverb|nightcore|reaction|8d|piano version|acoustic version|tutorial|lesson|8 ?bit)\b/i;
 const NOT_KARAOKE = /\b(cover|live|remix|sped ?up|slowed|nightcore|reaction|tutorial|lesson|8d)\b/i;
+/** Re-arrangements, not the song as recorded: acoustic/piano/guitar takes, lo-fi, orchestral, etc. */
+const REARRANGED = /\b(acoustic|piano|guitar|unplugged|ukulele|lo-?fi|orchestral|strings|jazz|rock|reggae|bossa|lullaby|music box|8 ?bit|cello|violin|sax(ophone)?|harp|stripped|ballad|female|male|lower|higher|duet) (version|ver\.?|cover|karaoke|instrumental|backing)|\b(piano|guitar|acoustic) (karaoke|instrumental|backing)|backing tracks?\b.*\b(guitar|piano)\b/i;
+/** Karaoke producers who re-record songs faithfully to the original arrangement. */
+const KARAOKE_BRANDS = /sing king|karafun|karaoke version|stingray|zoom karaoke|party tyme|sunfly|singsnap|lucky voice|kj ?karaoke|zzang|musisi|edkara|global karaoke|singsong|karaoke hits|bellysings|peareoke|hdpopkaraoke|karaoke channel/i;
 const KARAOKE_CHANNELS = /sing king|karafun|karaoke version|stingray|zzang|musisi|singsong|sing2music|carpool|karaoke hits|global karaoke|edkara|songjam|kj/i;
 
 /** ISO-8601 duration from the YouTube API ("PT3M25S") to seconds. */
@@ -54,21 +58,24 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
     if (v.durationS != null && (v.durationS < 60 || v.durationS > 15 * 60)) continue;
     if (KARAOKE.test(v.title)) {
       if (NOT_KARAOKE.test(v.title)) continue;
-      if (durDiff != null && (durDiff < -25 || durDiff > 45)) continue;
+      // a real karaoke version: the song's own arrangement (no acoustic/piano re-takes) and the whole song (a
+      // version that stops early cuts off the singer, e.g. an outro); a little longer (title card) is fine
+      if (REARRANGED.test(`${v.title} ${v.channel}`) && !REARRANGED.test(song.title)) continue;
+      if (durDiff != null && (durDiff < -8 || durDiff > 45)) continue;
       // Best: the artist's own instrumental (same master as the original, so the guide vocal stays in step, and no
-      // lyrics on screen competing with ours). Then backing tracks without on-screen lyrics, then lyric karaoke videos.
-      // the artist's own channel (or their YouTube Music "Topic" channel), never someone else's, and not a re-recording
+      // lyrics on screen competing with ours). Then karaoke producers' faithful re-recordings; plain uploads last.
       const rerecorded = /re-?record|cover|tribute|in the style of|made famous|as made/i.test(v.title);
       const artistChannel = titleMatch(v.channel.replace(/ - Topic$/i, ''), song.artist) >= 0.5;
       const official = /instrumental/i.test(v.title) && !/karaoke/i.test(v.title) && !rerecorded
         && (artistChannel || /official instrumental/i.test(v.title));
       // same master: an official instrumental whose length matches the original to the second
       const sameMaster = official && durDiff != null && Math.abs(durDiff) <= 2;
-      let q = match + (official ? 1.2 : 0) + (sameMaster ? 0.5 : 0) + (KARAOKE_CHANNELS.test(v.channel) ? 0.3 : 0)
-        + (/backing track|no vocals?|off ?vocal|minus one/i.test(v.title) ? 0.3 : 0)
-        - (/lyrics?|sing ?along/i.test(v.title) ? 0.35 : 0)
+      const brand = KARAOKE_BRANDS.test(v.channel);
+      let q = match + (official ? 1.2 : 0) + (sameMaster ? 0.5 : 0) + (brand ? 0.6 : 0)
+        + (/karaoke/i.test(v.title) ? 0.2 : 0)
+        - (!official && !brand && !/karaoke/i.test(v.title) ? 0.5 : 0)          // a stray "instrumental" upload
         - (/guide (melody|vocal)|with melody|melody guide/i.test(v.title) && !/no guide/i.test(v.title) ? 0.4 : 0)
-        - (durDiff == null ? 0.2 : Math.abs(durDiff) / 60);
+        - (durDiff == null ? 0.2 : durDiff < -2 ? 0.6 : Math.abs(durDiff) / 60);  // shorter than the song: risky
       if (/female key|male key|lower key|higher key|key of|[+-]\d ?(key|semitone)/i.test(v.title)) q -= 0.5;
       // a karaoke video of someone else's version (same title, different artist)
       if (titleMatch(`${v.title} ${v.channel}`, song.artist) < 0.5) q -= 0.6;
