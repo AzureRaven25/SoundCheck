@@ -4,7 +4,8 @@ import clsx from 'clsx';
 import { Trophy } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useUser } from '@/lib/hooks/useUser';
-import { Avatar, SignInGate } from '@/components/social/SignInGate';
+import Link from 'next/link';
+import { Avatar } from '@/components/social/SignInGate';
 
 interface Row { rank: number; user_id: string; display_name: string; avatar_url: string | null; avg_best: number; tracks_sung: number }
 interface Stats { performances: number; tracks_sung: number; avg_score: number | null; best_score: number | null; avg_pitch: number | null; avg_timing: number | null; avg_rhythm: number | null; avg_stability: number | null; achievements: number; songs_sung?: number; minutes_sung?: number }
@@ -18,7 +19,8 @@ function Boards() {
     setRows(null);
     void supabaseBrowser().rpc('global_leaderboard', { p_scope: scope, p_limit: 50 }).then(({ data }) => setRows((data as Row[] | null) ?? []));
   }, [scope]);
-  useEffect(() => { void supabaseBrowser().rpc('my_stats').then(({ data }) => setStats((data as Stats[] | null)?.[0] ?? null)); }, []);
+  const signedIn = !!user && !user.is_anonymous;
+  useEffect(() => { if (!signedIn) return; void supabaseBrowser().rpc('my_stats').then(({ data }) => setStats((data as Stats[] | null)?.[0] ?? null)); }, [signedIn]);
   const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}`);
 
   return (
@@ -28,14 +30,23 @@ function Boards() {
           <h1 className="font-display text-4xl font-extrabold tracking-tight">Leaderboards</h1>
           <p className="mt-1 text-ink-300">Ranked by the average of each singer’s best score per song (3 songs or more).</p>
         </div>
-        <div role="tablist" aria-label="Leaderboard scope" className="inline-flex rounded-full bg-ink-850 p-1">
+        {signedIn && <div role="tablist" aria-label="Leaderboard scope" className="inline-flex rounded-full bg-ink-850 p-1">
           {(['global', 'friends'] as const).map((s) => (
             <button key={s} role="tab" type="button" aria-selected={scope === s} onClick={() => setScope(s)}
               className={clsx('rounded-full px-4 py-1.5 text-sm font-bold capitalize', scope === s ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>{s}</button>
           ))}
-        </div>
+        </div>}
       </header>
 
+      {!signedIn && user !== undefined && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ink-900 p-4" aria-label="Join the leaderboard">
+          <p className="text-sm text-ink-300">Sing 3 different songs on Stage to get ranked. Log in to see your stats and compete with friends.</p>
+          <span className="flex gap-2">
+            <Link href="/login?next=%2Fleaderboards" className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950">Log in</Link>
+            <Link href="/signup?next=%2Fleaderboards" className="rounded-full border border-ink-700 px-4 py-2 text-sm font-bold">Create a free account</Link>
+          </span>
+        </section>
+      )}
       {stats && (
         <section aria-label="Your stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[['Songs sung', stats.songs_sung ?? stats.performances], ['Best score', stats.best_score ?? '—'], ['Average', stats.avg_score == null ? '—' : Math.round(stats.avg_score)], ['Badges', stats.achievements],
@@ -72,6 +83,7 @@ function Boards() {
   );
 }
 
+/** Public: anyone can see the boards; your stats and the friends board need a login. */
 export default function LeaderboardsPage() {
-  return <SignInGate next="/leaderboards" what="leaderboards" title="Leaderboards" why="See the top singers and how your scores stack up. Log in to compete."><Boards /></SignInGate>;
+  return <Boards />;
 }

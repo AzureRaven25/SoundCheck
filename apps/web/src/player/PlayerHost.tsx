@@ -1,4 +1,5 @@
 'use client';
+import { persistPlayer } from './persist';
 import { useEffect, useRef, useState } from 'react';
 import { loadYouTubeApi, type YTPlayer } from './youtube';
 import { resolveAudio } from '@/lib/audio';
@@ -12,6 +13,7 @@ import { suggestAfter } from './autoplay';
  * and records listening history for signed-in users.
  */
 export function PlayerHost() {
+  useEffect(() => { persistPlayer(); }, []);   // restore the last queue (paused) and keep saving it
   const audio = useRef<HTMLAudioElement | null>(null);
   const track = useCurrentTrack();
   const playing = usePlayer((s) => s.playing);

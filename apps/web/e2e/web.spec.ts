@@ -72,6 +72,13 @@ test('player queues an album-style list and controls work', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Shuffle' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: /Repeat off/ }).click();
   await expect(page.getByRole('button', { name: 'Repeat all' })).toBeVisible();
+  // the queue survives a reload (paused, same song, same shuffle/repeat)
+  const title = await page.getByRole('contentinfo', { name: 'Player' }).getByRole('link').first().textContent();
+  await page.reload();
+  const player = page.getByRole('contentinfo', { name: 'Player' });
+  await expect(player.getByRole('link').first()).toHaveText(title!);
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Repeat all' })).toBeVisible();
 });
 
 // Needs a running worker (karaoke-pipeline worker) and E2E_SONG pointing at a sung test track
@@ -91,4 +98,12 @@ test('upload your copy → processed into karaoke tracks', async ({ page }) => {
   await page.getByLabel('Audio file').setInputFiles(process.env.E2E_SONG!);
   await expect(page.getByRole('status')).toContainText(/Queued|Separating|Mapping|Finding|Timing|Detecting|Saving|Fetching/);
   await expect(page.getByText(/Karaoke-ready: full-length playback/)).toBeVisible({ timeout: 200_000 });
+});
+
+test('leaderboards are public: visitors see the board and an invitation to compete', async ({ page }) => {
+  await page.goto('/leaderboards');
+  await expect(page.getByRole('heading', { level: 1, name: 'Leaderboards' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Join the leaderboard' })).toContainText('Sing 3 different songs');
+  await expect(page.getByRole('tab', { name: 'friends' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'global leaderboard' })).toBeVisible();
 });
