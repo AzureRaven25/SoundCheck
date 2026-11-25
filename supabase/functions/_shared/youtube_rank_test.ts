@@ -38,7 +38,7 @@ Deno.test('rankVideos: the artist’s official instrumental beats lyric karaoke 
     { id: 'k1kkkkkkkkk', title: 'Treat You Better - Shawn Mendes Karaoke 【With Guide Melody】 Instrumental', channel: 'EdKara', durationS: 187 },
     { id: 'k2kkkkkkkkk', title: 'Shawn Mendes - Treat You Better (Karaoke Version)', channel: 'Sing King', durationS: 190 },
     { id: 'k3kkkkkkkkk', title: 'Treat You Better (Instrumental)', channel: 'Shawn Mendes - Topic', durationS: 187 },
-    { id: 'k4kkkkkkkkk', title: 'Treat You Better - Backing Track (No Vocals)', channel: 'Backing Tracks', durationS: 189 },
+    { id: 'k4kkkkkkkkk', title: 'Shawn Mendes - Treat You Better - Backing Track (No Vocals)', channel: 'Backing Tracks', durationS: 189 },
   ], song);
   assertEquals(r.karaoke[0]!.id, 'k3kkkkkkkkk');
   assertEquals(r.karaoke[0]!.sameMaster, true);
