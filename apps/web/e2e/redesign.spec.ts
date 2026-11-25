@@ -81,7 +81,7 @@ test('genres: index with counts, genre page lists full songs', async ({ page }) 
   await expect(first).toContainText(/\d+ songs/);
   await first.click();
   await expect(page).toHaveURL(/\/genre\/[a-z-]+$/);
-  await expect(page.getByText(/Full songs, free to play: \d+/)).toBeVisible();
+  await expect(page.getByText(/[\d,]+ full songs, free to play/)).toBeVisible();
 });
 
 test('song list from another app becomes a playlist', async ({ page }) => {

@@ -10,11 +10,14 @@
  * own party; scores are therefore flagged with how they were captured, and global leaderboards can
  * later be restricted to verified captures.
  *
- * POST { track_id, session_id?, key_shift?, singers: [{ member_id?, frames: number[], latency_ms?, noise_floor_db? }] }
+ * POST { track_id, session_id?, key_shift?, mode?: 'melody' | 'lyrics', singers: [{ member_id?, frames: number[], latency_ms?, noise_floor_db? }] }
+ *
+ * mode 'lyrics' (or a song with no karaoke analysis): sung along to a video, scored against the song's synced lyrics
+ * (frames in lyrics time) instead of a reference melody.
  *   → { results: [{ member_id, user_id, performance_id, score, grade, pitch, timing, rhythm, stability, feedback }] }
  */
 import { adminClient, handle, json } from '../_shared/runtime.ts';
-import { grade, scorePerformance, SCORING_VERSION, type Phrase, type RefNote } from '../_shared/scoring.ts';
+import { grade, LYRICS_SCORING_VERSION, scoreLyrics, scorePerformance, SCORING_VERSION, type LyricLine, type Phrase, type RefNote, type ScoreResult } from '../_shared/scoring.ts';
 
 const MAX_FRAMES = 4 * 100 * 60 * 15; // 15 minutes of 10 ms frames
 
@@ -64,14 +67,22 @@ Deno.serve((req) =>
     type A = { id: string; notes: RefNote[]; phrases: Phrase[]; audio_assets: { owner_id: string | null } | null };
     const list = (analyses ?? []) as unknown as A[];
     const analysis = list.find((a) => a.audio_assets?.owner_id === user.id) ?? list.find((a) => a.audio_assets?.owner_id == null) ?? list[0];
-    if (!analysis) return json({ error: 'this song has no karaoke analysis yet' }, 409);
+    let lines: LyricLine[] = [];
+    const useLyrics = body.mode === 'lyrics' || !analysis;
+    if (useLyrics) {
+      const { data: ly } = await db.from('lyrics').select('granularity, content').eq('track_id', trackId).eq('is_primary', true).maybeSingle();
+      lines = ly && ly.granularity !== 'plain' ? ((ly.content as { lines?: LyricLine[] }).lines ?? []) : [];
+      if (lines.filter((l) => l.start != null).length < 3) return json({ error: 'this song has no synced lyrics to score against' }, 409);
+    }
 
     const results = [];
     for (const { memberId, userId, s } of resolved) {
-      const r = scorePerformance({
-        notes: analysis.notes, phrases: analysis.phrases, frames: s.frames, keyShift,
-        latencyMs: s.latency_ms ?? null, noiseFloorDb: s.noise_floor_db ?? null,
-      });
+      const r: ScoreResult = useLyrics
+        ? scoreLyrics({ lines, frames: s.frames, noiseFloorDb: s.noise_floor_db ?? null })
+        : scorePerformance({
+          notes: analysis!.notes, phrases: analysis!.phrases, frames: s.frames, keyShift,
+          latencyMs: s.latency_ms ?? null, noiseFloorDb: s.noise_floor_db ?? null,
+        });
       let tMin = Infinity, tMax = -Infinity;    // frames can arrive out of order: use the real span
       for (let i = 0; i < s.frames.length; i += 4) { tMin = Math.min(tMin, s.frames[i]!); tMax = Math.max(tMax, s.frames[i]!); }
       const durationMs = s.frames.length ? Math.round((tMax - tMin) * 1000) : 0;
@@ -79,13 +90,13 @@ Deno.serve((req) =>
         session_id: sessionId, member_id: memberId, user_id: userId, track_id: trackId, key_shift: keyShift,
         score: r.score, pitch_score: r.pitch, timing_score: r.timing, rhythm_score: r.rhythm, stability_score: r.stability,
         duration_score: r.duration, transition_score: r.transitions,
-        grade: r.grade, scoring_version: SCORING_VERSION, duration_ms: Math.max(0, durationMs),
-        details: { ...r.details, feedback: r.feedback, analysis_id: analysis.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id },
+        grade: r.grade, scoring_version: useLyrics ? LYRICS_SCORING_VERSION : SCORING_VERSION, duration_ms: Math.max(0, durationMs),
+        details: { ...r.details, feedback: r.feedback, expression: r.expression, bonus: r.bonus, analysis_id: useLyrics ? null : analysis!.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id },
       }).select('id').single();
       if (error) throw error;
       results.push({ member_id: memberId, user_id: userId, performance_id: perf.id, score: r.score, grade: r.grade,
                      pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, duration: r.duration, transitions: r.transitions,
-                     stability: r.stability, feedback: r.feedback });
+                     stability: r.stability, expression: r.expression, bonus: r.bonus, mode: useLyrics ? 'lyrics' : 'melody', feedback: r.feedback });
     }
     // group result for party songs: the average of everyone who sang (each person keeps their own score too)
     const group = results.length > 1

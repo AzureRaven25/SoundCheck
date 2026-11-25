@@ -210,6 +210,6 @@ describe('duration and rhythm categories (v1.1)', () => {
     const r = sing({});
     for (const k of ['pitch', 'timing', 'rhythm', 'duration', 'transitions', 'stability'] as const) expect(r[k]).toBeGreaterThanOrEqual(0), expect(r[k]).toBeLessThanOrEqual(1);
     expect(r.score).toBeGreaterThan(80);
-    expect(r.details.scoringVersion).toBe('1.1.0');
+    expect(r.details.scoringVersion).toBe('1.2.0');
   });
 });

@@ -18,6 +18,8 @@ import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
 import { Results, type ScoreView } from '@/stage/Results';
 import { StageLyrics } from '@/stage/StageLyrics';
 import { useStageData, type StageData } from '@/stage/useStageData';
+import { useVideoStageData } from '@/stage/useVideoStageData';
+import { VideoStage } from '@/stage/VideoStage';
 
 type Phase = 'intro' | 'loading' | 'calibrating' | 'singing' | 'scoring' | 'results';
 type Mode = 'solo' | 'party';
@@ -411,6 +413,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
                 )}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
                 {scoreError && <p role="alert" className="mt-3 text-sm text-danger-400">{scoreError}</p>}
+                <p className="mt-4 text-xs text-ink-500"><Link href={`/stage/${data.track.id}?video=1`} className="underline hover:text-ink-300">Sing with the YouTube video instead</Link></p>
                 <button type="button" onClick={() => void start()} disabled={mode === 'party' && !partySingers.some((s) => s.mic === 'ready')}
                   className="stage-gradient mt-8 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
@@ -477,19 +480,25 @@ function UpNext({ items, current }: { items: QueueItem[]; current: string }) {
 function StageRoute() {
   const { trackId } = useParams<{ trackId: string }>();
   const resume = useSearchParams().get('party');
+  const forceVideo = useSearchParams().get('video') === '1';
   const state = useStageData(trackId);
-  if (state.kind === 'ready') return <Stage data={state.data} resume={resume} />;
+  if (state.kind === 'ready' && !forceVideo) return <Stage data={state.data} resume={resume} />;
+  // no karaoke tracks (or asked for the video): sing along to YouTube with synced lyrics
+  if (forceVideo || state.kind === 'not-ready' || state.kind === 'signed-out') return <VideoStageRoute trackId={trackId} resume={resume} />;
   return (
     <div className="flex h-full items-center justify-center p-8 text-center">
       {state.kind === 'loading' && <p className="flex items-center gap-3 text-ink-300"><Loader2 className="animate-spin" /> Setting the stage…</p>}
-      {state.kind === 'signed-out' && <p>Please <Link className="underline" href={`/login?next=/stage/${trackId}`}>log in</Link> to sing.</p>}
-      {state.kind === 'not-ready' && (
-        <div>
-          <p className="font-display text-3xl font-bold">“{state.title}” isn’t karaoke-ready yet</p>
-          <p className="mt-2 text-ink-300">Upload your copy on the song page and we’ll build the karaoke tracks in a minute or two.</p>
-          <Link href={`/track/${trackId}`} className="mt-6 inline-block rounded-full bg-ink-50 px-6 py-3 font-bold text-ink-950">Go to the song</Link>
-        </div>
-      )}
+      {state.kind === 'error' && <p role="alert" className="text-danger-400">Couldn’t open Stage: {state.message}</p>}
+    </div>
+  );
+}
+
+function VideoStageRoute({ trackId, resume }: { trackId: string; resume: string | null }) {
+  const state = useVideoStageData(trackId);
+  if (state.kind === 'ready') return <VideoStage data={state.data} resume={resume} />;
+  return (
+    <div className="flex h-full items-center justify-center p-8 text-center">
+      {state.kind === 'loading' && <p className="flex items-center gap-3 text-ink-300"><Loader2 className="animate-spin" /> Finding the karaoke video…</p>}
       {state.kind === 'error' && <p role="alert" className="text-danger-400">Couldn’t open Stage: {state.message}</p>}
     </div>
   );

@@ -10,6 +10,7 @@ export interface YTPlayer {
   playVideo(): void; pauseVideo(): void; seekTo(s: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number; getDuration(): number; setVolume(v: number): void; mute(): void; unMute(): void;
   loadVideoById(id: string): void; destroy(): void;
+  getPlayerState(): number; getVolume(): number; isMuted(): boolean; cueVideoById(id: string): void;
 }
 declare global {
   interface Window {
@@ -29,6 +30,18 @@ export function loadYouTubeApi(): Promise<void> {
     document.head.appendChild(s);
   });
   return api;
+}
+
+/** The 11-character video id from a YouTube link (watch, youtu.be, shorts, embed, music.youtube) or a bare id. */
+export function videoIdFrom(input: string): string | null {
+  const s = input.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  try {
+    const u = new URL(s);
+    if (!/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname)) return null;
+    const id = u.hostname.endsWith('youtu.be') ? u.pathname.slice(1) : u.searchParams.get('v') ?? u.pathname.split('/').filter(Boolean).pop() ?? '';
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch { return null; }
 }
 
 // Links people pasted on song pages are remembered on this device (they never go to SoundCheck's database).

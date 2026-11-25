@@ -1290,6 +1290,38 @@ export type Database = {
         }
         Relationships: []
       }
+      video_sync: {
+        Row: {
+          offset_ms: number
+          track_id: string
+          updated_at: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          offset_ms: number
+          track_id: string
+          updated_at?: string
+          user_id?: string
+          video_id: string
+        }
+        Update: {
+          offset_ms?: number
+          track_id?: string
+          updated_at?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_sync_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       xp_events: {
         Row: {
           amount: number
@@ -1562,6 +1594,10 @@ export type Database = {
           track_id: string
         }[]
       }
+      set_video_offset: {
+        Args: { p_offset_ms: number; p_track_id: string; p_video_id: string }
+        Returns: undefined
+      }
       shared_word_lyrics: { Args: { p_track_id: string }; Returns: Json }
       track_availability: {
         Args: { p_ids: string[] }
@@ -1585,6 +1621,14 @@ export type Database = {
           rank: number
           score: number
           user_id: string
+        }[]
+      }
+      video_offsets: {
+        Args: { p_track_id: string }
+        Returns: {
+          offset_ms: number
+          video_id: string
+          votes: number
         }[]
       }
       worker_claim_jobs: {

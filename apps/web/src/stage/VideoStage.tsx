@@ -1,0 +1,536 @@
+'use client';
+/**
+ * SoundCheck Stage for any song with a YouTube video: synced lyrics over YouTube's own players. Backing is a
+ * karaoke version (no lead vocal) when one exists, with the original playing alongside at whatever volume the
+ * singer wants as a guide vocal; or the original alone. Singing is scored against the lyrics (no melody needed).
+ */
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import clsx from 'clsx';
+import { ArrowLeft, Hand, ListMusic, Mic, MicOff, Pause, Play, RotateCcw, SkipForward, Smartphone, Square, Users } from 'lucide-react';
+import { PROTOCOL_VERSION } from '@soundcheck/contracts';
+import { Artwork } from '@/components/ui/Artwork';
+import { supabaseBrowser } from '@/lib/supabase/client';
+import { loadYouTubeApi, videoIdFrom, type YTPlayer } from '@/player/youtube';
+import { useHostSession } from '@/session/useHostSession';
+import { queueChanged, useSessionQueue } from '@/session/queue';
+import { VoiceReceiver } from '@/session/voice';
+import { startMic, type MicHandle } from './mic';
+import { PitchHud, type SingerTrail } from './PitchHud';
+import { Results, type ScoreView } from './Results';
+import { lineAt, StageLyrics } from './StageLyrics';
+import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
+import { VideoClock } from './videoClock';
+
+type Phase = 'intro' | 'singing' | 'scoring' | 'results';
+type Mode = 'solo' | 'party';
+type Backing = 'karaoke' | 'original';
+const SOLO_COLOR = '#ffc94d';
+const midiOf = (f0: number) => 69 + 12 * Math.log2(f0 / 440);
+const fmtOffset = (s: number) => `${s >= 0 ? '+' : '−'}${Math.abs(s).toFixed(1)} s`;
+
+function pasted(id: string, kind: StageVideo['kind']): StageVideo {
+  return { id, title: 'Your link', channel: 'YouTube', durationS: null, kind, offset: 0, offsetSource: 'guess', votes: 0 };
+}
+
+/** A YouTube player in a div (YouTube's own visible player, never hidden or covered). */
+function usePlayer(videoId: string | null, onReady: (p: YTPlayer | null) => void) {
+  const el = useRef<HTMLDivElement | null>(null);
+  const cb = useRef(onReady);
+  useEffect(() => { cb.current = onReady; });
+  useEffect(() => {
+    if (!videoId || !el.current) { cb.current(null); return; }
+    let p: YTPlayer | null = null;
+    let dead = false;
+    const host = document.createElement('div');
+    el.current.replaceChildren(host);
+    void loadYouTubeApi().then(() => {
+      if (dead || !window.YT) return;
+      p = new window.YT.Player(host, {
+        videoId, width: '100%', height: '100%',
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, fs: 0 },
+        events: { onReady: () => { if (!dead) cb.current(p); } },
+      });
+    });
+    return () => { dead = true; cb.current(null); try { p?.destroy(); } catch { /* gone */ } };
+  }, [videoId]);
+  return el;
+}
+
+export function VideoStage({ data, resume }: { data: VideoStageData; resume: string | null }) {
+  const router = useRouter();
+  const clock = useRef(new VideoClock());
+  const [karaokeList, setKaraokeList] = useState(data.karaoke);
+  const [originalList, setOriginalList] = useState(data.originals);
+  const [karaokeIdx, setKaraokeIdx] = useState(0);
+  const [originalIdx, setOriginalIdx] = useState(0);
+  const karaokeVid = karaokeList[karaokeIdx] ?? null;
+  const originalVid = originalList[originalIdx] ?? null;
+  const [backing, setBacking] = useState<Backing>(data.karaoke.length ? 'karaoke' : 'original');
+  const mainVid = backing === 'karaoke' ? karaokeVid ?? originalVid : originalVid ?? karaokeVid;
+  const guideVid = backing === 'karaoke' && karaokeVid && originalVid ? originalVid : null;
+  const [guide, setGuide] = useState(0.25);
+  const [music, setMusic] = useState(1);
+  const [mode, setMode] = useState<Mode>(resume ? 'party' : 'solo');
+  const [phase, setPhase] = useState<Phase>('intro');
+  const [playing, setPlaying] = useState(false);
+  const [useMic, setUseMic] = useState(true);
+  const [micError, setMicError] = useState<string | null>(null);
+  const [scores, setScores] = useState<ScoreView[] | null>(null);
+  const [group, setGroup] = useState<{ score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null>(null);
+  const [scoreError, setScoreError] = useState<string | null>(null);
+  const [offsets, setOffsets] = useState<Record<string, number>>(() => Object.fromEntries([...data.karaoke, ...data.originals].map((v) => [v.id, v.offset])));
+  const [paste, setPaste] = useState('');
+  const [pasteKind, setPasteKind] = useState<StageVideo['kind']>('karaoke');
+  const [ready, setReady] = useState({ main: false, guide: false });
+  const mic = useRef<MicHandle | null>(null);
+  const ctx = useRef<AudioContext | null>(null);
+  const frames = useRef<number[]>([]);
+  const trail = useRef<[number, number | null][]>([]);
+  const noiseFloor = useRef<number | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const host = useHostSession(data.track.id, resume);
+  const hostRef = useRef(host);
+  useEffect(() => { hostRef.current = host; });
+  const queue = useSessionQueue(host.session?.id, host.queueVersion);
+  const nextUp = queue.items.find((q) => q.status === 'queued' && q.track_id !== data.track.id) ?? null;
+  const { open: openParty, session: partySession } = host;
+  useEffect(() => { if (resume && !partySession) void openParty(); }, [resume, partySession, openParty]);
+  const singerIds = () => hostRef.current.singers().filter((s) => s.mic === 'ready' || s.mic === 'live').map((s) => s.memberId);
+
+  const getTime = useCallback(() => clock.current.lyricTime(), []);
+  const { setPositionSource } = host;
+  useEffect(() => { setPositionSource(getTime); }, [setPositionSource, getTime]);
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    (window as unknown as { __soundcheckStage?: unknown }).__soundcheckStage = { position: getTime, playing: () => clock.current.isPlaying(), clock: clock.current };
+  }, [getTime]);
+
+  const publish = useCallback((state: 'playing' | 'paused' | 'ended') => {
+    if (mode === 'party') hostRef.current.publishTransport(state, clock.current.lyricTime(), 0, singerIds());
+  }, [mode]);
+
+  // players
+  const mainEl = usePlayer(mainVid?.id ?? null, (p) => { clock.current.main = p; setReady((r) => ({ ...r, main: !!p })); });
+  const guideEl = usePlayer(guideVid?.id ?? null, (p) => { clock.current.guide = p; setReady((r) => ({ ...r, guide: !!p })); });
+  useEffect(() => {
+    const c = clock.current;
+    c.start();
+    return () => c.stop();
+  }, []);
+  // offsets and volumes follow the chosen videos and sliders
+  useEffect(() => { clock.current.mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0; }, [mainVid, offsets]);
+  useEffect(() => { clock.current.guideOffset = guideVid ? offsets[guideVid.id] ?? 0 : 0; }, [guideVid, offsets]);
+  useEffect(() => { try { clock.current.main?.setVolume(Math.round(music * 100)); } catch { /* not ready */ } }, [music, ready.main]);
+  useEffect(() => {
+    try {
+      const g = clock.current.guide;
+      if (!g) return;
+      if (guide <= 0) g.mute(); else { g.unMute(); g.setVolume(Math.round(guide * 100)); }
+    } catch { /* not ready */ }
+  }, [guide, ready.guide]);
+
+  // the video's own controls can start or pause the song too
+  useEffect(() => {
+    clock.current.onState = (s) => {
+      setPlaying(s === 'playing');
+      publish(s);
+      if (s === 'playing') setPhase((p) => (p === 'intro' ? 'singing' : p));
+    };
+  }, [publish]);
+  // keep phones' clocks honest (YouTube can buffer)
+  useEffect(() => {
+    if (!playing || mode !== 'party') return;
+    const iv = setInterval(() => publish('playing'), 5000);
+    return () => clearInterval(iv);
+  }, [playing, mode, publish]);
+
+  const nudge = (delta: number, which: 'main' | 'guide' = 'main') => {
+    const v = which === 'main' ? mainVid : guideVid;
+    if (!v) return;
+    setOffsets((o) => {
+      const next = Math.round(((o[v.id] ?? 0) + delta) * 100) / 100;
+      if (data.signedIn) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => void saveVideoOffset(data.track.id, v.id, next), 1500);
+      }
+      return { ...o, [v.id]: next };
+    });
+    if (which === 'main' && clock.current.isPlaying()) setTimeout(() => publish('playing'), 50);
+  };
+  /** "Tap on the first word": the nearest line (within 6 s) starts right now. */
+  const tapSync = () => {
+    if (!mainVid) return;
+    const sung = data.lines.filter((l) => l.start != null && l.text.trim());
+    const t = clock.current.lyricTime();
+    const i = lineAt(sung, t);
+    const cands = [sung[i], sung[i + 1]].filter(Boolean) as { start?: number }[];
+    const best = cands.sort((a, b) => Math.abs(a.start! - t) - Math.abs(b.start! - t))[0];
+    if (!best || Math.abs(best.start! - t) > 6) return;
+    nudge(t - best.start!);   // lyrics clock was at t when the line actually began: move offset by the difference
+  };
+
+  async function start() {
+    const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
+    ctx.current = ac;
+    void ac.resume();
+    frames.current = [];
+    trail.current = [];
+    host.resetTake();
+    setScores(null); setScoreError(null);
+    // start the video inside the click, before any await
+    clock.current.seekLyric(-mainOffset);   // from the top of the video
+    clock.current.play();
+    setPhase('singing');
+    if (mode === 'solo' && useMic && !mic.current) {
+      try {
+        mic.current = await startMic((f) => {
+          const c = clock.current;
+          if (!c.isPlaying()) return;
+          const t = c.lyricTime() - (mic.current?.inputLatencyMs ?? 0) / 1000;
+          frames.current.push(+t.toFixed(3), f.f0, +f.conf.toFixed(3), +f.rmsDb.toFixed(1));
+          const voiced = f.f0 > 0 && f.conf >= 0.6 && (noiseFloor.current == null || f.rmsDb >= noiseFloor.current + 10);
+          trail.current.push([t, voiced ? midiOf(f.f0) : null]);
+          if (trail.current.length > 400) trail.current.splice(0, trail.current.length - 400);
+        }, ac);
+        // most videos open with an instrumental lead-in: measure the room's level during its first second
+        noiseFloor.current = await mic.current.calibrate(1000);
+      } catch (err) {
+        setMicError(err instanceof Error && err.name === 'NotAllowedError' ? 'Microphone access was blocked, so singing won’t be scored.' : 'No microphone available, so singing won’t be scored.');
+        setUseMic(false);
+      }
+    }
+  }
+  useEffect(() => () => { mic.current?.stop(); void ctx.current?.close(); }, []);
+
+  const getTrails = useCallback((): SingerTrail[] => {
+    if (mode === 'solo') return [{ id: 'me', color: SOLO_COLOR, points: trail.current }];
+    return hostRef.current.singers().map((s) => {
+      const f = hostRef.current.framesOf(s.memberId);
+      const pts: [number, number | null][] = [];
+      for (let i = Math.max(0, f.length - 4 * 300); i < f.length; i += 4) {
+        const voiced = f[i + 1]! > 0 && f[i + 2]! >= 0.6 && (s.noiseFloorDb == null || f[i + 3]! >= s.noiseFloorDb + 10);
+        pts.push([f[i]!, voiced ? midiOf(f[i + 1]!) : null]);
+      }
+      return { id: s.memberId, color: s.color, points: pts };
+    });
+  }, [mode]);
+
+  // the song ends with the video
+  const finishRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const c = clock.current;
+    const prev = c.onState;
+    c.onState = (s) => { prev?.(s); if (s === 'ended') finishRef.current(); };
+    return () => { c.onState = prev; };
+  });
+
+  async function finish() {
+    clock.current.pause();
+    setPlaying(false);
+    publish('ended');
+    const sb = supabaseBrowser();
+    const scorable = data.lines.filter((l) => l.start != null).length >= 3;
+    if (!scorable) { setScoreError('This song has no synced lyrics, so it can’t be scored yet.'); setPhase('results'); return; }
+    if (!data.signedIn) { setScoreError('Log in to get scored and appear on the leaderboard.'); setPhase('results'); return; }
+    if (mode === 'party') {
+      const singers = hostRef.current.singers().filter((s) => hostRef.current.framesOf(s.memberId).length >= 400);
+      if (!singers.length) { setScoreError('We didn’t hear any phones. Check that each singer turned their mic on.'); setPhase('results'); return; }
+      setPhase('scoring');
+      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[]; group: typeof group }>('score-performance', {
+        body: { track_id: data.track.id, session_id: hostRef.current.session!.id, mode: 'lyrics',
+                singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb })) },
+      });
+      if (error || !res) setScoreError('Scoring failed. Please try again.');
+      else {
+        const byId = new Map(singers.map((s) => [s.memberId, s]));
+        setScores(res.results.map((r) => ({ ...r, name: byId.get(r.member_id)?.name ?? 'Singer', color: byId.get(r.member_id)?.color ?? '#fff' })));
+        setGroup(res.group ?? null);
+        hostRef.current.sendResults({
+          type: 'results', v: PROTOCOL_VERSION, trackId: data.track.id,
+          performances: res.results.map((r) => ({ memberId: r.member_id, performanceId: r.performance_id, score: r.score, grade: r.grade,
+            pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, stability: r.stability, duration: r.duration ?? 0, transitions: r.transitions ?? 0, feedback: r.feedback })),
+          group: res.group ?? null,
+        });
+      }
+      setPhase('results');
+      return;
+    }
+    if (!useMic || frames.current.length < 100) {
+      setScoreError(useMic ? 'We didn’t capture enough singing to score.' : null);
+      setPhase('results');
+      return;
+    }
+    setPhase('scoring');
+    const { data: res, error } = await sb.functions.invoke<{ results: Omit<ScoreView, 'name' | 'color'>[] }>('score-performance', {
+      body: { track_id: data.track.id, mode: 'lyrics', singers: [{ frames: frames.current, latency_ms: 0, noise_floor_db: noiseFloor.current }] },
+    });
+    if (error || !res) setScoreError('Scoring failed. Please try again.');
+    else setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR })));
+    setPhase('results');
+  }
+  useEffect(() => { finishRef.current = () => { if (phase === 'singing') void finish(); }; });
+
+  async function singNext() {
+    const sid = host.session?.id;
+    if (!sid) return;
+    const { data: rows } = await supabaseBrowser().rpc('advance_queue', { p_session_id: sid });
+    host.send(queueChanged);
+    const next = (rows as { track_id: string }[] | null)?.[0];
+    if (next) router.push(`/stage/${next.track_id}?party=${sid}`);
+  }
+
+  // voice monitoring (phones' mics through these speakers), as on the melody Stage
+  const voice = useRef<VoiceReceiver | null>(null);
+  const [voiceOn, setVoiceOn] = useState(false);
+  function toggleVoice(on: boolean) {
+    const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
+    ctx.current = ac;
+    void ac.resume();
+    if (on) {
+      voice.current ??= new VoiceReceiver(ac, (ev) => hostRef.current.send(ev));
+      hostRef.current.setRtcHandler((ev) => void voice.current?.handle(ev));
+    } else {
+      voice.current?.close();
+      voice.current = null;
+      hostRef.current.setRtcHandler(null);
+    }
+    setVoiceOn(on);
+    hostRef.current.send({ type: 'voice', v: PROTOCOL_VERSION, enabled: on });
+  }
+  useEffect(() => () => voice.current?.close(), []);
+
+  function addPasted() {
+    const id = videoIdFrom(paste);
+    if (!id) return;
+    if (pasteKind === 'karaoke') { setKaraokeList((l) => [pasted(id, 'karaoke'), ...l.filter((v) => v.id !== id)]); setKaraokeIdx(0); setBacking('karaoke'); }
+    else { setOriginalList((l) => [pasted(id, 'original'), ...l.filter((v) => v.id !== id)]); setOriginalIdx(0); }
+    setOffsets((o) => ({ ...o, [id]: o[id] ?? 0 }));
+    setPaste('');
+  }
+
+  const joinUrl = host.session ? `${typeof window !== 'undefined' ? window.location.origin : ''}/join/${host.session.code}` : '';
+  const partySingers = host.singers();
+  const mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0;
+  const hasLyrics = data.lines.some((l) => l.start != null);
+
+  return (
+    <div className="relative flex h-full flex-col overflow-y-auto">
+      {data.track.artworkUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={data.track.artworkUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-25 blur-3xl" />
+      )}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/75 to-ink-950" aria-hidden />
+
+      <header className="relative flex items-center gap-4 px-4 pt-4 md:px-6">
+        <Link href={`/track/${data.track.id}`} aria-label="Leave Stage" className="rounded-full bg-ink-900/70 p-2 hover:bg-ink-800"><ArrowLeft size={20} /></Link>
+        <div className="w-12"><Artwork src={data.track.artworkUrl} title={data.track.title} resolve={false} sizes="48px" /></div>
+        <div className="min-w-0">
+          <p className="truncate font-display text-lg font-bold">{data.track.title}</p>
+          <p className="truncate text-sm text-ink-300">{data.track.artist}</p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-widest">
+          <span className="stage-gradient rounded-md px-3 py-1.5 text-white">{mode === 'party' ? 'SoundCheck Party' : 'SoundCheck Stage'}</span>
+          {host.session && <span className="rounded-md bg-ink-800 px-3 py-1.5">Code {host.session.code}</span>}
+          <span className="rounded-md bg-ink-800 px-3 py-1.5">{mainVid?.kind === 'karaoke' ? 'Karaoke video' : 'Original video'}</span>
+        </div>
+      </header>
+
+      {phase === 'results' || phase === 'scoring' ? (
+        <div className="relative flex flex-1 items-center py-8">
+          <div className="w-full">
+            <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError}
+              onAgain={() => { setScores(null); setGroup(null); setScoreError(null); setPhase('intro'); }} />
+            {mode === 'party' && nextUp && phase === 'results' && (
+              <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
+                <ListMusic className="text-pink-400" />
+                <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Up next</p><p className="truncate font-bold">{nextUp.title} <span className="font-normal text-ink-300">· {nextUp.artist_credit}</span></p></div>
+                <button type="button" onClick={() => void singNext()} className="flex items-center gap-2 rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950"><SkipForward size={16} /> Sing next</button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* The players stay mounted (and visible) through the whole song; results replace them only visually below. */}
+      <div className={clsx('relative mx-4 mt-4 gap-4 md:mx-6', phase === 'results' || phase === 'scoring' ? 'hidden' : 'flex flex-col lg:flex-row')}>
+        <div className="flex-1">
+          {mainVid ? (
+            <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black ring-1 ring-ink-800 lg:max-h-[46vh]" ref={mainEl} data-testid="main-video" />
+          ) : (
+            <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-ink-900/70 p-6 text-center text-ink-300 lg:max-h-[46vh]">
+              {data.configured ? 'No video found for this song. Paste a YouTube link below.' : 'Paste a YouTube link for this song below to sing along.'}
+            </div>
+          )}
+        </div>
+        {guideVid && (
+          <div className="w-full shrink-0 lg:w-[360px]">
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-ink-300">Guide vocal · original</p>
+            <div className="h-[203px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-800" ref={guideEl} data-testid="guide-video" />
+          </div>
+        )}
+      </div>
+
+      {phase !== 'results' && phase !== 'scoring' && (
+        <>
+          <div className="relative mx-4 mt-3 h-16 overflow-hidden rounded-xl bg-ink-900/60 ring-1 ring-ink-800 md:mx-6" aria-hidden>
+            <PitchHud notes={[]} keyShift={0} getTime={getTime} getTrails={getTrails} range={null} />
+          </div>
+          <div className="relative flex min-h-[14rem] flex-1 items-center justify-center px-6">
+            {phase === 'intro' ? (
+              <div className="w-full max-w-3xl py-6 text-center">
+                <div role="radiogroup" aria-label="Microphones" className="mx-auto inline-flex rounded-full bg-ink-850 p-1">
+                  {(['solo', 'party'] as const).map((m) => (
+                    <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
+                      className={clsx('flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold', mode === m ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
+                      {m === 'solo' ? <><Mic size={16} /> This device’s mic</> : <><Smartphone size={16} /> Phones as mics</>}
+                    </button>
+                  ))}
+                </div>
+                {mode === 'solo' ? (
+                  <label className="mt-4 flex items-center justify-center gap-3 text-sm">
+                    <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />
+                    Score me with this device’s microphone {hasLyrics ? '' : '(needs synced lyrics)'}
+                  </label>
+                ) : !host.session ? (
+                  <button type="button" onClick={() => void host.open()} className="mx-auto mt-4 flex items-center gap-2 rounded-full bg-ink-50 px-6 py-3 font-bold text-ink-950">
+                    <Users size={18} /> Open the party
+                  </button>
+                ) : (
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-left">
+                    <div className="rounded-2xl bg-white p-3"><QRCodeSVG value={joinUrl} size={140} aria-label={`QR code to join ${host.session.code}`} /></div>
+                    <div>
+                      <p className="text-sm text-ink-300">Scan, or open <b className="text-ink-50">{joinUrl.replace(/^https?:\/\//, '').replace(/\/join\/.*/, '/join')}</b> and enter</p>
+                      <p className="font-display text-5xl font-black tracking-[0.25em]" data-testid="pairing-code">{host.session.code}</p>
+                      <ul className="mt-2 space-y-1" aria-label="Singers">
+                        {partySingers.length === 0 && <li className="text-sm text-ink-500">Waiting for singers…</li>}
+                        {partySingers.map((s) => (
+                          <li key={s.memberId} className="flex items-center gap-2 text-sm">
+                            <span className="h-3 w-3 rounded-full" style={{ background: s.color }} /><b>{s.name}</b>
+                            <span className={clsx('text-xs', s.mic === 'ready' ? 'text-success-400' : 'text-ink-500')}>{s.mic === 'ready' ? 'mic ready' : 'mic off'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <label className="mt-2 flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={voiceOn} onChange={(e) => toggleVoice(e.target.checked)} /> Hear singers through the speakers
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {host.error && <p role="alert" className="mt-3 text-sm text-danger-400">{host.error}</p>}
+                {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
+                {!hasLyrics && <p className="mt-3 text-sm text-ink-300">No synced lyrics for this song yet, so you can sing along but it won’t be scored.</p>}
+                <button type="button" onClick={() => void start()} disabled={!mainVid || !ready.main || (mode === 'party' && !partySingers.some((s) => s.mic === 'ready'))}
+                  className="stage-gradient mt-6 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
+                  Start singing
+                </button>
+              </div>
+            ) : (
+              <StageLyrics lines={data.lines} notes={[]} getTime={getTime} />
+            )}
+          </div>
+
+          <footer className="relative flex flex-wrap items-center justify-center gap-3 px-4 pb-6 md:px-6">
+            <button type="button" aria-label={playing ? 'Pause' : 'Play'} disabled={phase !== 'singing'}
+              onClick={() => (clock.current.isPlaying() ? clock.current.pause() : clock.current.play())}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50 text-ink-950 disabled:opacity-30">
+              {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="translate-x-0.5" />}
+            </button>
+            <button type="button" aria-label="Restart" disabled={phase !== 'singing'}
+              onClick={() => { frames.current = []; trail.current = []; host.resetTake(); clock.current.seekLyric(-mainOffset); clock.current.play(); }}
+              className="rounded-full bg-ink-800 p-3 disabled:opacity-30"><RotateCcw size={18} /></button>
+            <button type="button" aria-label="Finish and score" disabled={phase !== 'singing'} onClick={() => void finish()}
+              className="flex items-center gap-2 rounded-full bg-ink-800 px-4 py-3 text-sm font-bold disabled:opacity-30"><Square size={14} fill="currentColor" /> Finish</button>
+            <div className="mx-1 h-8 w-px bg-ink-700" />
+
+            <div className="flex items-center gap-1.5" role="group" aria-label="Lyrics timing">
+              <span className="text-xs font-bold uppercase tracking-widest text-ink-300">Lyrics</span>
+              <button type="button" onClick={() => nudge(0.25)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold" aria-label="Lyrics later">Later</button>
+              <span className="w-14 text-center text-xs font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
+              <button type="button" onClick={() => nudge(-0.25)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold" aria-label="Lyrics earlier">Earlier</button>
+              <button type="button" onClick={tapSync} disabled={phase !== 'singing' || !hasLyrics}
+                className="flex items-center gap-1 rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold disabled:opacity-30" title="Tap the moment a line starts being sung">
+                <Hand size={14} /> Tap on a line
+              </button>
+            </div>
+            <div className="mx-1 h-8 w-px bg-ink-700" />
+
+            {karaokeVid && originalVid && (
+              <div role="radiogroup" aria-label="Backing track" className="inline-flex rounded-full bg-ink-850 p-1 text-xs font-bold">
+                {(['karaoke', 'original'] as const).map((b) => (
+                  <button key={b} type="button" role="radio" aria-checked={backing === b} onClick={() => setBacking(b)} disabled={phase === 'singing'}
+                    className={clsx('rounded-full px-3 py-1.5', backing === b ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
+                    {b === 'karaoke' ? 'Karaoke version' : 'Original song'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
+              Music
+              <input type="range" min={0} max={1} step={0.05} value={music} onChange={(e) => setMusic(Number(e.target.value))} className="w-24" />
+            </label>
+            {guideVid && (
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
+                Guide vocal
+                <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-24" aria-label="Guide vocal volume" />
+              </label>
+            )}
+            {guideVid && (
+              <div className="flex items-center gap-1" role="group" aria-label="Guide timing">
+                <button type="button" onClick={() => nudge(-0.1, 'guide')} className="rounded-full bg-ink-800 px-2 py-1 text-xs font-bold" aria-label="Guide earlier">Guide −</button>
+                <button type="button" onClick={() => nudge(0.1, 'guide')} className="rounded-full bg-ink-800 px-2 py-1 text-xs font-bold" aria-label="Guide later">Guide +</button>
+              </div>
+            )}
+            {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
+          </footer>
+
+          {phase === 'intro' && (
+            <div className="relative mx-auto mb-8 grid w-full max-w-4xl gap-3 px-4 text-sm md:grid-cols-2">
+              <VideoPicker label="Karaoke versions" list={karaokeList} idx={karaokeIdx} onPick={setKaraokeIdx} offsets={offsets} />
+              <VideoPicker label="Original recordings" list={originalList} idx={originalIdx} onPick={setOriginalIdx} offsets={offsets} />
+              <form className="flex gap-2 md:col-span-2" onSubmit={(e) => { e.preventDefault(); addPasted(); }}>
+                <select value={pasteKind} onChange={(e) => setPasteKind(e.target.value as StageVideo['kind'])} aria-label="Kind of video"
+                  className="rounded-full bg-ink-850 px-3 py-2 text-sm">
+                  <option value="karaoke">Karaoke version</option>
+                  <option value="original">Original song</option>
+                </select>
+                <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste a YouTube link"
+                  className="min-w-0 flex-1 rounded-full bg-ink-850 px-4 py-2 text-sm placeholder:text-ink-500" aria-label="YouTube link" />
+                <button type="submit" disabled={!videoIdFrom(paste)} className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950 disabled:opacity-40">Use video</button>
+              </form>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function VideoPicker({ label, list, idx, onPick, offsets }: { label: string; list: StageVideo[]; idx: number; onPick: (i: number) => void; offsets: Record<string, number> }) {
+  if (!list.length) return <div className="rounded-xl bg-ink-850/80 p-3"><p className="text-xs font-bold uppercase tracking-widest text-ink-300">{label}</p><p className="mt-1 text-ink-500">None found.</p></div>;
+  return (
+    <fieldset className="rounded-xl bg-ink-850/80 p-3">
+      <legend className="sr-only">{label}</legend>
+      <p className="text-xs font-bold uppercase tracking-widest text-ink-300">{label}</p>
+      <ul className="mt-1 space-y-1">
+        {list.map((v, i) => (
+          <li key={v.id}>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg p-1 hover:bg-ink-800">
+              <input type="radio" name={label} checked={i === idx} onChange={() => onPick(i)} className="mt-1" />
+              <span className="min-w-0">
+                <span className="block truncate font-bold">{v.title}</span>
+                <span className="block truncate text-xs text-ink-300">
+                  {v.channel}{v.durationS ? ` · ${Math.floor(v.durationS / 60)}:${String(Math.round(v.durationS % 60)).padStart(2, '0')}` : ''}
+                  {v.offsetSource === 'shared' ? ` · lyrics synced by ${v.votes} singer${v.votes === 1 ? '' : 's'}` : (offsets[v.id] ?? 0) ? ` · lyrics start ≈ ${fmtOffset(offsets[v.id]!)}` : ''}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
