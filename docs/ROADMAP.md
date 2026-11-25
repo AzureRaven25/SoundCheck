@@ -153,3 +153,29 @@ Next:
 - Native TV apps: a YouTube sing-along mode (tvOS has no YouTube embed, so it will likely need AirPlay or casting from the web).
 - Moderation for community-synced lyrics (flagging, a second opinion before replacing).
 - Leaderboards that separate melody scores from lyrics scores.
+
+## Feedback to address: YouTube sing-along Stage (2026-11-25, from testing "Treat You Better")
+
+1. **The guide vocal and the karaoke track drift out of sync, so the mix can sound off.**
+   - Cause: most karaoke videos are re-recordings, so their timing differs from the original, and the guide offset starts as a guess.
+   - Ideas:
+     - Prefer official instrumentals (same master recording as the original, so exact sync).
+     - Auto-estimate the guide offset from both videos' lengths and lyric-start offsets.
+     - A clearer "Guide −/+" nudge with live feedback, saved and shared like the lyric offsets.
+     - Mute the guide automatically when it can't be kept in sync.
+2. **Showing the karaoke video is confusing: its burned-in lyrics compete with ours.**
+   - YouTube's terms require any playing player to be visible (at least 200×200 px, not covered), so it can't be hidden completely.
+   - Ideas:
+     - Shrink the karaoke player to a small tile beside the guide.
+     - Rank karaoke videos with no on-screen lyrics ("instrumental", "backing track", "no lyrics") above lyric karaoke videos.
+     - Make our lyrics the clear focus.
+3. **The pitch strip is plain. Make it look cooler and more professional.**
+   - Ideas:
+     - A live waveform and level meter for the singer's mic, a spectrum or spectrogram (frequency and amplitude), a glow or trail on the pitch line, and note-name gridlines.
+     - In melody mode, notes lighting up when hit.
+     - All drawn from the mic only; the YouTube audio can't be analysed.
+4. **The overall Stage layout looks odd** (big video, thin strip, huge lyrics, crowded footer).
+   - Ideas:
+     - Rework the hierarchy: lyrics and the visualiser as the hero, the videos as compact tiles.
+     - A tidier control bar, grouped and collapsible.
+     - A proper TV/fullscreen layout and a phone-width layout.
