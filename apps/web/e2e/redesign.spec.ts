@@ -4,10 +4,22 @@ import { signUp } from './helpers';
 
 test('home: actions, genres and shelves', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Find the song.');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Sing anything.');
   await expect(page.getByRole('link', { name: /Start a party/ })).toHaveAttribute('href', '/sing');
   await expect(page.getByRole('navigation', { name: 'Genres' }).getByRole('link', { name: 'Jazz' })).toHaveAttribute('href', '/genre/jazz');
   await expect(page.getByRole('heading', { name: 'Karaoke classics' })).toBeVisible();
+  // the hero search goes straight to results; cards have a one-tap Sing button
+  await page.getByLabel('What do you want to sing?').fill('stand by me');
+  await page.getByRole('button', { name: 'Let’s sing' }).click();
+  await expect(page).toHaveURL(/\/search\?q=stand%20by%20me/);
+});
+
+test('song cards open Stage with one tap', async ({ page }) => {
+  await page.goto('/');
+  const sing = page.getByRole('button', { name: /^Sing / }).first();
+  await sing.focus();
+  await sing.click();
+  await expect(page).toHaveURL(/\/stage\//);
 });
 
 test('sing hub: host and join', async ({ page }) => {

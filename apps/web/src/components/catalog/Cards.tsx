@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Mic2, Pause, Play } from 'lucide-react';
 import clsx from 'clsx';
 import { Artwork } from '@/components/ui/Artwork';
@@ -50,6 +51,7 @@ function Badge({ kind }: { kind: CardBadge }) {
 
 export function TrackCard({ t, list, badge }: { t: TrackItem; list?: TrackItem[]; badge?: CardBadge }) {
   const playTracks = usePlayer((s) => s.playTracks);
+  const router = useRouter();
   return (
     <Link href={`/track/${t.id}`} className="group block rounded-xl p-2.5 transition-colors hover:bg-ink-800">
       <div className="relative mb-2.5 shadow-lift">
@@ -65,6 +67,11 @@ export function TrackCard({ t, list, badge }: { t: TrackItem; list?: TrackItem[]
         >
           <PlayButton tracks={[t]} label={`Play ${t.title}`} />
         </div>
+        <button type="button" aria-label={`Sing ${t.title}`}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/stage/${t.id}`); }}
+          className="stage-gradient absolute bottom-2 left-2 flex h-11 w-11 translate-y-2 items-center justify-center rounded-full text-white opacity-0 shadow-lift transition-all hover:scale-110 focus:translate-y-0 focus:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100">
+          <Mic2 size={18} aria-hidden />
+        </button>
       </div>
       <p className="truncate text-sm font-bold">{t.title}</p>
       <p className="truncate text-xs text-ink-300">{t.artist_credit}{t.release_year ? ` · ${t.release_year}` : ''}</p>

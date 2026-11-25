@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('home shows the hero and catalog shelves', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Find the song/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Sing anything/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Karaoke classics' })).toBeVisible();
   await expect(page.locator('a[href^="/track/"]').first()).toBeVisible();
 });

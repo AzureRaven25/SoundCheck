@@ -3,6 +3,7 @@ import { Mic2, PartyPopper, Search, Upload } from 'lucide-react';
 import { Shelf, TrackCard } from '@/components/catalog/Cards';
 import { RecentlyPlayed } from '@/components/catalog/RecentlyPlayed';
 import { ForYou } from '@/components/catalog/ForYou';
+import { Equalizer, FloatingNotes, HeroSearch } from '@/components/catalog/HeroSearch';
 import { getFullLengthTracks, getPopularTracks, getReadyToSing } from '@/lib/catalog';
 import { GENRE_INFO } from '@/lib/genres';
 
@@ -12,7 +13,8 @@ const GENRES = ['pop', 'rock', 'hip-hop', 'electronic', 'acoustic', 'jazz', 'sou
 
 const ACTIONS = [
   { href: '/sing', icon: PartyPopper, title: 'Start a party', text: 'TV on the big screen, phones as mics' },
-  { href: '/search', icon: Search, title: 'Find a song', text: 'A million songs to look up' },
+  { href: '/sing', icon: Mic2, title: 'Sing solo', text: 'Your laptop mic, scored live' },
+  { href: '/search', icon: Search, title: 'Browse songs', text: 'A million songs to look up' },
   { href: '/import', icon: Upload, title: 'Import your music', text: 'Folders, Bandcamp ZIPs, CD rips' },
 ];
 
@@ -27,24 +29,27 @@ export default async function HomePage() {
   return (
     <div className="pt-2">
       <section className="@container relative mb-8 overflow-hidden rounded-2xl">
-        <div className="stage-gradient absolute inset-0" aria-hidden />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(56,225,255,0.45),transparent_40%),radial-gradient(circle_at_10%_110%,rgba(255,201,77,0.35),transparent_45%)]" aria-hidden />
-        <div className="relative grid gap-6 p-6 @2xl:grid-cols-[1.4fr_1fr] @2xl:items-end @2xl:p-10">
+        <div className="party-gradient absolute inset-0 animate-gradient" aria-hidden />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(56,225,255,0.35),transparent_40%),radial-gradient(circle_at_10%_110%,rgba(7,6,12,0.55),transparent_55%)]" aria-hidden />
+        <FloatingNotes />
+        <div className="absolute inset-x-6 bottom-0 h-16 opacity-40 @2xl:inset-x-10" aria-hidden><Equalizer bars={48} /></div>
+        <div className="relative grid grid-cols-1 gap-6 p-5 pb-20 [&>*]:min-w-0 @4xl:grid-cols-[1.4fr_1fr] @4xl:items-end @2xl:p-10 @2xl:pb-20">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-black/20 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white/90">
               <Mic2 size={12} aria-hidden /> Karaoke night, anywhere
             </p>
-            <h1 className="mt-4 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-white @2xl:text-5xl @5xl:text-6xl">
-              Find the song.<br />Take the stage.
+            <h1 className="mt-4 font-display text-[2.6rem] font-extrabold leading-[1.02] tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.25)] @md:text-5xl @2xl:text-6xl @5xl:text-7xl">
+              Sing anything.
             </h1>
-            <p className="mt-4 max-w-md text-base text-white/85">
-              Thousands of full songs free to play, karaoke versions with the vocals pulled out, word-by-word lyrics, and
-              your phone as the mic.
+            <p className="mt-3 max-w-md text-base text-white/90">
+              Pick a song and we line up the karaoke video, lyrics in time with the music, and your phone as the mic. Then
+              we score you like a real karaoke box.
             </p>
+            <HeroSearch />
           </div>
-          <ul className="grid gap-2">
+          <ul className="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-1">
             {ACTIONS.map(({ href, icon: Icon, title, text }) => (
-              <li key={href}>
+              <li key={title}>
                 <Link href={href} className="group flex items-center gap-3 rounded-xl bg-black/25 p-3 backdrop-blur transition hover:bg-black/40">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-ink-950 transition group-hover:scale-105">
                     <Icon size={18} aria-hidden />

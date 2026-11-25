@@ -17,6 +17,7 @@ import { startMic, type MicHandle } from '@/stage/mic';
 import { PitchHud, type SingerTrail } from '@/stage/PitchHud';
 import { Results, type ScoreView } from '@/stage/Results';
 import { StageLyrics } from '@/stage/StageLyrics';
+import { LineCheers, rateLine } from '@/stage/Cheers';
 import { useStageData, type StageData } from '@/stage/useStageData';
 import { useVideoStageData } from '@/stage/useVideoStageData';
 import { VideoStage } from '@/stage/VideoStage';
@@ -432,7 +433,15 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
             ) : phase === 'calibrating' ? (
               <p className="text-xl text-ink-300" role="status">Stay quiet for a moment while we listen to the room…</p>
             ) : (
-              <StageLyrics lines={data.lines} notes={data.notes} getTime={getTime} />
+              <div className="relative w-full">
+                <LineCheers lines={data.lines} getTime={getTime} rate={(a, b) => {
+                  const ref = (t: number) => noteAt.current(t);
+                  if (mode === 'solo') return useMic ? rateLine(frames.current, a, b, noiseFloor.current, ref, keyShiftRef.current) : null;
+                  const rs = hostRef.current.singers().map((sg) => rateLine(hostRef.current.framesOf(sg.memberId), a, b, sg.noiseFloorDb ?? null, ref, keyShiftRef.current)).filter((r): r is number => r != null);
+                  return rs.length ? Math.max(...rs) : null;
+                }} />
+                <StageLyrics lines={data.lines} notes={data.notes} getTime={getTime} />
+              </div>
             )}
           </div>
           <footer className="relative flex flex-wrap items-center justify-center gap-3 px-6 pb-6">

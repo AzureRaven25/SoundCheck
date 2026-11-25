@@ -4,6 +4,7 @@ import { MonitorPlay, Smartphone } from 'lucide-react';
 import { MyKaraoke, SingRows } from '@/components/catalog/SingList';
 import { JoinCodeForm } from '@/components/catalog/JoinCodeForm';
 import { SurpriseMe } from '@/components/catalog/SurpriseMe';
+import { HeroSearch } from '@/components/catalog/HeroSearch';
 import { getReadyToSing } from '@/lib/catalog';
 
 export const metadata: Metadata = { title: 'Sing' };
@@ -19,8 +20,9 @@ export default async function SingPage() {
       </div>
       <p className="mt-2 max-w-2xl text-ink-300">
         Pick a song to open SoundCheck Stage. Put it on a TV or laptop for a party: everyone joins with their phone as the mic and
-        gets scored, or sing solo with this device&apos;s microphone.
+        gets scored, or sing solo with this device&apos;s microphone. Any song works: we find its karaoke video and line up the lyrics.
       </p>
+      <HeroSearch />
 
       <div className="mt-6 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl bg-ink-850 p-5">

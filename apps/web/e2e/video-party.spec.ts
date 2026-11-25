@@ -73,7 +73,9 @@ test('a phone sings along to a YouTube song: lyrics, tuner, voice on the TV, and
   await expect(phone.locator('[data-line="cur"]')).toHaveText('Hello from the testing stage', { timeout: 10_000 });
   await expect(phone.getByText(/^(A3|E4)$/)).toBeVisible({ timeout: 10_000 });   // the tuner hears the fake singer
 
-  await page.waitForTimeout(8_000);
+  // line 1 (2–8 s) was sung through: the TV cheers when line 2 starts
+  await expect(page.getByText(/^(Perfect|Great|Nice)!$/)).toBeAttached({ timeout: 15_000 });
+  await page.waitForTimeout(2_000);
   if (process.env.E2E_SHOTS) {
     await phone.screenshot({ path: `${process.env.E2E_SHOTS}/video-party-phone.png` });
     await page.screenshot({ path: `${process.env.E2E_SHOTS}/video-party-host.png` });

@@ -20,6 +20,7 @@ import { VoiceReceiver } from '@/session/voice';
 import { startMic, type MicHandle } from './mic';
 import { PitchHud, type SingerTrail } from './PitchHud';
 import { Results, type ScoreView } from './Results';
+import { LineCheers, rateLine } from './Cheers';
 import { LyricsSyncer } from './LyricsSyncer';
 import { lineAt, StageLyrics } from './StageLyrics';
 import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
@@ -462,7 +463,14 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                 </button>
               </div>
             ) : (
-              <StageLyrics lines={lines} notes={[]} getTime={getTime} />
+              <div className="relative w-full">
+                <LineCheers lines={lines} getTime={getTime} rate={(a, b) => {
+                  if (mode === 'solo') return useMic ? rateLine(frames.current, a, b, noiseFloor.current) : null;
+                  const rs = hostRef.current.singers().map((sg) => rateLine(hostRef.current.framesOf(sg.memberId), a, b, sg.noiseFloorDb ?? null)).filter((r): r is number => r != null);
+                  return rs.length ? Math.max(...rs) : null;
+                }} />
+                <StageLyrics lines={lines} notes={[]} getTime={getTime} />
+              </div>
             )}
           </div>
 

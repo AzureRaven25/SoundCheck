@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { RotateCcw, Share2, Trophy } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { Confetti } from './Cheers';
 
 export interface ScoreView {
   name: string;
@@ -12,6 +13,8 @@ export interface ScoreView {
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
   pitch: number; timing: number; rhythm: number; stability: number;
   duration?: number; transitions?: number;
+  /** v1.2: expression (vibrato, dynamics) and the bonus points it earned; mode says what the score judged */
+  expression?: number; bonus?: number; mode?: 'melody' | 'lyrics';
   feedback: string[];
   performance_id?: string | null;
 }
@@ -68,8 +71,10 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
       .then(({ data }) => setBoard((data as Row[] | null) ?? []));
   }, [scores, trackId]);
 
+  const celebrate = !!scores?.some((s) => s.grade === 'S' || s.grade === 'A');
   return (
     <div className="mx-auto w-full max-w-5xl px-4" role="dialog" aria-label="Results">
+      {celebrate && <Confetti />}
       <h2 className="mb-8 text-center font-display text-5xl font-extrabold tracking-tight">SoundCheck Score</h2>
       {error && <p role="alert" className="mb-6 text-center text-danger-400">{error}</p>}
       {!scores ? (
@@ -80,15 +85,19 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
             <div key={`${s.name}-${i}`} className="rounded-2xl bg-ink-850/90 p-6 shadow-lift ring-1 ring-ink-700">
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-lg font-bold" style={{ color: s.color }}>{s.name}</p>
-                <span className={clsx('rounded-xl bg-gradient-to-br px-4 py-1 font-display text-3xl font-black text-ink-950', GRADE_COLOR[s.grade])}>{s.grade}</span>
+                <span className={clsx('animate-stamp rounded-xl bg-gradient-to-br px-4 py-1 font-display text-3xl font-black text-ink-950', GRADE_COLOR[s.grade])} style={{ animationDelay: '1.3s' }}>{s.grade}</span>
               </div>
-              <p className="mb-6 font-display text-8xl font-black tabular-nums tracking-tight"><CountUp to={s.score} /></p>
+              <p className="mb-6 flex items-end gap-3 font-display text-8xl font-black tabular-nums tracking-tight">
+                <CountUp to={s.score} />
+                {!!s.bonus && s.bonus >= 0.5 && <span className="mb-4 rounded-full bg-gold-400/15 px-3 py-1 text-base font-bold tracking-normal text-gold-400">+{s.bonus.toFixed(1)} bonus</span>}
+              </p>
               <div className="space-y-3">
-                <Bar label="Pitch" value={s.pitch} /><Bar label="Timing" value={s.timing} />
+                <Bar label={s.mode === 'lyrics' ? 'Intonation' : 'Pitch'} value={s.pitch} /><Bar label="Timing" value={s.timing} />
                 <Bar label="Rhythm" value={s.rhythm} />
-                {s.duration != null && <Bar label="Duration" value={s.duration} />}
-                {s.transitions != null && <Bar label="Transitions" value={s.transitions} />}
+                {s.duration != null && <Bar label={s.mode === 'lyrics' ? 'Lines sung' : 'Duration'} value={s.duration} />}
+                {s.transitions != null && s.mode !== 'lyrics' && <Bar label="Transitions" value={s.transitions} />}
                 <Bar label="Stability" value={s.stability} />
+                {s.expression != null && <Bar label="Expression" value={s.expression} />}
               </div>
               <ul className="mt-6 space-y-1 text-sm text-ink-300">{s.feedback.map((f) => <li key={f}>• {f}</li>)}</ul>
             </div>
