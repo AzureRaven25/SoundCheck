@@ -9,6 +9,7 @@ import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { liveHit } from '@soundcheck/scoring';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { SingRecorder, voicedSeconds } from '@/stage/singHistory';
 import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
 import { VoiceReceiver } from '@/session/voice';
@@ -162,6 +163,15 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     if (mode === 'party') hostRef.current.publishTransport(state, pos, keyShiftRef.current, singerIds());
   }, [mode]);
 
+  // sing history: every solo take is recorded, scored or not
+  const singRec = useRef<SingRecorder | null>(null);
+  useEffect(() => {
+    if (phase !== 'singing') return;
+    const iv = setInterval(() => void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current)), 5_000);
+    return () => clearInterval(iv);
+  }, [phase]);
+  useEffect(() => () => { void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true); }, []);
+
   async function start() {
     // Everything that needs the click's user activation happens synchronously, first: create and
     // resume the one AudioContext shared by playback and the mic.
@@ -170,6 +180,8 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     void e.ctx.resume();
     setPhase('loading');
     try {
+      void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true);
+      singRec.current = mode === 'solo' ? new SingRecorder(data.track.id, 'melody', false) : null;
       frames.current = [];
       trail.current = [];
       hits.current = { hit: 0, total: 0 };
@@ -262,6 +274,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     e?.pause();
     setPlaying(false);
     publish('ended', e?.position() ?? 0);
+    void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true);
     const sb = supabaseBrowser();
     if (mode === 'party') {
       const singers = hostRef.current.singers().filter((s) => hostRef.current.framesOf(s.memberId).length >= 400);
@@ -307,7 +320,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       body: { track_id: data.track.id, key_shift: keyShift, singers: [{ frames: frames.current, latency_ms: 0, noise_floor_db: noiseFloor.current }] },
     });
     if (error || !res) setScoreError('Scoring failed. Please try again.');
-    else setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR })));
+    else { setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR }))); void singRec.current?.link((res.results[0] as { performance_id?: string } | undefined)?.performance_id); }
     setPhase('results');
   }
 

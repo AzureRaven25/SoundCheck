@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { ListMusic, Plus } from 'lucide-react';
 import { TrackList } from '@/components/catalog/TrackList';
+import { SungHistory } from '@/components/catalog/SungHistory';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { TRACK_SELECT, withArtworkClient, type Row } from '@/lib/track-mapping';
@@ -13,7 +14,8 @@ import type { TrackItem } from '@/lib/types';
 const TABS = [
   { id: 'favorites', label: 'Favorites' },
   { id: 'playlists', label: 'Playlists' },
-  { id: 'history', label: 'History' },
+  { id: 'history', label: 'Listened' },
+  { id: 'sung', label: 'Sung' },
   { id: 'music', label: 'Your music' },
 ] as const;
 
@@ -24,7 +26,7 @@ function LibraryInner() {
   const [tracks, setTracks] = useState<TrackItem[] | null>(null);
 
   useEffect(() => {
-    if (!userId || tab === 'playlists') return;
+    if (!userId || tab === 'playlists' || tab === 'sung') return;
     const sb = supabaseBrowser();
     setTracks(null);
     void (async () => {
@@ -49,7 +51,7 @@ function LibraryInner() {
   return (
     <div className="pt-4">
       <h1 className="mb-6 font-display text-4xl font-extrabold tracking-tight">Your Library</h1>
-      <div role="tablist" className="mb-8 flex gap-2">
+      <div role="tablist" className="mb-8 flex flex-wrap gap-2">
         {TABS.map((t) => (
           <Link
             key={t.id}
@@ -62,7 +64,7 @@ function LibraryInner() {
           </Link>
         ))}
       </div>
-      {tab === 'playlists' ? (
+      {tab === 'sung' ? (userId ? <SungHistory userId={userId} /> : <p className="text-ink-300">Loading…</p>) : tab === 'playlists' ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <button
             type="button"

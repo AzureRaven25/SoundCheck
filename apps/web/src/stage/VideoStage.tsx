@@ -13,6 +13,7 @@ import { AlertTriangle, ArrowLeft, Hand, ListMusic, Mic, MicOff, Pause, Play, Ro
 import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { SingRecorder, voicedSeconds } from './singHistory';
 import { loadYouTubeApi, videoIdFrom, type YTPlayer } from '@/player/youtube';
 import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue } from '@/session/queue';
@@ -209,6 +210,15 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     nudge(t - best.start!);   // lyrics clock was at t when the line actually began: move offset by the difference
   };
 
+  // sing history: every solo take is recorded (signed in), scored or not
+  const singRec = useRef<SingRecorder | null>(null);
+  useEffect(() => {
+    if (phase !== 'singing') return;
+    const iv = setInterval(() => void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current)), 5_000);
+    return () => clearInterval(iv);
+  }, [phase]);
+  useEffect(() => () => { void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true); }, []);
+
   async function start() {
     const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
     ctx.current = ac;
@@ -217,6 +227,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     trail.current = [];
     host.resetTake();
     setScores(null); setScoreError(null);
+    void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true);
+    singRec.current = mode === 'solo' && data.signedIn ? new SingRecorder(data.track.id, 'lyrics', false) : null;
     // start the video inside the click, before any await
     resetPlayers();
     clock.current.seekLyric(-mainOffset);   // from the top of the video
@@ -284,6 +296,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     clock.current.pause();
     setPlaying(false);
     publish('ended');
+    void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true);
     const sb = supabaseBrowser();
     const scorable = lines.filter((l) => l.start != null).length >= 3;
     if (!scorable) { setScoreError('This song has no synced lyrics, so it can’t be scored yet.'); setPhase('results'); return; }
@@ -321,7 +334,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       body: { track_id: data.track.id, mode: 'lyrics', singers: [{ frames: frames.current, latency_ms: 0, noise_floor_db: noiseFloor.current }] },
     });
     if (error || !res) setScoreError('Scoring failed. Please try again.');
-    else setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR })));
+    else { setScores(res.results.map((r) => ({ ...r, name: 'You', color: SOLO_COLOR }))); void singRec.current?.link(res.results[0]?.performance_id); }
     setPhase('results');
   }
   useEffect(() => { finishRef.current = () => { if (phase === 'singing') void finish(); }; });

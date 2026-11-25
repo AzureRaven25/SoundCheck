@@ -86,3 +86,36 @@ test('a phone sings along to a YouTube song: lyrics, tuner, voice on the TV, and
   await ctx.close();
   fs.rmSync(wav, { force: true });
 });
+
+test('sing history: a take is recorded even when you leave without finishing, and counts as a song sung', async ({ page }) => {
+  test.skip(!process.env.E2E_SB_URL, 'set E2E_SB_URL / E2E_SB_SERVICE');
+  test.setTimeout(120_000);
+  const wav = singingWav();
+  await fakeMicrophone(page, wav);
+  await signUp(page, 'History Singer');
+  await page.goto(`/stage/${FIXTURE_TRACK}?video=1`);
+  await page.getByLabel('Kind of video').selectOption('original');
+  await page.getByLabel('YouTube link').fill('pKtLNYNWbBw');
+  await page.getByRole('button', { name: 'Use video' }).click();
+  await expect(page.getByTestId('main-video').locator('iframe')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Start singing' }).click();
+  await page.waitForTimeout(1500);   // mic calibration
+  await page.evaluate(() => {
+    const c = (window as unknown as HostW).__soundcheckStage.clock as unknown as { videoTime: () => number; isPlaying: () => boolean };
+    const t0 = performance.now();
+    c.videoTime = () => 1 + (performance.now() - t0) / 1000;
+    c.isPlaying = () => true;
+    (window as unknown as { __fakeMicSing: (s: number) => void }).__fakeMicSing(0);
+  });
+  await page.waitForTimeout(24_000);
+  await page.getByRole('link', { name: 'Leave Stage' }).click();          // no Finish: still recorded
+  await page.waitForURL(/\/track\//);
+  await page.waitForTimeout(1_000);
+  await page.goto('/library?tab=sung');
+  const row = page.getByRole('list', { name: 'Songs you sang' }).getByRole('listitem').first();
+  await expect(row).toContainText('Testing Stage', { timeout: 15_000 });
+  await expect(row).toContainText('not scored');
+  await page.goto('/leaderboards');
+  await expect(page.getByRole('region', { name: 'Your stats' })).toContainText(/Songs sung\s*1/);
+  fs.rmSync(wav, { force: true });
+});

@@ -7,7 +7,7 @@ import { useUser } from '@/lib/hooks/useUser';
 import { Avatar, SignInGate } from '@/components/social/SignInGate';
 
 interface Row { rank: number; user_id: string; display_name: string; avatar_url: string | null; avg_best: number; tracks_sung: number }
-interface Stats { performances: number; tracks_sung: number; avg_score: number | null; best_score: number | null; avg_pitch: number | null; avg_timing: number | null; avg_rhythm: number | null; avg_stability: number | null; achievements: number }
+interface Stats { performances: number; tracks_sung: number; avg_score: number | null; best_score: number | null; avg_pitch: number | null; avg_timing: number | null; avg_rhythm: number | null; avg_stability: number | null; achievements: number; songs_sung?: number; minutes_sung?: number }
 
 function Boards() {
   const user = useUser();
@@ -38,7 +38,7 @@ function Boards() {
 
       {stats && (
         <section aria-label="Your stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[['Songs sung', stats.performances], ['Best score', stats.best_score ?? '—'], ['Average', stats.avg_score == null ? '—' : Math.round(stats.avg_score)], ['Badges', stats.achievements],
+          {[['Songs sung', stats.songs_sung ?? stats.performances], ['Best score', stats.best_score ?? '—'], ['Average', stats.avg_score == null ? '—' : Math.round(stats.avg_score)], ['Badges', stats.achievements],
             ['Pitch', pct(stats.avg_pitch)], ['Timing', pct(stats.avg_timing)], ['Rhythm', pct(stats.avg_rhythm)], ['Stability', pct(stats.avg_stability)]].map(([k, v]) => (
             <div key={k as string} className="rounded-xl bg-ink-900 p-4">
               <p className="text-xs font-bold uppercase tracking-widest text-ink-300">{k}</p>

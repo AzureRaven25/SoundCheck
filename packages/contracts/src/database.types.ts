@@ -1091,6 +1091,57 @@ export type Database = {
           },
         ]
       }
+      sing_sessions: {
+        Row: {
+          id: string
+          mode: string
+          party: boolean
+          performance_id: string | null
+          started_at: string
+          sung_seconds: number
+          track_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          mode: string
+          party?: boolean
+          performance_id?: string | null
+          started_at?: string
+          sung_seconds?: number
+          track_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          id?: string
+          mode?: string
+          party?: boolean
+          performance_id?: string | null
+          started_at?: string
+          sung_seconds?: number
+          track_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sing_sessions_performance_id_fkey"
+            columns: ["performance_id"]
+            isOneToOne: false
+            referencedRelation: "performances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sing_sessions_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       song_videos: {
         Row: {
           added_by: string | null
@@ -1591,7 +1642,9 @@ export type Database = {
           avg_stability: number
           avg_timing: number
           best_score: number
+          minutes_sung: number
           performances: number
+          songs_sung: number
           tracks_sung: number
         }[]
       }

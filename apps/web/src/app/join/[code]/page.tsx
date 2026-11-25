@@ -8,6 +8,7 @@ import {
   type ClockPongEvent, type LiveScoreEvent, type ResultsEvent, type SessionEvent, type TransportEvent,
 } from '@soundcheck/contracts';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { SingRecorder } from '@/stage/singHistory';
 import { openSessionChannel, type SessionChannel } from '@/session/channel';
 import { startMic, type MicHandle } from '@/stage/mic';
 import { StageLyrics } from '@/stage/StageLyrics';
@@ -51,6 +52,14 @@ export default function JoinSessionPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [queueVersion, setQueueVersion] = useState(0);
   const [voiceLive, setVoiceLive] = useState(false);
+  // a signed-in phone keeps its scores and sing history on its own account; otherwise it joins as a guest
+  const [account, setAccount] = useState<{ name: string | null; guest: boolean } | null>(null);
+  useEffect(() => {
+    void supabaseBrowser().auth.getUser().then(({ data: { user } }) => {
+      setAccount(user ? { name: (user.user_metadata?.display_name as string | undefined) ?? user.email ?? null, guest: !!user.is_anonymous } : { name: null, guest: true });
+      if (user && !user.is_anonymous && user.user_metadata?.display_name) setName((n) => n || String(user.user_metadata.display_name));
+    });
+  }, []);
   const voiceWanted = useRef(false);
   const sender = useRef<VoiceSender | null>(null);
   /** Start or stop sending this phone's voice to the TV, following the host's switch. */
@@ -75,6 +84,9 @@ export default function JoinSessionPage() {
   const seq = useRef(0);
   const memberRef = useRef<string | null>(null);
   const floorRef = useRef<number | null>(null);
+  // sing history on this phone's account: one session per song (or take) the TV starts
+  const singRec = useRef<SingRecorder | null>(null);
+  const voicedFrames = useRef(0);
   const lastPitch = useRef(0);
   const lastDb = useRef(-90);
   const mutedRef = useRef(false);
@@ -94,6 +106,13 @@ export default function JoinSessionPage() {
     if (e.type === 'transport') {
       // a new song (or the same song again) starting: the previous score card goes away
       if (e.state === 'playing' && transport.current?.state !== 'playing') setResult(null);
+      const prev = transport.current;
+      if (e.state === 'playing' && e.trackId && (!prev || prev.trackId !== e.trackId || prev.state === 'ended' || prev.state === 'idle' || (prev.state !== 'playing' && e.songPos < 1))) {
+        void singRec.current?.report(voicedFrames.current * 0.01, true);
+        voicedFrames.current = 0;
+        singRec.current = mic.current ? new SingRecorder(e.trackId, 'lyrics', true) : null;
+      }
+      if (e.state === 'ended') void singRec.current?.report(voicedFrames.current * 0.01, true);
       // frames still waiting in a partial batch belong to the previous take (or song): never send them late
       if (e.state !== 'playing' || transport.current?.state !== 'playing') batch.current = [];
       transport.current = e;
@@ -118,7 +137,7 @@ export default function JoinSessionPage() {
       if (mine) setLive({ hitRate: mine.hitRate });
     } else if (e.type === 'results') {
       const mine = e.performances.find((p) => p.memberId === me);
-      if (mine) setResult(mine);
+      if (mine) { setResult(mine); void singRec.current?.link(mine.performanceId); }
     } else if (e.type === 'voice') {
       voiceWanted.current = e.enabled;
       syncVoice();
@@ -176,6 +195,7 @@ export default function JoinSessionPage() {
         const st = songPositionAt(t, Date.now() - (mic.current?.inputLatencyMs ?? 0), offset.current);
         const voiced = f.f0 > 0 && f.conf >= 0.6 && (floorRef.current == null || f.rmsDb >= floorRef.current + 10);
         trail.current.push([st, voiced ? 69 + 12 * Math.log2(f.f0 / 440) : null]);
+        if (voiced) voicedFrames.current++;
         if (trail.current.length > 400) trail.current.splice(0, trail.current.length - 400);
         lastPitch.current = voiced ? f.f0 : lastPitch.current;
         lastDb.current = f.rmsDb;
@@ -219,6 +239,12 @@ export default function JoinSessionPage() {
     return () => clearInterval(iv);
   }, [step, songTime]);
 
+  useEffect(() => {
+    if (step !== 'live') return;
+    const iv = setInterval(() => void singRec.current?.report(voicedFrames.current * 0.01), 5_000);
+    return () => clearInterval(iv);
+  }, [step]);
+
   // phones lock and suspend audio: keep the screen on, and pick the mic back up when the page returns
   useEffect(() => {
     if (step !== 'live') return;
@@ -255,6 +281,13 @@ export default function JoinSessionPage() {
             {step === 'joining' ? 'Joining…' : 'Join'}
           </button>
         </form>
+        {account?.guest && (
+          <p className="max-w-xs text-sm text-ink-300">
+            Joining as a guest: your scores won’t be saved to an account.{' '}
+            <Link href={`/login?next=${encodeURIComponent(`/join/${code}`)}`} className="font-bold text-ink-50 underline">Log in</Link> to keep them in your history and stats.
+          </p>
+        )}
+        {account && !account.guest && <p className="text-sm text-ink-300">Singing as <b className="text-ink-50">{account.name}</b>: scores go to your history and stats.</p>}
       </main>
     );
   }
