@@ -97,6 +97,8 @@ async function growFromItunes(q: string, key: string): Promise<number> {
 
 Deno.serve((req) =>
   handle(req, async (body) => {
+    // keep-warm ping from pg_cron (every 5 min): no work, just keeps an instance ready so searches skip cold starts
+    if (body.warm === true) return json({ warm: true });
     const q = String(body.q ?? '').trim().slice(0, 200);
     const limit = Math.min(Math.max(Number(body.limit ?? 30) || 30, 1), 100);
     if (!q) return json({ results: [], source: 'catalog' });

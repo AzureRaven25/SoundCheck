@@ -53,7 +53,7 @@ export function TrackCard({ t, list, badge }: { t: TrackItem; list?: TrackItem[]
   const playTracks = usePlayer((s) => s.playTracks);
   const router = useRouter();
   return (
-    <Link href={`/track/${t.id}`} className="group block rounded-xl p-2.5 transition-colors hover:bg-ink-800">
+    <Link prefetch={false} href={`/track/${t.id}`} className="group block rounded-xl p-2.5 transition-colors hover:bg-ink-800">
       <div className="relative mb-2.5 shadow-lift">
         <Artwork src={t.artwork_url} albumId={t.album_id} title={t.album_title ?? t.title} sizes="(max-width: 640px) 40vw, 180px" />
         <Badge kind={badge} />
@@ -83,7 +83,7 @@ export function EntityCard({ href, title, subtitle, artwork, albumId, artistId, 
   href: string; title: string; subtitle?: string; artwork?: string | null; albumId?: string | null; artistId?: string | null; round?: boolean;
 }) {
   return (
-    <Link href={href} className="group block rounded-xl p-2.5 transition-colors hover:bg-ink-800">
+    <Link prefetch={false} href={href} className="group block rounded-xl p-2.5 transition-colors hover:bg-ink-800">
       <div className="mb-2.5 shadow-lift">
         <Artwork src={artwork} albumId={albumId} artistId={artistId} title={title} rounded={round ? 'rounded-full' : 'rounded-md'} />
       </div>
@@ -107,7 +107,7 @@ export function Shelf({ title, subtitle, href, layout = 'row', children }: {
           <h2 className="font-display text-xl font-bold tracking-tight md:text-2xl">{title}</h2>
           {subtitle && <p className="truncate text-sm text-ink-500">{subtitle}</p>}
         </div>
-        {href && <Link href={href} className="shrink-0 text-xs font-bold text-ink-300 hover:text-ink-50 hover:underline">Show all</Link>}
+        {href && <Link prefetch={false} href={href} className="shrink-0 text-xs font-bold text-ink-300 hover:text-ink-50 hover:underline">Show all</Link>}
       </div>
       {layout === 'grid' ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">{children}</div>

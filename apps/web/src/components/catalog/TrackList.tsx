@@ -16,7 +16,7 @@ function ArtistLinks({ t }: { t: TrackItem }) {
     <>
       {t.artists.map((a) => (
         <Fragment key={a.id}>
-          <Link href={`/artist/${a.id}`} className="hover:text-ink-50 hover:underline" onClick={(e) => e.stopPropagation()}>{a.name}</Link>
+          <Link prefetch={false} href={`/artist/${a.id}`} className="hover:text-ink-50 hover:underline" onClick={(e) => e.stopPropagation()}>{a.name}</Link>
           {a.join_phrase}
         </Fragment>
       ))}
@@ -133,7 +133,7 @@ export function TrackList({
               )}
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Link href={`/track/${t.id}`} className={clsx('truncate font-medium hover:underline', isCurrent ? 'text-pink-400' : 'text-ink-50')}>
+                  <Link prefetch={false} href={`/track/${t.id}`} className={clsx('truncate font-medium hover:underline', isCurrent ? 'text-pink-400' : 'text-ink-50')}>
                     {t.title}
                   </Link>
                   <AvailabilityTag a={avail.get(t.id)} />
@@ -143,7 +143,7 @@ export function TrackList({
             </div>
             <div role="cell" className="hidden min-w-0 truncate text-ink-300 md:block">
               {showAlbum && t.album_id && t.album_title ? (
-                <Link href={`/album/${t.album_id}`} className="hover:text-ink-50 hover:underline">{t.album_title}</Link>
+                <Link prefetch={false} href={`/album/${t.album_id}`} className="hover:text-ink-50 hover:underline">{t.album_title}</Link>
               ) : null}
             </div>
             <div role="cell" className="flex items-center justify-end gap-2 text-ink-300">

@@ -24,7 +24,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     if (mode === 'login') {
       const { error: err } = await sb.auth.signInWithPassword({ email, password });
       setBusy(false);
-      if (err) return setError(err.message);
+      if (err) return setError(/invalid login/i.test(err.message) ? 'Wrong email or password.' : err.message);
       router.push(safeNext);
       router.refresh();
       return;
@@ -72,6 +72,9 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           />
           {mode === 'signup' && <span className="mt-1 block text-xs text-ink-500">At least 8 characters.</span>}
         </label>
+        {mode === 'login' && (
+          <p className="-mt-2 text-right text-sm"><Link href="/forgot-password" className="text-ink-300 underline hover:text-ink-50">Forgot password?</Link></p>
+        )}
         {error && <p role="alert" className="text-sm text-danger-400">{error}</p>}
         {notice && <p role="status" className="text-sm text-success-400">{notice}</p>}
         <button type="submit" disabled={busy} className="w-full rounded-full bg-pink-500 py-3 font-bold text-ink-950 transition-transform hover:scale-[1.02] disabled:opacity-60">

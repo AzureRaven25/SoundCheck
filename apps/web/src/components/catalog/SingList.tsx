@@ -17,10 +17,10 @@ export function SingRows({ tracks }: { tracks: TrackItem[] }) {
         <li key={t.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-ink-800">
           <div className="w-12 shrink-0"><Artwork src={t.artwork_url} albumId={t.album_id} title={t.album_title ?? t.title} sizes="48px" /></div>
           <div className="min-w-0 flex-1">
-            <Link href={`/track/${t.id}`} className="block truncate text-sm font-bold hover:underline">{t.title}</Link>
+            <Link prefetch={false} href={`/track/${t.id}`} className="block truncate text-sm font-bold hover:underline">{t.title}</Link>
             <p className="truncate text-xs text-ink-300">{t.artist_credit} · {formatDuration(t.duration_ms)}</p>
           </div>
-          <Link href={`/stage/${t.id}`} aria-label={`Sing ${t.title}`}
+          <Link prefetch={false} href={`/stage/${t.id}`} aria-label={`Sing ${t.title}`}
             className="stage-gradient inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white hover:scale-105">
             <Mic2 size={14} aria-hidden /> Sing
           </Link>
