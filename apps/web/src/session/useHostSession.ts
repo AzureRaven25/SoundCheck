@@ -30,7 +30,7 @@ export function useHostSession(trackId: string, resumeSessionId?: string | null)
   const frames = useRef<Map<string, number[]>>(new Map());
   const lastSeq = useRef<Map<string, number>>(new Map());
   const transport = useRef<TransportEvent | null>(null);
-  const rtcHandler = useRef<((e: Extract<SessionEvent, { type: 'rtc' }>) => void) | null>(null);
+  const rtcHandler = useRef<((e: Extract<SessionEvent, { type: 'rtc' | 'voice_gain' }>) => void) | null>(null);
   const position = useRef<(() => number) | null>(null);
 
   const onEvent = useCallback((e: SessionEvent) => {
@@ -50,7 +50,7 @@ export function useHostSession(trackId: string, resumeSessionId?: string | null)
       setStatus((s) => ({ ...s, [e.memberId]: e }));
     } else if (e.type === 'queue_changed') {
       setQueueVersion((v) => v + 1);
-    } else if (e.type === 'rtc' && e.from === 'phone') {
+    } else if ((e.type === 'rtc' && e.from === 'phone') || e.type === 'voice_gain') {
       rtcHandler.current?.(e);
     }
   }, []);
@@ -123,7 +123,7 @@ export function useHostSession(trackId: string, resumeSessionId?: string | null)
 
   return {
     session, members, singers, error, open, queueVersion,
-    setRtcHandler: (fn: ((e: Extract<SessionEvent, { type: 'rtc' }>) => void) | null) => { rtcHandler.current = fn; }, bumpQueue: () => setQueueVersion((v) => v + 1), publishTransport, resetTake, sendResults, send, setPositionSource,
+    setRtcHandler: (fn: ((e: Extract<SessionEvent, { type: 'rtc' | 'voice_gain' }>) => void) | null) => { rtcHandler.current = fn; }, bumpQueue: () => setQueueVersion((v) => v + 1), publishTransport, resetTake, sendResults, send, setPositionSource,
     framesOf: (memberId: string) => frames.current.get(memberId) ?? [],
     allFrames: () => frames.current,
   };

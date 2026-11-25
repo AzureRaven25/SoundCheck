@@ -69,6 +69,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const voice = useRef<VoiceReceiver | null>(null);
   const [voiceOn, setVoiceOn] = useState(false);
   const [voiceVol, setVoiceVol] = useState(0.8);
+  const [echo, setEcho] = useState(0.35);
   function toggleVoice(on: boolean) {
     const e = engine.current ?? new StageEngine();   // inside the click: the shared AudioContext may start
     engine.current = e;
@@ -76,6 +77,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     if (on) {
       voice.current ??= new VoiceReceiver(e.ctx, (ev) => hostRef.current.send(ev));
       voice.current.setVolume(voiceVol);
+      voice.current.setEcho(echo);
       hostRef.current.setRtcHandler((ev) => void voice.current?.handle(ev));
     } else {
       voice.current?.close();
@@ -90,6 +92,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     if (voiceOn && readyCount) hostRef.current.send({ type: 'voice', v: PROTOCOL_VERSION, enabled: true });
   }, [voiceOn, readyCount]);
   useEffect(() => { voice.current?.setVolume(voiceVol); }, [voiceVol]);
+  useEffect(() => { voice.current?.setEcho(echo); }, [echo]);
   useEffect(() => () => voice.current?.close(), []);
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
@@ -409,6 +412,11 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
                         <input type="range" min={0} max={1.5} step={0.05} value={voiceVol} onChange={(e) => setVoiceVol(Number(e.target.value))} className="w-28" />
                       </label>
                     )}
+                    {voiceOn && (
+                      <label className="flex items-center gap-2 text-ink-300">Echo
+                        <input type="range" min={0} max={1} step={0.05} value={echo} onChange={(e) => setEcho(Number(e.target.value))} className="w-24" aria-label="Echo" />
+                      </label>
+                    )}
                   </div>
                 )}
                 {micError && <p className="mt-3 text-sm text-gold-400">{micError}</p>}
@@ -451,6 +459,12 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
               <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
                 Voices
                 <input type="range" min={0} max={1.5} step={0.05} value={voiceVol} onChange={(e) => setVoiceVol(Number(e.target.value))} className="w-24" aria-label="Voice volume" />
+              </label>
+            )}
+            {phase === 'singing' && mode === 'party' && voiceOn && (
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ink-300">
+                Echo
+                <input type="range" min={0} max={1} step={0.05} value={echo} onChange={(e) => setEcho(Number(e.target.value))} className="w-20" aria-label="Echo" />
               </label>
             )}
             {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}

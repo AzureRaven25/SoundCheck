@@ -149,6 +149,14 @@ export interface RtcEvent {
   candidate?: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
 }
 
+/** Phone → host: how loud this singer wants their own voice through the host's speakers (0–2, 1 = as mixed). */
+export interface VoiceGainEvent {
+  type: 'voice_gain';
+  v: typeof PROTOCOL_VERSION;
+  memberId: string;
+  gain: number;
+}
+
 export type SessionEvent =
   | TransportEvent
   | PitchEvent
@@ -160,7 +168,8 @@ export type SessionEvent =
   | HostCommandEvent
   | QueueChangedEvent
   | VoiceEvent
-  | RtcEvent;
+  | RtcEvent
+  | VoiceGainEvent;
 
 /** Presence payload each device tracks on the channel. */
 export interface PresenceState {

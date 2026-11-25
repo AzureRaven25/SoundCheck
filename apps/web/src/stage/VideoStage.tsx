@@ -292,12 +292,18 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   // voice monitoring (phones' mics through these speakers), as on the melody Stage
   const voice = useRef<VoiceReceiver | null>(null);
   const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceVol, setVoiceVol] = useState(0.8);
+  const [echo, setEcho] = useState(0.35);
+  useEffect(() => { voice.current?.setVolume(voiceVol); }, [voiceVol]);
+  useEffect(() => { voice.current?.setEcho(echo); }, [echo]);
   function toggleVoice(on: boolean) {
     const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
     ctx.current = ac;
     void ac.resume();
     if (on) {
       voice.current ??= new VoiceReceiver(ac, (ev) => hostRef.current.send(ev));
+      voice.current.setVolume(voiceVol);
+      voice.current.setEcho(echo);
       hostRef.current.setRtcHandler((ev) => void voice.current?.handle(ev));
     } else {
       voice.current?.close();
@@ -433,6 +439,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                       <label className="mt-2 flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={voiceOn} onChange={(e) => toggleVoice(e.target.checked)} /> Hear singers through the speakers
                       </label>
+                      {voiceOn && <VoiceKnobs vol={voiceVol} setVol={setVoiceVol} echo={echo} setEcho={setEcho} />}
                     </div>
                   </div>
                 )}
@@ -510,6 +517,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                 <button type="button" onClick={() => nudge(0.1, 'guide')} className="rounded-full bg-ink-800 px-2 py-1 text-xs font-bold" aria-label="Guide later">Guide +</button>
               </div>
             )}
+            {phase === 'singing' && mode === 'party' && voiceOn && <VoiceKnobs vol={voiceVol} setVol={setVoiceVol} echo={echo} setEcho={setEcho} />}
             {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
           </footer>
 
@@ -531,6 +539,19 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function VoiceKnobs({ vol, setVol, echo, setEcho }: { vol: number; setVol: (v: number) => void; echo: number; setEcho: (v: number) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-widest text-ink-300">
+      <label className="flex items-center gap-2">Voices
+        <input type="range" min={0} max={1.5} step={0.05} value={vol} onChange={(e) => setVol(Number(e.target.value))} className="w-20" aria-label="Voice volume" />
+      </label>
+      <label className="flex items-center gap-2">Echo
+        <input type="range" min={0} max={1} step={0.05} value={echo} onChange={(e) => setEcho(Number(e.target.value))} className="w-20" aria-label="Echo" />
+      </label>
     </div>
   );
 }

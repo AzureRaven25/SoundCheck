@@ -1,5 +1,5 @@
 'use client';
-import { PROTOCOL_VERSION, type RtcEvent, type SessionEvent } from '@soundcheck/contracts';
+import { PROTOCOL_VERSION, type RtcEvent, type SessionEvent, type VoiceGainEvent } from '@soundcheck/contracts';
 
 /**
  * Voice monitoring: each phone's (echo-cancelled) mic streams to the host screen over WebRTC so singers hear
@@ -40,15 +40,64 @@ export class VoiceSender {
   stop() { this.pc?.close(); this.pc = null; }
 }
 
-interface Peer { pc: RTCPeerConnection; gain: GainNode; analyser: AnalyserNode; source?: MediaStreamAudioSourceNode; el?: HTMLAudioElement }
+interface Peer { pc: RTCPeerConnection; gain: GainNode; analyser: AnalyserNode; source?: MediaStreamAudioSourceNode; el?: HTMLAudioElement; own: number }
 
-/** Host side: answers each phone and mixes its voice into the stage's AudioContext with one volume control. */
+/** A short synthetic room (decaying noise), for the reverb half of the karaoke echo. */
+function impulse(ctx: AudioContext, seconds = 1.4, decay = 3): AudioBuffer {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** decay;
+  }
+  return buf;
+}
+
+/**
+ * Host side: answers each phone and mixes its voice into the stage's AudioContext: one master volume, each
+ * singer's own level (set from their phone), and the karaoke-box "echo" (a slap-back delay plus a little room).
+ */
 export class VoiceReceiver {
   private peers = new Map<string, Peer>();
   private volume = 0.8;
-  constructor(private ctx: AudioContext, private send: Send) {}
+  private bus: GainNode;
+  private wet: GainNode;
+  private room: GainNode;
+  constructor(private ctx: AudioContext, private send: Send) {
+    this.bus = ctx.createGain();
+    this.bus.connect(ctx.destination);
+    // echo: 160 ms delay with feedback, darkened so repeats sit behind the dry voice
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = 0.16;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.32;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 3200;
+    this.wet = ctx.createGain();
+    this.wet.gain.value = 0;
+    this.bus.connect(delay);
+    delay.connect(tone);
+    tone.connect(fb);
+    fb.connect(delay);
+    tone.connect(this.wet);
+    this.wet.connect(ctx.destination);
+    const conv = ctx.createConvolver();
+    conv.buffer = impulse(ctx);
+    this.room = ctx.createGain();
+    this.room.gain.value = 0;
+    this.bus.connect(conv);
+    conv.connect(this.room);
+    this.room.connect(ctx.destination);
+  }
 
-  async handle(e: RtcEvent) {
+  async handle(e: RtcEvent | VoiceGainEvent) {
+    if (e.type === 'voice_gain') {
+      const p = this.peers.get(e.memberId);
+      const g = Math.max(0, Math.min(2, Number(e.gain) || 0));
+      if (p) { p.own = g; p.gain.gain.setTargetAtTime(this.volume * g, this.ctx.currentTime, 0.05); }
+      return;
+    }
     if (e.from !== 'phone') return;
     if (e.sdp?.type === 'offer') {
       this.drop(e.memberId);
@@ -58,8 +107,8 @@ export class VoiceReceiver {
       const analyser = this.ctx.createAnalyser();
       analyser.fftSize = 1024;
       gain.connect(analyser);
-      gain.connect(this.ctx.destination);
-      const peer: Peer = { pc, gain, analyser };
+      gain.connect(this.bus);
+      const peer: Peer = { pc, gain, analyser, own: 1 };
       this.peers.set(e.memberId, peer);
       pc.ontrack = (ev) => {
         const stream = ev.streams[0] ?? new MediaStream([ev.track]);
@@ -86,18 +135,25 @@ export class VoiceReceiver {
 
   setVolume(v: number) {
     this.volume = v;
-    for (const p of this.peers.values()) p.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    for (const p of this.peers.values()) p.gain.gain.setTargetAtTime(v * p.own, this.ctx.currentTime, 0.05);
+  }
+
+  /** 0 = dry, 1 = full karaoke-box echo. */
+  setEcho(amount: number) {
+    const a = Math.max(0, Math.min(1, amount));
+    this.wet.gain.setTargetAtTime(0.55 * a, this.ctx.currentTime, 0.05);
+    this.room.gain.setTargetAtTime(0.35 * a, this.ctx.currentTime, 0.05);
   }
 
   /** Per-singer level (dBFS) and connection state, for the host's indicators and tests. */
-  status(): Record<string, { state: RTCPeerConnectionState; levelDb: number }> {
-    const out: Record<string, { state: RTCPeerConnectionState; levelDb: number }> = {};
+  status(): Record<string, { state: RTCPeerConnectionState; levelDb: number; gain: number }> {
+    const out: Record<string, { state: RTCPeerConnectionState; levelDb: number; gain: number }> = {};
     const buf = new Float32Array(1024);
     for (const [id, p] of this.peers) {
       p.analyser.getFloatTimeDomainData(buf);
       let e = 0;
       for (const x of buf) e += x * x;
-      out[id] = { state: p.pc.connectionState, levelDb: 10 * Math.log10(e / buf.length + 1e-12) };
+      out[id] = { state: p.pc.connectionState, levelDb: 10 * Math.log10(e / buf.length + 1e-12), gain: p.own };
     }
     return out;
   }
@@ -108,5 +164,8 @@ export class VoiceReceiver {
     p.pc.close(); p.source?.disconnect(); p.gain.disconnect(); p.el?.pause();
     this.peers.delete(memberId);
   }
-  close() { for (const id of [...this.peers.keys()]) this.drop(id); }
+  close() {
+    for (const id of [...this.peers.keys()]) this.drop(id);
+    this.bus.disconnect(); this.wet.disconnect(); this.room.disconnect();
+  }
 }
