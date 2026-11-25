@@ -57,8 +57,12 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
       if (durDiff != null && (durDiff < -25 || durDiff > 45)) continue;
       // Best: the artist's own instrumental (same master as the original, so the guide vocal stays in step, and no
       // lyrics on screen competing with ours). Then backing tracks without on-screen lyrics, then lyric karaoke videos.
-      const official = /instrumental/i.test(v.title) && !/karaoke/i.test(v.title)
-        && (topic || titleMatch(v.channel, song.artist) >= 0.5);
+      // the artist's own channel (or their YouTube Music "Topic" channel), never someone else's, and not a re-recording
+      const rerecorded = /re-?record|cover|tribute|in the style of|made famous|as made/i.test(v.title);
+      const artistChannel = titleMatch(v.channel.replace(/ - Topic$/i, ''), song.artist) >= 0.5;
+      const official = /instrumental/i.test(v.title) && !/karaoke/i.test(v.title) && !rerecorded
+        && (artistChannel || /official instrumental/i.test(v.title));
+      // same master: an official instrumental whose length matches the original to the second
       const sameMaster = official && durDiff != null && Math.abs(durDiff) <= 2;
       let q = match + (official ? 1.2 : 0) + (sameMaster ? 0.5 : 0) + (KARAOKE_CHANNELS.test(v.channel) ? 0.3 : 0)
         + (/backing track|no vocals?|off ?vocal|minus one/i.test(v.title) ? 0.3 : 0)
@@ -66,6 +70,8 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
         - (/guide (melody|vocal)|with melody|melody guide/i.test(v.title) && !/no guide/i.test(v.title) ? 0.4 : 0)
         - (durDiff == null ? 0.2 : Math.abs(durDiff) / 60);
       if (/female key|male key|lower key|higher key|key of|[+-]\d ?(key|semitone)/i.test(v.title)) q -= 0.5;
+      // a karaoke video of someone else's version (same title, different artist)
+      if (titleMatch(`${v.title} ${v.channel}`, song.artist) < 0.5) q -= 0.6;
       karaoke.push({ ...v, kind: 'karaoke', quality: +q.toFixed(3), sameMaster,
                      offsetGuessMs: sameMaster ? 0 : offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
     } else {

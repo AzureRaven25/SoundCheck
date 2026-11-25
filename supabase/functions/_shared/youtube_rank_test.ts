@@ -45,3 +45,25 @@ Deno.test('rankVideos: the artist’s official instrumental beats lyric karaoke 
   assertEquals(r.karaoke[0]!.offsetGuessMs, 0);
   assertEquals(r.karaoke.at(-1)!.id, 'k1kkkkkkkkk');   // guide melody + lyrics on screen: last
 });
+
+Deno.test('rankVideos: another act’s Topic instrumental or a re-recording is not the official instrumental', () => {
+  const song = { title: 'Great Balls of Fire', artist: 'Jerry Lee Lewis', durationS: 112 };
+  const r = rankVideos([
+    { id: 'a1aaaaaaaaa', title: 'Great Balls Of Fire (Instrumental)', channel: 'The Rocking Saxists - Topic', durationS: 112 },
+    { id: 'b1bbbbbbbbb', title: 'Great Balls of Fire (Instrumental - Re-Recorded)', channel: 'Jerry Lee Lewis - Topic', durationS: 112 },
+    { id: 'c1ccccccccc', title: 'Great Balls of Fire (Official Instrumental)', channel: 'Some Uploader', durationS: 113 },
+  ], song);
+  const by = Object.fromEntries(r.karaoke.map((v) => [v.id, v]));
+  assertEquals(by['a1aaaaaaaaa']!.sameMaster, false);
+  assertEquals(by['b1bbbbbbbbb']!.sameMaster, false);
+  assertEquals(by['c1ccccccccc']!.sameMaster, true);
+  assertEquals(r.karaoke[0]!.id, 'c1ccccccccc');
+});
+
+Deno.test('rankVideos: a karaoke video of another artist’s version ranks below the right artist’s', () => {
+  const r = rankVideos([
+    { id: 'e1eeeeeeeee', title: 'Blue Suede Shoes by Elvis Presley - Karaoke', channel: 'Stingray Karaoke', durationS: 130 },
+    { id: 'c1ccccccccc', title: 'Carl Perkins - Blue Suede Shoes (Karaoke)', channel: 'Some Karaoke', durationS: 135 },
+  ], { title: 'Blue Suede Shoes', artist: 'Carl Perkins', durationS: 135 });
+  assertEquals(r.karaoke[0]!.id, 'c1ccccccccc');
+});
