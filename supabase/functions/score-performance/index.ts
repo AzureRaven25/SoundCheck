@@ -12,6 +12,9 @@
  *
  * POST { track_id, session_id?, key_shift?, mode?: 'melody' | 'lyrics', singers: [{ member_id?, frames: number[], latency_ms?, noise_floor_db? }] }
  *
+ * Party guests (phones that joined without logging in) also count together: their scores are averaged into one
+ * combined guest performance on the host's account (returned as `guests`). Signed-in phones keep their own scores.
+ *
  * mode 'lyrics' (or a song with no karaoke analysis): sung along to a video, scored against the song's synced lyrics
  * (frames in lyrics time) instead of a reference melody.
  *   → { results: [{ member_id, user_id, performance_id, score, grade, pitch, timing, rhythm, stability, feedback }] }
@@ -44,9 +47,11 @@ Deno.serve((req) =>
 
     // resolve each singer to a user, enforcing session membership / host rights
     const resolved: { memberId: string | null; userId: string; s: SingerIn }[] = [];
+    let hostId: string | null = null;
     if (sessionId) {
       const { data: session } = await db.from('karaoke_sessions').select('id, host_id, status').eq('id', sessionId).maybeSingle();
       if (!session) return json({ error: 'session not found' }, 404);
+      hostId = session.host_id;
       const { data: members } = await db.from('session_members').select('id, user_id, kicked').eq('session_id', sessionId);
       const byId = new Map((members ?? []).map((m) => [m.id, m]));
       for (const s of singers) {
@@ -98,10 +103,34 @@ Deno.serve((req) =>
                      pitch: r.pitch, timing: r.timing, rhythm: r.rhythm, duration: r.duration, transitions: r.transitions,
                      stability: r.stability, expression: r.expression, bonus: r.bonus, mode: useLyrics ? 'lyrics' : 'melody', feedback: r.feedback });
     }
+    // Party guests (not logged in) score together on the host's account: one combined performance averaging them
+    let guests: { performance_id: string; score: number; grade: string; singers: number; member_ids: (string | null)[] } | null = null;
+    if (sessionId && hostId) {
+      const isGuest = async (id: string) => (await db.auth.admin.getUserById(id)).data.user?.is_anonymous === true;
+      const hostIsGuest = await isGuest(hostId);
+      const guestResults: typeof results = [];
+      for (const r of results) if (r.user_id !== hostId && await isGuest(r.user_id)) guestResults.push(r);
+      if (!hostIsGuest && guestResults.length) {
+        const avg = (k: 'score' | 'pitch' | 'timing' | 'rhythm' | 'stability' | 'duration' | 'transitions') =>
+          guestResults.reduce((a, r) => a + (r[k] as number), 0) / guestResults.length;
+        const score = Math.round(avg('score'));
+        const { data: perf, error } = await db.from('performances').insert({
+          session_id: sessionId, member_id: null, user_id: hostId, track_id: trackId, key_shift: keyShift,
+          score, pitch_score: avg('pitch'), timing_score: avg('timing'), rhythm_score: avg('rhythm'), stability_score: avg('stability'),
+          duration_score: avg('duration'), transition_score: avg('transitions'),
+          grade: grade(score), scoring_version: useLyrics ? LYRICS_SCORING_VERSION : SCORING_VERSION, duration_ms: 0,
+          details: { mode: useLyrics ? 'lyrics' : 'melody', capture: 'session', combined_guests: guestResults.length,
+                     guest_member_ids: guestResults.map((r) => r.member_id), guest_performance_ids: guestResults.map((r) => r.performance_id),
+                     feedback: [`Combined score of ${guestResults.length} guest${guestResults.length === 1 ? '' : 's'} in your party.`], submitted_by: user.id },
+        }).select('id').single();
+        if (error) throw error;
+        guests = { performance_id: perf.id, score, grade: grade(score), singers: guestResults.length, member_ids: guestResults.map((r) => r.member_id) };
+      }
+    }
     // group result for party songs: the average of everyone who sang (each person keeps their own score too)
     const group = results.length > 1
       ? (() => { const score = Math.round(results.reduce((a, r) => a + r.score, 0) / results.length); return { score, grade: grade(score), singers: results.length }; })()
       : null;
-    return json({ results, group });
+    return json({ results, group, guests });
   })
 );

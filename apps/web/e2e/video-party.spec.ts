@@ -83,7 +83,15 @@ test('a phone sings along to a YouTube song: lyrics, tuner, voice on the TV, and
   await page.getByRole('button', { name: 'Finish and score' }).click();
   await expect(page.getByText('Cleo').first()).toBeVisible({ timeout: 30_000 });
   await expect(phone.getByRole('dialog', { name: 'Your score' })).toBeVisible({ timeout: 30_000 });
+  // Cleo joined without logging in: guests score together on the host's account
+  await expect(page.getByRole('status', { name: 'Guest score' })).toContainText('Guests combined · 1 phone');
   await ctx.close();
+  await page.waitForTimeout(1_500);
+  await page.goto('/library?tab=sung');
+  const row = page.getByRole('list', { name: 'Songs you sang' }).getByRole('listitem').first();
+  await expect(row).toContainText('Testing Stage', { timeout: 15_000 });
+  await expect(row).toContainText('party');
+  await expect(row).not.toContainText('not scored');
   fs.rmSync(wav, { force: true });
 });
 

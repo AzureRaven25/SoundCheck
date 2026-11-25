@@ -51,7 +51,7 @@ function Bar({ label, value }: { label: string; value: number }) {
 interface Row { rank: number; display_name: string; score: number; grade: string }
 
 /** SoundCheck Score results: one card per singer, then the song's leaderboard. */
-export function Results({ scores, trackId, onAgain, error, group }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null }) {
+export function Results({ scores, trackId, onAgain, error, group, guests }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null; guests?: { score: number; grade: string; singers: number } | null }) {
   const [board, setBoard] = useState<Row[]>([]);
   const [badges, setBadges] = useState<{ title: string; tier: string }[]>([]);
   const [xp, setXp] = useState(0);
@@ -109,6 +109,14 @@ export function Results({ scores, trackId, onAgain, error, group }: { scores: Sc
       )}
       <div className={clsx(solo && 'md:[&>*:first-child]:mt-0')}>
       {xp > 0 && <p className="mx-auto mt-4 w-fit rounded-full bg-pink-500/15 px-4 py-1.5 text-sm font-bold text-pink-400" role="status">+{xp} XP</p>}
+      {guests && (
+        <div className="mx-auto mt-4 flex max-w-md items-center justify-between rounded-2xl bg-ink-850/90 p-4 ring-1 ring-cyan-400/40" role="status" aria-label="Guest score">
+          <div><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Guests combined · {guests.singers} phone{guests.singers === 1 ? '' : 's'}</p>
+            <p className="font-display text-4xl font-black tabular-nums">{guests.score}</p>
+            <p className="text-xs text-ink-300">Saved to your account (guests aren’t logged in)</p></div>
+          <span className="rounded-xl bg-cyan-400 px-4 py-1 font-display text-3xl font-black text-ink-950">{guests.grade}</span>
+        </div>
+      )}
       {group && (
         <div className="mx-auto mt-6 flex max-w-md items-center justify-between rounded-2xl bg-ink-850/90 p-5 ring-1 ring-pink-500/40" role="status" aria-label="Group score">
           <div><p className="text-xs font-bold uppercase tracking-widest text-ink-300">Group score · {group.singers} singers</p><p className="font-display text-5xl font-black tabular-nums">{group.score}</p></div>

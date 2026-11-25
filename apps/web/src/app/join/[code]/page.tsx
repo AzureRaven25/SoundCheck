@@ -283,8 +283,8 @@ export default function JoinSessionPage() {
         </form>
         {account?.guest && (
           <p className="max-w-xs text-sm text-ink-300">
-            Joining as a guest: your scores won’t be saved to an account.{' '}
-            <Link href={`/login?next=${encodeURIComponent(`/join/${code}`)}`} className="font-bold text-ink-50 underline">Log in</Link> to keep them in your history and stats.
+            Joining as a guest: your score counts toward the party’s combined guest score on the host’s account.{' '}
+            <Link href={`/login?next=${encodeURIComponent(`/join/${code}`)}`} className="font-bold text-ink-50 underline">Log in</Link> to keep your own score, history and stats.
           </p>
         )}
         {account && !account.guest && <p className="text-sm text-ink-300">Singing as <b className="text-ink-50">{account.name}</b>: scores go to your history and stats.</p>}

@@ -9,6 +9,7 @@ import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { liveHit } from '@soundcheck/scoring';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { recordGuestTake, type GuestScore } from '@/stage/guestScore';
 import { SingRecorder, voicedSeconds } from '@/stage/singHistory';
 import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
@@ -63,6 +64,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
   const noteAt = useRef<(t: number) => number | null>(() => null);
   const keyShiftRef = useRef(0);
   const host = useHostSession(data.track.id, resume);
+  const [guests, setGuests] = useState<GuestScore | null>(null);
   const hostRef = useRef(host);
   useEffect(() => { hostRef.current = host; });
   const queue = useSessionQueue(host.session?.id, host.queueVersion);
@@ -285,7 +287,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         return;
       }
       setPhase('scoring');
-      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[]; group: { score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null }>('score-performance', {
+      const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[]; group: { score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null; guests?: GuestScore | null }>('score-performance', {
         body: {
           track_id: data.track.id, session_id: hostRef.current.session!.id, key_shift: keyShift,
           singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb })),
@@ -297,6 +299,9 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         const byId = new Map(singers.map((s) => [s.memberId, s]));
         setScores(res.results.map((r) => ({ ...r, name: byId.get(r.member_id)?.name ?? 'Singer', color: byId.get(r.member_id)?.color ?? '#fff' })));
         setGroup(res.group ?? null);
+        setGuests(res.guests ?? null);
+        void recordGuestTake(data.track.id, 'melody', res.guests, (id) => hostRef.current.framesOf(id),
+          (id) => hostRef.current.singers().find((x) => x.memberId === id)?.noiseFloorDb ?? null);
         hostRef.current.sendResults({
           type: 'results', v: PROTOCOL_VERSION, trackId: data.track.id,
           performances: res.results.map((r) => ({
@@ -366,7 +371,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
       {phase === 'results' || phase === 'scoring' ? (
         <div className="relative flex flex-1 flex-col py-6">
           <div className="my-auto w-full">
-            <Results scores={scores} group={mode === 'party' ? group : null} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setGroup(null); setScoreError(null); setPhase('intro'); }} />
+            <Results scores={scores} group={mode === 'party' ? group : null} guests={mode === 'party' ? guests : null} trackId={data.track.id} error={scoreError} onAgain={() => { setScores(null); setGroup(null); setGuests(null); setScoreError(null); setPhase('intro'); }} />
             {mode === 'party' && nextUp && phase === 'results' && (
               <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
                 <ListMusic className="text-pink-400" />
