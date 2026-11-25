@@ -1,12 +1,14 @@
 .DS_Store
-# Processed song bundles and source audio never go in git.
-library/
-music/
+# Processed song bundles and source audio never go in git. Anchored to their real locations: a bare `library/`
+# also matched the website's /library page (apps/web/src/app/library), so it was never committed or deployed.
+/library/
+services/pipeline/library/
+/music/
 *.mp3
 *.flac
 *.m4a
 *.wav
-data/
+/data/
 .claude/
 __pycache__/
 .venv/
