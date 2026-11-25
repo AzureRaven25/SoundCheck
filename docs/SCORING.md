@@ -104,3 +104,28 @@ The overall score is `100 × completion × Σ weight × category`. Party songs w
 Onset detection fix: an onset is now the first frame within 50 cents of the note's target. Previously, the
 tail of the previous note could count as an early onset, so a perfect performance with adjacent notes
 scored 77 instead of 100. Performances store `scoring_version`, so v1.0 and v1.1 results can be told apart.
+
+## v1.2 (2026-11-25): expression bonus
+
+Karaoke-box scoring (DAM, JOYSOUND) adds bonus points for technique on top of accuracy. SoundCheck does the same:
+
+- **Expression** (0–1) = ½ dynamics + ½ vibrato.
+  - *Dynamics*: the spread of loudness between sung phrases (the median dB of each phrase). 1 dB or less counts as flat, 4 dB or more as fully expressive.
+  - *Vibrato*: the share of long, in-tune notes (≥ 0.6 s) that carry a real vibrato. Real means a 4.5–7.5 Hz pitch oscillation, 15–150 cents deep, that explains at least half of the note's movement once slow drift is removed (`detectVibrato`). Vibrato on about a third of the long notes earns full credit.
+- **Bonus** = 5 × expression × pitch × completion, at most **+5 points**. It is added to the weighted categories, and the total is capped at 100. The bonus never takes points away. Vibrato around the wrong note earns nothing, because only long notes with at least 0.7 pitch credit count and the bonus scales with pitch.
+
+## Lyrics score (lyrics-1.0.0): songs without a reference melody
+
+When someone sings along to a song's YouTube video, there's no separated vocal to take a melody from, so `scoreLyrics` scores against the synced lyrics and the song's key instead. Performances are stored with `scoring_version = 'lyrics-1.0.0'` and `details.mode = 'lyrics'`.
+
+- **Alignment**: the lyrics clock can be off by a little for a given video. The scorer tries shifts of ±1 s and keeps the one that puts the most singing inside lines, the least outside them, and the most line entries on time.
+- **Timing** = 55% lines sung (voiced for at least ~45% of each line's span) + 30% entries (the first voiced frame within 0.2 s of the line's start earns full credit, falling to zero at 0.8 s) + 15% staying quiet in the instrumental breaks.
+- **Rhythm**: how steady the entry offsets are from line to line.
+- **Intonation** ("pitch"), based on sung notes (stable pitch segments of at least 120 ms):
+  - 55%: landing on the semitone grid after the singer's own tuning offset (a circular mean). Full credit within 12 cents, none past 40.
+  - 45%: staying in one key (the best-fitting Krumhansl major or minor profile; at least 94% of sung time in the scale earns full credit).
+  - Multiplied by a movement factor, so droning one note doesn't count as singing the song.
+- **Stability** and the **expression bonus** work as in v1.2.
+- **Overall** = completion × (0.35 intonation + 0.3 timing + 0.1 rhythm + 0.25 stability) + bonus.
+
+It's a softer judge than the melody score because it can't know which note each syllable should be. The results screen says which score was used. Songs that get a karaoke version (audio SoundCheck can process) are scored note by note.

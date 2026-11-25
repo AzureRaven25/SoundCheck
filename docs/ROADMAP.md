@@ -124,3 +124,32 @@ Later the same session (2026-11-17/18):
 
 Next: an always-on worker host (processing only runs while a worker is up); Openverse/Jamendo keys for more
 open music; native listening history.
+
+
+## 2026-11-25: sing any song (YouTube pivot)
+
+Shipped:
+- **Sing along to YouTube on Stage, for any song.**
+  - The backing is a karaoke video, with the original playing alongside in a second player as the guide vocal at a volume you choose.
+  - Lyrics are kept in time by shared, crowd-corrected timing for each video, and you can tap along to fix them.
+  - Scoring uses the lyrics score.
+- **Lyrics coverage:**
+  - smarter LRCLIB matching;
+  - a weekly re-check for songs that only have plain lyrics;
+  - singers can paste lyrics and tap along to time them, which fills gaps for everyone.
+- **Scoring v1.2:** an expression bonus (vibrato and dynamics), as on karaoke-box systems.
+- **Phone as mic:**
+  - lyrics with the word wipe on the phone, the melody guide, a tuner and mic tips;
+  - your own voice level on the TV, and an Echo control on the TV.
+- **More fun design:**
+  - "Sing anything" hero with a song search;
+  - one-tap Sing on song cards;
+  - line-by-line cheers on Stage;
+  - confetti on results.
+
+Limit: YouTube's audio can't be separated: its terms don't allow downloading, and the page can't access the player's sound. So the guide vocal is the original video's volume, not a stem. True vocal-stem control stays available for songs SoundCheck can process (open-licensed songs and your own uploads).
+
+Next:
+- Native TV apps: a YouTube sing-along mode (tvOS has no YouTube embed, so it will likely need AirPlay or casting from the web).
+- Moderation for community-synced lyrics (flagging, a second opinion before replacing).
+- Leaderboards that separate melody scores from lyrics scores.
