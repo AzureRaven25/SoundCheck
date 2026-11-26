@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { EntityCard, PlayButton } from '@/components/catalog/Cards';
 import { DetailHeader } from '@/components/catalog/DetailHeader';
 import { TrackList } from '@/components/catalog/TrackList';
+import { ArtistFill } from '@/components/catalog/ArtistFill';
 import { getArtist } from '@/lib/catalog';
 
 /** Public catalog page: cached and refreshed hourly (user-specific parts load in the browser). */
@@ -38,6 +39,7 @@ export default async function ArtistPage({ params }: PageProps<'/artist/[id]'>) 
         meta={<span>{[artist.disambiguation, artist.country].filter(Boolean).join(' · ')}</span>}
         actions={<PlayButton tracks={topTracks} size="lg" label={`Play ${artist.name}`} />}
       />
+      <ArtistFill artistId={artist.id} known={topTracks.length} />
       {topTracks.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-4 font-display text-2xl font-bold">Popular</h2>

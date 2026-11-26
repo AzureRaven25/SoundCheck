@@ -5,16 +5,17 @@
 import { norm } from './norm.ts';
 import { upscaleArtwork } from './itunes.ts';
 import { stableUuid } from './openmusic.ts';
+import { toGenres } from './genres.ts';
 
 export interface ItunesSong {
   wrapperType?: string; kind?: string; trackId: number; trackName: string; artistName: string; artistId?: number;
   collectionId?: number; collectionName?: string; trackTimeMillis?: number; releaseDate?: string;
-  artworkUrl100?: string; trackViewUrl?: string; isStreamable?: boolean;
+  artworkUrl100?: string; trackViewUrl?: string; isStreamable?: boolean; primaryGenreName?: string;
 }
 
 export interface ItunesRows {
   albums: { id: string; title: string; artist_credit: string; primary_type: string; release_year: number | null }[];
-  tracks: { id: string; title: string; artist_credit: string; album_id: string | null; duration_ms: number | null; release_year: number | null; popularity: number }[];
+  tracks: { id: string; title: string; artist_credit: string; album_id: string | null; duration_ms: number | null; release_year: number | null; popularity: number; genres: string[] }[];
   artwork: { entity_type: 'album'; entity_id: string; provider: 'itunes'; source_url: string; is_primary: boolean }[];
   sources: { track_id: string; provider: 'itunes'; external_id: string; url: string | null; duration_ms: number | null; karaoke_ok: false }[];
   artistNames: Map<string, string>;   // track id → primary artist name (linked to artists by name)
@@ -41,7 +42,7 @@ export async function itunesToRows(songs: ItunesSong[]): Promise<ItunesRows> {
       }
     }
     const id = await stableUuid(`itunes:track:${s.trackId}`);
-    rows.tracks.push({ id, title: s.trackName.slice(0, 500), artist_credit: s.artistName, album_id: albumId, duration_ms: s.trackTimeMillis ?? null, release_year: releaseYear, popularity: Math.max(1, 20 - rank) });   // keep Apple's relevance order
+    rows.tracks.push({ id, title: s.trackName.slice(0, 500), artist_credit: s.artistName, album_id: albumId, duration_ms: s.trackTimeMillis ?? null, release_year: releaseYear, popularity: Math.max(1, 20 - rank), genres: toGenres(s.primaryGenreName) });   // keep Apple's relevance order
     rows.sources.push({ track_id: id, provider: 'itunes', external_id: String(s.trackId), url: s.trackViewUrl ?? null, duration_ms: s.trackTimeMillis ?? null, karaoke_ok: false });
     rows.artistNames.set(id, s.artistName);
   }
