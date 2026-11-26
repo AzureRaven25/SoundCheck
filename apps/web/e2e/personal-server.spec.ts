@@ -14,6 +14,7 @@ test('connect a Navidrome server, play a song in full, and make a catalog song k
   await signUp(page, 'Server Singer');
   await page.goto('/settings');
   await expect(page.getByLabel('Display name')).toHaveValue('Server Singer');   // the page has finished loading
+  await page.getByText('Advanced: play music from your own server').click();
   const box = page.getByRole('region', { name: 'Your music server' });
   await box.getByLabel('Server address').fill(NAVIDROME_TEST.url);
   await box.getByLabel('Server username').fill(NAVIDROME_TEST.username);
@@ -45,6 +46,7 @@ test('connect a Jellyfin server and play a song in full', async ({ page }) => {
   await signUp(page, 'Jelly Singer');
   await page.goto('/settings');
   await expect(page.getByLabel('Display name')).toHaveValue('Jelly Singer');
+  await page.getByText('Advanced: play music from your own server').click();
   const box = page.getByRole('region', { name: 'Your music server' });
   await box.getByLabel('Server type').selectOption('jellyfin');
   await box.getByLabel('Server address').fill(JELLYFIN_TEST.url);
@@ -68,6 +70,7 @@ test('import a whole music server library (Navidrome)', async ({ page }) => {
   await signUp(page, 'Library Mover');
   await page.goto('/settings');
   await expect(page.getByLabel('Display name')).toHaveValue('Library Mover');
+  await page.getByText('Advanced: play music from your own server').click();
   const box = page.getByRole('region', { name: 'Your music server' });
   await box.getByLabel('Server address').fill(NAVIDROME_TEST.url);
   await box.getByLabel('Server username').fill(NAVIDROME_TEST.username);

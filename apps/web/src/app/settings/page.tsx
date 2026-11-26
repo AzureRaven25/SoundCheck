@@ -67,7 +67,10 @@ export default function SettingsPage() {
           Show my scores on public leaderboards
         </label>
       </section>
-      <ServerConnections />
+      <details className="group rounded-xl bg-ink-900 p-4">
+        <summary className="cursor-pointer font-bold">Advanced: play music from your own server <span className="text-sm font-normal text-ink-300">(Navidrome, Jellyfin, Subsonic)</span></summary>
+        <div className="mt-4"><ServerConnections /></div>
+      </details>
       <section className="space-y-4">
         <h2 className="text-lg font-bold">SoundCheck Stage</h2>
         <label className="block"><span className="mb-1 block text-sm font-bold">Default guide vocal: {Math.round((prefs.default_guide_vocal ?? 0) * 100)}%</span>

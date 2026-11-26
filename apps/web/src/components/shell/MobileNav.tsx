@@ -2,14 +2,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
-import { Home, Library, Mic2, Search, Upload } from 'lucide-react';
+import { Home, Library, Mic2, Search, Trophy } from 'lucide-react';
 
 const ITEMS = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/search', label: 'Search', icon: Search },
   { href: '/sing', label: 'Sing', icon: Mic2 },
   { href: '/library', label: 'Library', icon: Library },
-  { href: '/import', label: 'Import', icon: Upload },
+  { href: '/leaderboards', label: 'Leaders', icon: Trophy },
 ];
 
 /** Bottom tab bar on phones (the sidebar is hidden below md). */

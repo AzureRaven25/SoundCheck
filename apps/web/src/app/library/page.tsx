@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { ListMusic, Plus } from 'lucide-react';
+import { ListMusic, Plus, Upload } from 'lucide-react';
 import { TrackList } from '@/components/catalog/TrackList';
 import { SungHistory } from '@/components/catalog/SungHistory';
 import { useLibrary } from '@/lib/hooks/useLibrary';
@@ -50,7 +50,10 @@ function LibraryInner() {
 
   return (
     <div className="pt-4">
-      <h1 className="mb-6 font-display text-4xl font-extrabold tracking-tight">Your Library</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-4xl font-extrabold tracking-tight">Your Library</h1>
+        <Link href="/import" className="flex items-center gap-2 rounded-full bg-ink-800 px-4 py-2 text-sm font-bold hover:bg-ink-700"><Upload size={16} aria-hidden /> Import music</Link>
+      </div>
       <div role="tablist" className="mb-8 flex flex-wrap gap-2">
         {TABS.map((t) => (
           <Link

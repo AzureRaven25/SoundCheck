@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import clsx from 'clsx';
-import { Award, Home, Library, ListMusic, Mic2, Plus, Search, Trophy, Upload, Users } from 'lucide-react';
+import { Award, Home, Library, ListMusic, Mic2, Plus, Search, Trophy, Users } from 'lucide-react';
 import { useLibrary } from '@/lib/hooks/useLibrary';
 
 const NAV = [
@@ -11,7 +11,6 @@ const NAV = [
   { href: '/search', label: 'Search', icon: Search },
   { href: '/sing', label: 'Sing', icon: Mic2 },
   { href: '/library', label: 'Your Library', icon: Library },
-  { href: '/import', label: 'Import music', icon: Upload },
   { href: '/leaderboards', label: 'Leaderboards', icon: Trophy },
   { href: '/friends', label: 'Friends', icon: Users },
   { href: '/achievements', label: 'Achievements', icon: Award },
