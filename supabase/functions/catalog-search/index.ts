@@ -12,7 +12,7 @@
 import { MB_BASE, mapRecordingSearch, recordingQuery, type CatalogRows, type MbRecording } from '../_shared/musicbrainz.ts';
 import { norm } from '../_shared/norm.ts';
 import { searchTurso, songsToRows, tursoConfigured } from '../_shared/turso.ts';
-import { adminClient, cacheGet, cachePut, DAY, handle, json, providerFetch } from '../_shared/runtime.ts';
+import { adminClient, cacheGet, cachePut, DAY, handle, json, providerFetch, sleep } from '../_shared/runtime.ts';
 import { itunesToRows, type ItunesSong } from '../_shared/itunes_catalog.ts';
 import { stableUuid } from '../_shared/openmusic.ts';
 
@@ -205,7 +205,8 @@ Deno.serve((req) =>
       if (query) {
         const url = `${MB_BASE}/recording?fmt=json&limit=25&query=${encodeURIComponent(query)}`;
         let res = await providerFetch('musicbrainz', url);
-        if (res.status === 503) res = await providerFetch('musicbrainz', url); // MusicBrainz signals throttling with 503
+        // MusicBrainz answers 503 when it is overloaded or throttling: wait a moment and try twice more
+        for (let i = 0; i < 2 && res.status === 503; i++) { await sleep(1200 * (i + 1)); res = await providerFetch('musicbrainz', url); }
         if (!res.ok) {
           await cachePut('musicbrainz', key, 'error', { status: res.status }, 60);
         } else {

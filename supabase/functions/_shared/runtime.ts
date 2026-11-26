@@ -54,7 +54,7 @@ export async function handle(req: Request, fn: (body: Record<string, unknown>) =
   }
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class ProviderBusyError extends Error {}
 
