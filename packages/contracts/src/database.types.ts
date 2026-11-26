@@ -1203,6 +1203,7 @@ export type Database = {
           name: string
           plays: number
           skip_rate: number
+          source: string
           streams: number
           track_count: number
           user_id: string
@@ -1214,6 +1215,7 @@ export type Database = {
           name: string
           plays: number
           skip_rate: number
+          source: string
           streams: number
           track_count?: number
           user_id: string
@@ -1225,6 +1227,7 @@ export type Database = {
           name?: string
           plays?: number
           skip_rate?: number
+          source?: string
           streams?: number
           track_count?: number
           user_id?: string
@@ -1238,11 +1241,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "taste_artists_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "taste_artists_import_fkey"
+            columns: ["user_id", "source"]
             isOneToOne: false
             referencedRelation: "taste_imports"
-            referencedColumns: ["user_id"]
+            referencedColumns: ["user_id", "source"]
           },
         ]
       }
@@ -1297,6 +1300,7 @@ export type Database = {
           plays: number
           rank: number
           skip_rate: number
+          source: string
           spotify_uri: string | null
           streams: number
           title: string
@@ -1311,6 +1315,7 @@ export type Database = {
           plays: number
           rank: number
           skip_rate: number
+          source: string
           spotify_uri?: string | null
           streams: number
           title: string
@@ -1325,6 +1330,7 @@ export type Database = {
           plays?: number
           rank?: number
           skip_rate?: number
+          source?: string
           spotify_uri?: string | null
           streams?: number
           title?: string
@@ -1333,18 +1339,18 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "taste_tracks_import_fkey"
+            columns: ["user_id", "source"]
+            isOneToOne: false
+            referencedRelation: "taste_imports"
+            referencedColumns: ["user_id", "source"]
+          },
+          {
             foreignKeyName: "taste_tracks_track_id_fkey"
             columns: ["track_id"]
             isOneToOne: false
             referencedRelation: "tracks"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "taste_tracks_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "taste_imports"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -1913,12 +1919,12 @@ export type Database = {
           streams: number
           track_count: number
           user_id: string
-        }
+        }[]
         SetofOptions: {
           from: "*"
           to: "taste_imports"
-          isOneToOne: true
-          isSetofReturn: false
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       remove_session_member: {

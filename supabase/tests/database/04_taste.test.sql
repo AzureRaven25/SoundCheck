@@ -1,7 +1,7 @@
 -- Imported listening taste (Spotify summary): owner-only access, catalog matching, recommendations, delete.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(25);
 
 create function pg_temp.as_user(uid uuid) returns void language plpgsql as $$
 begin
@@ -75,6 +75,12 @@ select is((select count(*)::int from public.taste_imports), 1, 'others cannot de
 
 select lives_ok($$ select public.import_taste(jsonb_set((select s from summary), '{tracks}', '[]'::jsonb)) $$, 're-import replaces the old summary');
 select is((select count(*)::int from public.taste_tracks), 0, 'old tracks are gone after re-import');
+select lives_ok($$ select public.import_taste(jsonb_set((select s from summary), '{source}', '"apple_music"')) $$, 'a second service imports alongside');
+select is((select array_agg(source order by source) from public.taste_imports), array['apple_music', 'spotify'], 'one summary per service');
+select is((select count(*)::int from public.taste_tracks where source = 'apple_music'), 3, 'the other service keeps its own songs');
+select throws_ok($$ select public.import_taste(jsonb_set((select s from summary), '{source}', '"napster"')) $$, '22023', null, 'unknown services are refused');
+delete from public.taste_imports where source = 'apple_music';
+select is((select count(*)::int from public.taste_imports), 1, 'deleting one service keeps the others');
 delete from public.taste_imports;
 select is((select count(*)::int from public.taste_artists), 0, 'deleting the import removes everything');
 

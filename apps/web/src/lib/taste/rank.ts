@@ -1,4 +1,4 @@
-/** Ranking for the "From your Spotify" shelf: the imported songs you play most, lately, without skipping. */
+/** Ranking for the "Your top songs" shelf: the imported songs you play most, lately, without skipping. */
 
 export interface TastePlay { track_id: string; plays: number; skip_rate: number; last_played: string }
 

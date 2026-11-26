@@ -2,8 +2,9 @@ import { expect, test } from '@playwright/test';
 import { strToU8, zipSync } from 'fflate';
 import { signUp } from './helpers';
 
-// Spotify taste import: a signed-in singer picks their Spotify export zip in Settings; it's summarized in the
-// browser, matched to the catalog, and shows up on the home feed ("From your Spotify", "Picked for you").
+// Listening-history import: a signed-in singer picks their Spotify export zip in Settings; it's detected,
+// summarized in the browser, matched to the catalog, and shows up on the home feed ("From your Spotify",
+// "Picked for you"). An Apple Music export (zip of zips) then imports alongside it, and each deletes on its own.
 // The history here is synthetic (made-up artist and songs). Needs E2E_SB_URL / E2E_SB_SERVICE to seed the catalog.
 
 const ARTIST = { id: '5ca1ab1e-0000-4000-8000-00000000a501', name: 'Lantern Test Choir' };
@@ -39,7 +40,13 @@ function exportZip(): Buffer {
   }));
 }
 
-test('Spotify export: import in settings, tailored home shelves, delete', async ({ page }) => {
+function appleZip(): Buffer {
+  const daily = `Track Description,Date Played,Play Count,Play Duration Milliseconds\r\n${ARTIST.name} - ${OTHER.title},20240301,5,1000000\r\n`;
+  const inner = zipSync({ 'Apple_Media_Services/Apple Music Activity/Apple Music - Play History Daily Tracks.csv': strToU8(daily) });
+  return Buffer.from(zipSync({ 'Apple Media Services information/Apple_Media_Services.zip': inner }));
+}
+
+test('listening history: Spotify and Apple Music import, tailored home shelves, delete', async ({ page }) => {
   test.skip(!(await seedCatalog()), 'needs E2E_SB_URL and E2E_SB_SERVICE (supabase status -o env)');
   test.setTimeout(90_000);
 
@@ -48,10 +55,11 @@ test('Spotify export: import in settings, tailored home shelves, delete', async 
 
   await signUp(page, `Spotty ${Date.now().toString(36)}`);
   await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Your Spotify listening' })).toBeVisible();
-  await page.getByLabel('Spotify data export').setInputFiles({ name: 'my_spotify_data.zip', mimeType: 'application/zip', buffer: exportZip() });
-  await expect(page.getByText('1 of your songs are in the catalog.')).toBeVisible();
-  const summary = page.getByTestId('spotify-import-summary');
+  await expect(page.getByRole('heading', { name: 'Your listening history' })).toBeVisible();
+  const picker = page.getByLabel('Listening history export');
+  await picker.setInputFiles({ name: 'my_spotify_data.zip', mimeType: 'application/zip', buffer: exportZip() });
+  await expect(page.getByText('Spotify imported: 1 of your songs are in the catalog.')).toBeVisible();
+  const summary = page.getByTestId('taste-import-spotify');
   await expect(summary).toContainText('12 plays');
   await expect(summary).toContainText('1 artists and 1 songs found in the catalog');
 
@@ -69,9 +77,22 @@ test('Spotify export: import in settings, tailored home shelves, delete', async 
   await expect(picked.getByText(LOVED.title)).toHaveCount(0);
 
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Delete imported listening' }).click();
+  await picker.setInputFiles({ name: 'Apple Media Services information.zip', mimeType: 'application/zip', buffer: appleZip() });
+  await expect(page.getByText('Apple Music imported: 1 of your songs are in the catalog.')).toBeVisible();
+  await expect(page.getByTestId('taste-import-apple_music')).toContainText('Apple Music: 5 plays');
+  await expect(summary).toBeVisible(); // Spotify is kept
+
+  await page.getByRole('button', { name: 'Delete imported Spotify listening' }).click();
   await expect(page.getByText('Deleted your imported Spotify listening.')).toBeVisible();
   await expect(summary).toHaveCount(0);
   await page.goto('/');
+  const fromApple = page.getByRole('region', { name: 'From your Apple Music' });
+  await expect(fromApple.getByText(OTHER.title)).toBeVisible();
   await expect(page.getByRole('region', { name: 'From your Spotify' })).toHaveCount(0);
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Delete imported Apple Music listening' }).click();
+  await expect(page.getByTestId('taste-import-apple_music')).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'From your Apple Music' })).toHaveCount(0);
 });

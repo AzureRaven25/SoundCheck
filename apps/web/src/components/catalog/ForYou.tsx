@@ -16,7 +16,7 @@ export async function tracksInOrder(sb: ReturnType<typeof supabaseBrowser>, ids:
 
 /**
  * "Picked for you": songs by the artists you like most: what you play and favorite here, plus your imported
- * Spotify history (see recommended_tracks in supabase/migrations/20261126040001_listening_taste.sql).
+ * listening history from other services (see recommended_tracks in supabase/migrations/20261126050001_taste_sources.sql).
  * Signed-in users only; hidden until there's some history.
  */
 export function ForYou() {

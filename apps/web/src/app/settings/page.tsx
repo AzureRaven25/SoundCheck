@@ -1,6 +1,6 @@
 'use client';
 import { ServerConnections } from '@/components/personal/ServerConnections';
-import { SpotifyTaste } from '@/components/personal/SpotifyTaste';
+import { ListeningTaste } from '@/components/personal/ListeningTaste';
 import { useEffect, useState } from 'react';
 import { useUser } from '@/lib/hooks/useUser';
 import { supabaseBrowser } from '@/lib/supabase/client';
@@ -68,7 +68,7 @@ export default function SettingsPage() {
           Show my scores on public leaderboards
         </label>
       </section>
-      <SpotifyTaste userId={user.id} />
+      <ListeningTaste userId={user.id} />
       <details className="group rounded-xl bg-ink-900 p-4">
         <summary className="cursor-pointer font-bold">Advanced: play music from your own server <span className="text-sm font-normal text-ink-300">(Navidrome, Jellyfin, Subsonic)</span></summary>
         <div className="mt-4"><ServerConnections /></div>
