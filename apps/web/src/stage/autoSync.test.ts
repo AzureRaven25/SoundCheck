@@ -34,11 +34,13 @@ const hz = (m: number) => 440 * 2 ** ((m - 69) / 12);
  * A song: a chord every beat-pair from a fixed random progression, with drum-like clicks on each beat.
  * `vocal` adds a melody (the original has one, karaoke doesn't); `timbre` changes harmonics (a re-recording).
  */
-function song(seconds: number, { vocal, timbre, noise }: { vocal: boolean; timbre: number; noise: number }) {
+function song(seconds: number, { vocal, timbre, noise, loop = 0 }: { vocal: boolean; timbre: number; noise: number; loop?: number }) {
   const r = rng(7), n = rng(99 + timbre);
   const beat = 0.5;
-  const prog = Array.from({ length: Math.ceil(seconds / (2 * beat)) + 1 }, () => CHORDS[Math.floor(r() * CHORDS.length)]!);
-  const mel = Array.from({ length: Math.ceil(seconds / beat) + 1 }, () => 72 + Math.floor(r() * 8));
+  let prog = Array.from({ length: Math.ceil(seconds / (2 * beat)) + 1 }, () => CHORDS[Math.floor(r() * CHORDS.length)]!);
+  let mel = Array.from({ length: Math.ceil(seconds / beat) + 1 }, () => 72 + Math.floor(r() * 8));
+  // `loop`: the same `loop` chords over and over (a song whose bars all sound alike)
+  if (loop) { prog = prog.map((_, i) => prog[i % loop]!); mel = mel.map((_, i) => mel[i % (2 * loop)]!); }
   const out = new Float32Array(Math.round(seconds * SR));
   for (let i = 0; i < out.length; i++) {
     const t = i / SR;
@@ -56,11 +58,12 @@ function song(seconds: number, { vocal, timbre, noise }: { vocal: boolean; timbr
 /** Frames of `audio` heard from `from` to `to` seconds, stamped with `stamp(t)` (its video time). */
 function hear(audio: Float32Array, from: number, to: number, stamp: (t: number) => number): Frame[] {
   const frames: Frame[] = [];
+  const room = rng(5);
   let prev: Float32Array | null = null;
   for (let t = from; t < to; t += 0.04) {
     const start = Math.round(t * SR) - FFT;
     const re = new Float64Array(FFT), im = new Float64Array(FFT);
-    for (let i = 0; i < FFT; i++) re[i] = (audio[start + i] ?? 0) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / FFT));
+    for (let i = 0; i < FFT; i++) re[i] = ((audio[start + i] ?? 0) + (room() * 2 - 1) * 0.003) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / FFT));
     fft(re, im);
     const db = new Float32Array(FFT / 2);
     for (let k = 0; k < FFT / 2; k++) db[k] = 20 * Math.log10(Math.hypot(re[k]!, im[k]!) / FFT + 1e-9);
@@ -109,6 +112,21 @@ describe('auto sync', () => {
     expect(confident(m)).toBe(true);
     expect(gOff + m!.shift).toBeGreaterThan(kOff + at * 0.01 - 0.25);   // the drift up to here is part of the answer
     expect(gOff + m!.shift).toBeLessThan(kOff + (at + 6) * 0.01 + 0.25);
+  });
+
+  it('the song’s opening pins down a song whose bars all sound alike (where the middle can be a bar off)', () => {
+    const orig = song(30, { vocal: true, timbre: 2, noise: 0.01, loop: 2 });   // repeats every 2 s
+    const kar = song(30, { vocal: false, timbre: 0, noise: 0.02, loop: 2 });
+    const kOff = 3.0, guess = 5.0;   // a 3 s title card; the guess is one loop off
+    const silence = new Float32Array(SR * 12);
+    // as the Stage does at the opening: 1.5 s of the quiet room, then 8 s of the original from its start
+    const ref = [...hear(silence, 1, 2.5, (u) => u - 2.5), ...hear(orig, 0, 8, (u) => u)];
+    const kFrom = guess - 1.5 - 4;   // -0.5: half a second of room before the karaoke video starts
+    const cand = [...hear(silence, 1, 1.5, (u) => u - 1.5), ...hear(kar, -kOff, 17 - kOff, (u) => u + kOff)];
+    expect(kFrom).toBeLessThan(0);
+    const m = bestShift(ref, cand, guess - 4, guess + 4);
+    expect(confident(m)).toBe(true);
+    expect(m!.shift).toBeCloseTo(kOff, 1);
   });
 
   it('refuses to guess when it only hears a quiet room (headphones)', () => {
