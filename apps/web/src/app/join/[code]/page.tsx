@@ -152,6 +152,10 @@ export default function JoinSessionPage() {
       setQueueVersion((v) => v + 1);
     } else if (e.type === 'host_command' && e.memberId === me) {
       if (e.command === 'mute') { mutedRef.current = true; setMuted(true); }
+      if (e.command === 'kick') {
+        sender.current?.stop(); mic.current?.stop(); void ch.current?.close();
+        setError('The host removed you from this party.'); setStep('error');
+      }
       if (e.command === 'unmute') { mutedRef.current = false; setMuted(false); }
     }
   }, [syncVoice]);

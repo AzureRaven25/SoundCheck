@@ -1690,6 +1690,10 @@ export type Database = {
           track_id: string
         }[]
       }
+      remove_session_member: {
+        Args: { p_member_id: string }
+        Returns: undefined
+      }
       request_processing: {
         Args: { p_asset_id: string }
         Returns: {

@@ -14,6 +14,7 @@ import { PROTOCOL_VERSION } from '@soundcheck/contracts';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { recordGuestTake, type GuestScore } from './guestScore';
+import { PartyPanel } from './PartyPanel';
 import { SingRecorder, voicedSeconds } from './singHistory';
 import { loadYouTubeApi, videoIdFrom, type YTPlayer } from '@/player/youtube';
 import { useHostSession } from '@/session/useHostSession';
@@ -639,6 +640,11 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
         </section>
       </div>
 
+      {mode === 'party' && host.session && (
+        <div className={clsx('relative px-4 pb-6 md:px-6', phase !== 'intro' && 'hidden')}>
+          <PartyPanel host={host} items={queue.items} reload={queue.reload} currentTrackId={data.track.id} phase={phase} />
+        </div>
+      )}
       </div>
     </div>
   );

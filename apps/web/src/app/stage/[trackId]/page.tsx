@@ -10,6 +10,7 @@ import { liveHit } from '@soundcheck/scoring';
 import { Artwork } from '@/components/ui/Artwork';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { recordGuestTake, type GuestScore } from '@/stage/guestScore';
+import { PartyPanel } from '@/stage/PartyPanel';
 import { SingRecorder, voicedSeconds } from '@/stage/singHistory';
 import { useHostSession } from '@/session/useHostSession';
 import { queueChanged, useSessionQueue, type QueueItem } from '@/session/queue';
@@ -515,6 +516,11 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
             {phase === 'singing' && mode === 'solo' && (useMic ? <Mic size={18} className="text-success-400" aria-label="Microphone on" /> : <MicOff size={18} className="text-ink-500" aria-label="Microphone off" />)}
           </footer>
         </>
+      )}
+      {mode === 'party' && host.session && (
+        <div className={clsx('relative px-4 pb-6 md:px-6', phase !== 'intro' && 'hidden')}>
+          <PartyPanel host={host} items={queue.items} reload={queue.reload} currentTrackId={data.track.id} phase={phase} />
+        </div>
       )}
       </div>
     </div>

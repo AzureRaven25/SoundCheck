@@ -127,3 +127,55 @@ test('sing history: a take is recorded even when you leave without finishing, an
   await expect(page.getByRole('region', { name: 'Your stats' })).toContainText(/Songs sung\s*1/);
   fs.rmSync(wav, { force: true });
 });
+
+test('host controls: reorder and remove requests, mute and remove singers, take turns', async ({ page, browser }) => {
+  test.skip(!process.env.E2E_SB_URL, 'set E2E_SB_URL / E2E_SB_SERVICE');
+  test.setTimeout(150_000);
+  const wav = singingWav();
+  await signUp(page, 'Party Boss');
+  await page.goto(`/stage/${FIXTURE_TRACK}?video=1`);
+  await page.getByLabel('Kind of video').selectOption('original');
+  await page.getByLabel('YouTube link').fill('pKtLNYNWbBw');
+  await page.getByRole('button', { name: 'Use video' }).click();
+  await page.getByRole('radio', { name: /Phones as mics/ }).click();
+  await page.getByRole('button', { name: 'Open the party' }).click();
+  const code = (await page.getByTestId('pairing-code').textContent({ timeout: 15_000 }))!.trim();
+
+  const join = async (name: string) => {
+    const ctx = await browser.newContext({ permissions: ['microphone'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const p = await ctx.newPage();
+    await fakeMicrophone(p, wav);
+    await p.goto(`/join/${code}`);
+    await p.getByLabel('Stage name').fill(name);
+    await p.getByRole('button', { name: 'Join' }).click();
+    await p.getByRole('button', { name: 'Turn on my microphone' }).click();
+    await expect(p.getByText('Waiting for the song')).toBeVisible({ timeout: 15_000 });
+    return { ctx, p };
+  };
+  const dee = await join('Dee');
+  const eli = await join('Eli');
+  for (const song of ['Stand by Me', 'I Will Survive']) {
+    if (!(await dee.p.getByPlaceholder('Search songs').isVisible())) await dee.p.getByRole('button', { name: /Request a song/ }).click();
+    await dee.p.getByPlaceholder('Search songs').fill(song);
+    await dee.p.getByRole('button', { name: new RegExp(song) }).first().click();
+    await expect(dee.p.getByText('Added to the queue')).toBeVisible();
+  }
+  const queue = page.getByRole('list', { name: 'Manage queue' });
+  await expect(queue.getByRole('listitem')).toHaveCount(2, { timeout: 15_000 });
+  await expect(queue.getByRole('listitem').first()).toContainText('Stand by Me');
+  await page.getByRole('button', { name: 'Play I Will Survive next' }).click();
+  await expect(queue.getByRole('listitem').first()).toContainText('I Will Survive');
+  await page.getByRole('button', { name: 'Remove Stand by Me from the queue' }).click();
+  await expect(queue.getByRole('listitem')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Mute Dee' }).click();
+  await expect(dee.p.getByText('Your mic is muted')).toBeVisible();
+  await page.getByRole('button', { name: 'Unmute Dee' }).click();
+  await page.getByLabel('Take turns').check();
+  await expect(page.getByRole('status').filter({ hasText: 'Next up to sing:' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Remove Eli from the party' }).click();
+  await expect(eli.p.getByText('The host removed you from this party.')).toBeVisible({ timeout: 10_000 });
+  await dee.ctx.close(); await eli.ctx.close();
+  fs.rmSync(wav, { force: true });
+});
