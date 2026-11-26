@@ -1,6 +1,8 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import { Check, Search, UserMinus, UserPlus, X } from 'lucide-react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Check, Link2, Mic2, Search, UserMinus, UserPlus, X } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { useUser } from '@/lib/hooks/useUser';
 import { Avatar, SignInGate } from '@/components/social/SignInGate';
@@ -8,8 +10,28 @@ import { Avatar, SignInGate } from '@/components/social/SignInGate';
 interface Person { id: string; display_name: string; username: string | null; avatar_url: string | null; relationship: 'friends' | 'requested' | 'incoming' | 'none' }
 interface Friend { id: string; display_name: string; username: string | null; avatar_url: string | null; status: 'pending' | 'accepted'; direction: 'incoming' | 'outgoing'; songs_sung: number; best_score: number | null }
 
+interface Activity { user_id: string; display_name: string; avatar_url: string | null; track_id: string; title: string; artist_credit: string; score: number; grade: string; performed_at: string }
+
 function Friends() {
   const user = useUser();
+  const inviteId = useSearchParams().get('invite');
+  const [inviter, setInviter] = useState<{ id: string; display_name: string; avatar_url: string | null } | null>(null);
+  const [activity, setActivity] = useState<Activity[] | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!inviteId || !/^[0-9a-f-]{36}$/.test(inviteId)) return;
+    void supabaseBrowser().rpc('invite_profile', { p_user_id: inviteId }).then(({ data }) => setInviter(((data as typeof inviter[]) ?? [])[0] ?? null));
+  }, [inviteId]);
+  useEffect(() => { void supabaseBrowser().rpc('friends_activity', { p_limit: 20 }).then(({ data }) => setActivity((data as Activity[] | null) ?? [])); }, []);
+  const inviteUrl = typeof window !== 'undefined' && user ? `${window.location.origin}/friends?invite=${user.id}` : '';
+  async function shareInvite() {
+    try {
+      if (navigator.share) { await navigator.share({ title: 'SoundCheck', text: 'Add me on SoundCheck and let’s sing!', url: inviteUrl }); return; }
+    } catch { /* closed the sheet: copy instead */ }
+    await navigator.clipboard?.writeText(inviteUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
   const [q, setQ] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
   const [friends, setFriends] = useState<Friend[] | null>(null);
@@ -57,6 +79,26 @@ function Friends() {
         <p className="mt-1 text-ink-300">Sing with friends, then compare scores on the friends leaderboard.</p>
       </header>
 
+      {inviter && inviter.id !== user?.id && (() => {
+        const rel = friends?.find((f) => f.id === inviter.id);
+        return (
+          <section aria-label="Invitation" className="flex flex-wrap items-center gap-3 rounded-xl bg-ink-850 p-4 ring-1 ring-pink-500/40">
+            <Avatar name={inviter.display_name} url={inviter.avatar_url} size={48} />
+            <p className="min-w-0 flex-1"><b>{inviter.display_name}</b> invited you to be friends on SoundCheck.</p>
+            {rel?.status === 'accepted' ? <span className="text-sm text-success-400">You’re friends</span>
+              : rel?.direction === 'incoming' ? <button type="button" className={`${btn} bg-pink-500 text-ink-950`} onClick={() => void accept(inviter.id)}><Check size={14} /> Accept</button>
+              : rel ? <span className="text-sm text-ink-300">Request sent</span>
+              : <button type="button" className={`${btn} bg-ink-50 text-ink-950`} onClick={() => void add(inviter.id)}><UserPlus size={14} /> Add friend</button>}
+          </section>
+        );
+      })()}
+
+      <section aria-label="Invite friends" className="flex flex-wrap items-center gap-3 rounded-xl bg-ink-900 p-4">
+        <Link2 className="text-pink-400" aria-hidden />
+        <p className="min-w-0 flex-1 text-sm text-ink-300">Send friends your invite link: they can add you in one tap.</p>
+        <button type="button" onClick={() => void shareInvite()} className={`${btn} bg-ink-50 text-ink-950`}>{copied ? 'Link copied!' : 'Share invite link'}</button>
+      </section>
+
       <section aria-label="Find people">
         <label className="flex items-center gap-3 rounded-full bg-ink-850 px-4 py-3 ring-1 ring-ink-700 focus-within:ring-pink-500">
           <Search size={18} className="text-ink-300" />
@@ -98,6 +140,22 @@ function Friends() {
         </section>
       )}
 
+      {activity && activity.length > 0 && (
+        <section aria-label="Friends' recent songs">
+          <h2 className="mb-3 text-lg font-bold">Your friends sang</h2>
+          <ul className="divide-y divide-ink-800 rounded-xl bg-ink-900">
+            {activity.map((a) => (
+              <li key={`${a.user_id}-${a.performed_at}`} className="flex items-center gap-3 p-3">
+                <Avatar name={a.display_name} url={a.avatar_url} size={36} />
+                <p className="min-w-0 flex-1 truncate text-sm"><b>{a.display_name}</b> sang <Link prefetch={false} href={`/track/${a.track_id}`} className="font-bold hover:underline">{a.title}</Link> <span className="text-ink-300">· {a.artist_credit}</span></p>
+                <span className="shrink-0 rounded-lg bg-ink-800 px-2 py-0.5 text-sm font-black tabular-nums">{a.score} <span className="text-pink-400">{a.grade}</span></span>
+                <Link prefetch={false} href={`/stage/${a.track_id}`} aria-label={`Sing ${a.title} too`} className="stage-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"><Mic2 size={14} aria-hidden /></Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section aria-label="Your friends">
         <h2 className="mb-3 text-lg font-bold">Your friends</h2>
         {friends === null ? <p className="text-ink-500">Loading…</p> : accepted.length === 0 ? (
@@ -122,6 +180,12 @@ function Friends() {
   );
 }
 
+function FriendsGate() {
+  const invite = useSearchParams().get('invite');
+  const next = invite ? `/friends?invite=${invite}` : '/friends';
+  return <SignInGate next={next} what="your friends" title="Friends" why={invite ? 'Someone invited you to be friends on SoundCheck. Log in or create a free account to accept.' : 'Add friends to compare scores and see what they’re singing. Log in to find them.'}><Friends /></SignInGate>;
+}
+
 export default function FriendsPage() {
-  return <SignInGate next="/friends" what="your friends" title="Friends" why="Add friends to compare scores and see what they’re singing. Log in to find them."><Friends /></SignInGate>;
+  return <Suspense><FriendsGate /></Suspense>;
 }

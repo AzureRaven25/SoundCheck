@@ -1535,6 +1535,20 @@ export type Database = {
         }
         Returns: string
       }
+      friends_activity: {
+        Args: { p_limit?: number }
+        Returns: {
+          artist_credit: string
+          avatar_url: string
+          display_name: string
+          grade: string
+          performed_at: string
+          score: number
+          title: string
+          track_id: string
+          user_id: string
+        }[]
+      }
       genre_counts: {
         Args: never
         Returns: {
@@ -1570,6 +1584,14 @@ export type Database = {
         Returns: {
           created: boolean
           track_id: string
+        }[]
+      }
+      invite_profile: {
+        Args: { p_user_id: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
         }[]
       }
       join_session: {
