@@ -1195,6 +1195,159 @@ export type Database = {
           },
         ]
       }
+      taste_artists: {
+        Row: {
+          artist_id: string | null
+          last_played: string
+          ms_played: number
+          name: string
+          plays: number
+          skip_rate: number
+          streams: number
+          track_count: number
+          user_id: string
+        }
+        Insert: {
+          artist_id?: string | null
+          last_played: string
+          ms_played: number
+          name: string
+          plays: number
+          skip_rate: number
+          streams: number
+          track_count?: number
+          user_id: string
+        }
+        Update: {
+          artist_id?: string | null
+          last_played?: string
+          ms_played?: number
+          name?: string
+          plays?: number
+          skip_rate?: number
+          streams?: number
+          track_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "taste_artists_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "taste_artists_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "taste_imports"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      taste_imports: {
+        Row: {
+          artist_count: number
+          first_played: string | null
+          imported_at: string
+          last_played: string | null
+          matched_artists: number
+          matched_tracks: number
+          ms_played: number
+          source: string
+          streams: number
+          track_count: number
+          user_id: string
+        }
+        Insert: {
+          artist_count?: number
+          first_played?: string | null
+          imported_at?: string
+          last_played?: string | null
+          matched_artists?: number
+          matched_tracks?: number
+          ms_played?: number
+          source: string
+          streams?: number
+          track_count?: number
+          user_id: string
+        }
+        Update: {
+          artist_count?: number
+          first_played?: string | null
+          imported_at?: string
+          last_played?: string | null
+          matched_artists?: number
+          matched_tracks?: number
+          ms_played?: number
+          source?: string
+          streams?: number
+          track_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      taste_tracks: {
+        Row: {
+          album: string | null
+          artist: string
+          last_played: string
+          ms_played: number
+          plays: number
+          rank: number
+          skip_rate: number
+          spotify_uri: string | null
+          streams: number
+          title: string
+          track_id: string | null
+          user_id: string
+        }
+        Insert: {
+          album?: string | null
+          artist: string
+          last_played: string
+          ms_played: number
+          plays: number
+          rank: number
+          skip_rate: number
+          spotify_uri?: string | null
+          streams: number
+          title: string
+          track_id?: string | null
+          user_id: string
+        }
+        Update: {
+          album?: string | null
+          artist?: string
+          last_played?: string
+          ms_played?: number
+          plays?: number
+          rank?: number
+          skip_rate?: number
+          spotify_uri?: string | null
+          streams?: number
+          title?: string
+          track_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "taste_tracks_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "taste_tracks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "taste_imports"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       track_artists: {
         Row: {
           artist_id: string
@@ -1589,6 +1742,28 @@ export type Database = {
           track_id: string
         }[]
       }
+      import_taste: {
+        Args: { p_summary: Json }
+        Returns: {
+          artist_count: number
+          first_played: string | null
+          imported_at: string
+          last_played: string | null
+          matched_artists: number
+          matched_tracks: number
+          ms_played: number
+          source: string
+          streams: number
+          track_count: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "taste_imports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       invite_profile: {
         Args: { p_user_id: string }
         Returns: {
@@ -1714,6 +1889,37 @@ export type Database = {
           processed_at: string
           track_id: string
         }[]
+      }
+      recommended_tracks: {
+        Args: { p_limit?: number }
+        Returns: {
+          artist_id: string
+          artist_name: string
+          track_id: string
+          weight: number
+        }[]
+      }
+      rematch_taste: {
+        Args: never
+        Returns: {
+          artist_count: number
+          first_played: string | null
+          imported_at: string
+          last_played: string | null
+          matched_artists: number
+          matched_tracks: number
+          ms_played: number
+          source: string
+          streams: number
+          track_count: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "taste_imports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       remove_session_member: {
         Args: { p_member_id: string }

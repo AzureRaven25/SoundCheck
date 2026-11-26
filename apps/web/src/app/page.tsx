@@ -3,6 +3,7 @@ import { Mic2, PartyPopper, Search, Upload } from 'lucide-react';
 import { Shelf, TrackCard } from '@/components/catalog/Cards';
 import { RecentlyPlayed } from '@/components/catalog/RecentlyPlayed';
 import { ForYou } from '@/components/catalog/ForYou';
+import { SpotifyFavorites } from '@/components/catalog/SpotifyFavorites';
 import { Welcome } from '@/components/catalog/Welcome';
 import { Equalizer, FloatingNotes, HeroSearch } from '@/components/catalog/HeroSearch';
 import { getFullLengthTracks, getPopularTracks, getReadyToSing } from '@/lib/catalog';
@@ -82,6 +83,7 @@ export default async function HomePage() {
 
       <Welcome picks={classics.slice(0, 3)} />
       <RecentlyPlayed />
+      <SpotifyFavorites />
       <ForYou />
 
       {ready.length > 0 && (
