@@ -16,7 +16,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL(safeNext, url.origin));
     }
   }
-  return NextResponse.redirect(new URL('/login?error=auth', url.origin));
+  // No code (an older-format link carries the session after '#', which only the browser can read), or the code
+  // was expired/used: finish in the browser. Redirects keep the '#…' part, so /auth/confirm still receives it.
+  const confirm = new URL('/auth/confirm', url.origin);
+  confirm.searchParams.set('next', safeNext);
+  if (code) confirm.searchParams.set('error', 'expired');
+  const err = url.searchParams.get('error_description');
+  if (err) confirm.searchParams.set('error', err.slice(0, 200));
+  return NextResponse.redirect(confirm);
 }
 
 /** True when the session came from a password-recovery link (the JWT's `amr` lists method "recovery"). */

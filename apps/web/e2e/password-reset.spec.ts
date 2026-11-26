@@ -61,3 +61,25 @@ test('a used or missing reset link offers a new one', async ({ page }) => {
   await expect(page.getByText('This reset link has expired or was already used.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Send a new link' })).toHaveAttribute('href', '/forgot-password');
 });
+
+test('an older-format reset link (session after #) still opens "Choose a new password"', async ({ page }) => {
+  const url = process.env.E2E_SB_URL, anon = process.env.E2E_SB_ANON, service = process.env.E2E_SB_SERVICE;
+  test.skip(!url || !anon || !service, 'needs the local stack (Mailpit)');
+  const email = `implicit-${Date.now()}@soundcheck.test`;
+  await fetch(`${url}/auth/v1/admin/users`, { method: 'POST', headers: { apikey: service!, Authorization: `Bearer ${service}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'first-password-1', email_confirm: true }) });
+  // a direct request without PKCE, as other clients or the dashboard send it
+  const r = await fetch(`${url}/auth/v1/recover?redirect_to=${encodeURIComponent('http://localhost:3000/auth/callback')}`, {
+    method: 'POST', headers: { apikey: anon!, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+  expect(r.status).toBe(200);
+  await page.goto(await latestLink(email));
+  await expect(page).toHaveURL(/\/reset-password$/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Choose a new password' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /^New password/ })).toBeVisible();
+});
+
+test('an expired or used link explains itself instead of dropping you on the login page', async ({ page }) => {
+  await page.goto('/auth/callback?code=00000000-0000-4000-8000-000000000000');
+  await expect(page.getByRole('heading', { name: 'That link didn’t work' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Send a new reset link' })).toHaveAttribute('href', '/forgot-password');
+});
