@@ -86,6 +86,8 @@ export function VideoStage({ data, resume, local = null }: { data: VideoStageDat
   const guideVid = backing === 'karaoke' && karaokeVid && originalVid ? originalVid : null;
   const [guide, setGuide] = useState(0.25);
   const [music, setMusic] = useState(1);
+  /** "Check by ear": hear only the karaoke or only the original, flipping between them (a jump means out of step) */
+  const [hear, setHear] = useState<'both' | 'karaoke' | 'original'>('both');
   const [mode, setMode] = useState<Mode>(resume ? 'party' : 'solo');
   const [phase, setPhase] = useState<Phase>('intro');
   const [playing, setPlaying] = useState(false);
@@ -168,8 +170,12 @@ export function VideoStage({ data, resume, local = null }: { data: VideoStageDat
   useEffect(() => {
     clock.current.guideOffset = local ? (mainVid ? offsets[mainVid.id] ?? 0 : 0) : guideVid ? offsets[guideVid.id] ?? 0 : 0;
   }, [guideVid, mainVid, offsets, local]);
-  useEffect(() => { try { clock.current.main?.setVolume(Math.round(music * 100)); } catch { /* not ready */ } }, [music, ready.main]);
-  useEffect(() => { clock.current.setGuideVolume(guide); }, [guide, ready.guide]);
+  const flipping = hear !== 'both' && !!guideVid && !local;
+  const mainLevel = flipping ? (hear === 'karaoke' ? Math.max(music, 0.8) : 0) : music;
+  const guideLevel = flipping ? (hear === 'original' ? Math.max(music, 0.8) : 0) : guide;
+  useEffect(() => { try { clock.current.main?.setVolume(Math.round(mainLevel * 100)); } catch { /* not ready */ } }, [mainLevel, ready.main]);
+  useEffect(() => { clock.current.setGuideVolume(guideLevel); }, [guideLevel, ready.guide]);
+  useEffect(() => { if (phase !== 'singing') setHear('both'); }, [phase]);
   // the karaoke video ended before the song did: the original plays on at the music volume
   const [handedOff, setHandedOff] = useState(false);
   const musicRef = useRef(music);
@@ -206,14 +212,15 @@ export function VideoStage({ data, resume, local = null }: { data: VideoStageDat
     return () => clearInterval(iv);
   }, [playing, mode, publish]);
 
-  const nudge = (delta: number, which: 'main' | 'guide' = 'main') => {
+  /** `byEar`: set with the flip check, which is as good as a measurement (it's saved as one). */
+  const nudge = (delta: number, which: 'main' | 'guide' = 'main', byEar = false) => {
     const v = which === 'main' ? mainVid : guideVid;
     if (!v) return;
     setOffsets((o) => {
       const next = Math.round(((o[v.id] ?? 0) + delta) * 100) / 100;
       if (data.signedIn && !local) {
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => void saveVideoOffset(data.track.id, v.id, next), 1500);
+        saveTimer.current = setTimeout(() => void saveVideoOffset(data.track.id, v.id, next, byEar), 1500);
       }
       return { ...o, [v.id]: next };
     });
@@ -614,6 +621,30 @@ export function VideoStage({ data, resume, local = null }: { data: VideoStageDat
                     </p>
                   )}
                 </>
+              )}
+              {guideVid && !local && phase === 'singing' && (
+                <div className="space-y-2 rounded-lg bg-ink-850 p-2 text-xs" role="group" aria-label="Check the timing by ear">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold uppercase tracking-widest text-ink-300">Check by ear</span>
+                    <span role="radiogroup" aria-label="Hear" className="flex rounded-full bg-ink-900 p-0.5 font-bold">
+                      {(['both', 'karaoke', 'original'] as const).map((h) => (
+                        <button key={h} type="button" role="radio" aria-checked={hear === h} onClick={() => setHear(h)}
+                          className={clsx('rounded-full px-2 py-1', hear === h ? 'bg-ink-50 text-ink-950' : 'text-ink-300')}>
+                          {h === 'both' ? 'Mix' : h === 'karaoke' ? 'Karaoke' : 'Original'}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  {flipping && (
+                    <>
+                      <p className="text-ink-300">Flip between Karaoke and Original. If the song jumps when you flip, it’s out of step: fix it until flipping sounds seamless.</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button type="button" onClick={() => nudge(0.1, 'main', true)} className="rounded-full bg-ink-800 px-2 py-1.5 font-bold" aria-label="Karaoke is behind">Karaoke is behind</button>
+                        <button type="button" onClick={() => nudge(-0.1, 'main', true)} className="rounded-full bg-ink-800 px-2 py-1.5 font-bold" aria-label="Karaoke is ahead">Karaoke is ahead</button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               <div className="flex items-center justify-between gap-1.5 text-xs" role="group" aria-label="Lyrics timing"
                 title={local ? 'Moves the lyrics against your recording' : guideVid ? 'Moves the lyrics and the original together, against the karaoke backing' : 'Moves the lyrics against the video'}>

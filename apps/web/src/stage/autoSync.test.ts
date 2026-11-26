@@ -142,6 +142,10 @@ describe('auto sync', () => {
     expect(agree(m(2.5), m(2.45))).toBe(true);
     expect(agree(m(2.5), m(1.9))).toBe(false);
     expect(agree(m(2.5), m(2.5, 0.1))).toBe(false);
+    // the middle and the opening both landing on 17.55 s with close runners-up (a real case): agreement is the evidence
+    expect(agree(m(2.55, 0.289, 0.005), m(2.55, 0.241, 0.014))).toBe(true);
+    expect(agree(m(2.55, 0.289, 0.005), m(2.75, 0.241, 0.014))).toBe(false);
+    expect(agree(m(2.55, 0.18, 0.005), m(2.55, 0.25, 0.014))).toBe(false);
   });
 
   it('a long stretch of the middle lines up the singing even when the karaoke version cut 2 s from the intro', () => {
