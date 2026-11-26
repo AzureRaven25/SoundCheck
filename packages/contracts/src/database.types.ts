@@ -1768,6 +1768,21 @@ export type Database = {
           track_id: string
         }[]
       }
+      log_video_sync_attempt: {
+        Args: {
+          p_cand_frames: number
+          p_guess_ms: number
+          p_level_db: number | null
+          p_margin: number | null
+          p_offset_ms: number | null
+          p_outcome: string
+          p_ref_frames: number
+          p_score: number | null
+          p_track_id: string
+          p_video_id: string
+        }
+        Returns: undefined
+      }
       set_video_offset: {
         Args: { p_measured?: boolean; p_offset_ms: number; p_track_id: string; p_video_id: string }
         Returns: undefined

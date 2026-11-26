@@ -239,9 +239,10 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const alignAbort = useRef<AbortController | null>(null);
   const tried = useRef(new Set<string>());
   useEffect(() => () => alignAbort.current?.abort(), []);
-  const needsAutoSync = () => !!(mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
-    && ready.guide && guidePlayer.current && mainPlayer.current && !karaokeVid.measured
-    && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id));
+  /** `again`: the singer asked to line it up again, even though it was measured before. */
+  const needsAutoSync = (again = false) => !!(mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
+    && ready.guide && guidePlayer.current && mainPlayer.current
+    && (again || (!karaokeVid.measured && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id))));
 
   /** Lyrics time to compare at: somewhere with the full band (about 40% in, after the first line). */
   function compareAt(): number {
@@ -263,9 +264,17 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     try {
       const r = await measureKaraokeOffset({ ctx: ac, karaoke: kp, original: gp, originalOffset: offsets[guideVid!.id] ?? 0, guess,
         at: compareAt(), signal: ctl.signal, onStep: setAligning });
-      if (ctl.signal.aborted) return null;
+      void supabaseBrowser().rpc('log_video_sync_attempt', {
+        p_track_id: data.track.id, p_video_id: k.id, p_outcome: r.outcome, p_guess_ms: Math.round(guess * 1000),
+        p_offset_ms: r.match ? Math.round(((offsets[guideVid!.id] ?? 0) + r.match.shift) * 1000) : null,
+        p_score: r.match?.score ?? null, p_margin: r.match?.margin ?? null, p_ref_frames: r.refFrames, p_cand_frames: r.candFrames, p_level_db: r.levelDb,
+      }).then(() => {});
+      if (r.outcome === 'skipped') return null;
       if (!r.ok) {
-        setAutoNote('Couldn’t hear the music clearly enough to line up the karaoke version (headphones, or the volume is low). If it’s off, use the Lyrics Earlier / Later buttons.');
+        setAutoNote(r.outcome === 'low-confidence' && r.levelDb != null && r.levelDb > -50
+          ? 'Heard the music but couldn’t find a sure match, so the timing wasn’t changed. If the original sounds ahead of the karaoke, press Later.'
+          : r.outcome.endsWith('did-not-play') ? 'A video didn’t start in time (an ad, or slow loading), so the timing wasn’t checked. Try “Line up again”.'
+          : 'Couldn’t hear the music through the mic (headphones, or the volume is low), so the timing wasn’t checked.');
         return null;
       }
       rememberOffset(k.id, r.offset);
@@ -283,11 +292,11 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     }
   }
 
-  async function start() {
+  async function start(again = false) {
     const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
     ctx.current = ac;
     void ac.resume();
-    const synced = needsAutoSync() && (await micMaybeAllowed()) ? await autoSync(ac) : null;
+    const synced = needsAutoSync(again) && (await micMaybeAllowed()) ? await autoSync(ac) : null;
     await begin(ac, synced);
   }
 
@@ -313,7 +322,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           lastDb.current = f.rmsDb;
           const t = c.lyricTime() - (mic.current?.inputLatencyMs ?? 0) / 1000;
           frames.current.push(+t.toFixed(3), f.f0, +f.conf.toFixed(3), +f.rmsDb.toFixed(1));
-          const voiced = f.f0 > 0 && f.conf >= 0.6 && (noiseFloor.current == null || f.rmsDb >= noiseFloor.current + 10);
+          // the trail is lenient (a quiet mic still draws): a clear pitch a little above the room. Scoring has its own gate.
+          const voiced = f.f0 > 0 && f.conf >= 0.65 && (noiseFloor.current == null || f.rmsDb >= noiseFloor.current + 4);
           trail.current.push([t, voiced ? midiOf(f.f0) : null]);
           if (trail.current.length > 400) trail.current.splice(0, trail.current.length - 400);
         }, ac);
@@ -465,7 +475,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
 
   const showStage = phase !== 'results' && phase !== 'scoring';
   // YouTube asks for embedded players of at least 200×200 px
-  const tile = 'h-[200px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-700/80';
+  const tile = 'h-[200px] w-full min-w-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-ink-700/80 min-[900px]:h-[clamp(200px,calc((100vh-30rem)/2),300px)]';
   return (
     <div className="relative h-full overflow-hidden">
       {data.track.artworkUrl && (
@@ -507,7 +517,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       {/* Stage: lyrics and the visualiser are the show; YouTube's players sit in a side rail as compact tiles (they must
           stay visible while playing, so they're kept mounted and are only hidden on the results screen, paused). */}
       <div className={clsx('relative flex-1 gap-4 px-4 pb-3 md:px-6', showStage ? 'flex flex-col min-[900px]:grid min-[900px]:min-h-0 min-[900px]:grid-cols-[minmax(0,1fr)_26rem] min-[900px]:grid-rows-[auto_minmax(0,1fr)]' : 'hidden')}>
-        <aside className="order-1 -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 min-[900px]:col-start-2 min-[900px]:row-start-1 min-[900px]:mx-0 min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:gap-2 min-[900px]:overflow-visible min-[900px]:px-0 min-[900px]:pb-0" aria-label="Videos">
+        <aside className="order-1 -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 min-[900px]:col-start-2 min-[900px]:row-start-1 min-[900px]:mx-0 min-[900px]:flex min-[900px]:flex-col min-[900px]:gap-2 min-[900px]:overflow-visible min-[900px]:px-0 min-[900px]:pb-0" aria-label="Videos">
           <div className="w-[260px] shrink-0 min-[900px]:w-full">
             <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-widest text-ink-300">
               Backing · {mainVid?.kind === 'karaoke' ? (mainVid.title.match(/instrumental/i) && !mainVid.title.match(/karaoke/i) ? 'instrumental' : 'karaoke version') : 'original'}
@@ -567,12 +577,13 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   )}
                 </>
               )}
-              <div className="flex items-center justify-between gap-1.5 text-xs" role="group" aria-label="Lyrics timing">
-                <span className="font-bold uppercase tracking-widest text-ink-300">Lyrics</span>
+              <div className="flex items-center justify-between gap-1.5 text-xs" role="group" aria-label="Lyrics timing"
+                title={guideVid ? 'Moves the lyrics and the original together, against the karaoke backing' : 'Moves the lyrics against the video'}>
+                <span className="font-bold uppercase tracking-widest text-ink-300">{guideVid ? 'Lyrics + original' : 'Lyrics'}</span>
                 <span className="flex items-center gap-1">
-                  <button type="button" onClick={() => nudge(0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics later">Later</button>
-                  <span className="w-14 text-center font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
                   <button type="button" onClick={() => nudge(-0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics earlier">Earlier</button>
+                  <span className="w-14 text-center font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
+                  <button type="button" onClick={() => nudge(0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics later">Later</button>
                 </span>
                 <button type="button" onClick={tapSync} disabled={phase !== 'singing' || !hasLyrics}
                   className="flex items-center gap-1 rounded-full bg-ink-800 px-2.5 py-1 font-bold disabled:opacity-30" title="Tap the moment a line starts being sung" aria-label="Tap when a line starts">
@@ -584,7 +595,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           )}
 
         <section className="order-2 flex min-w-0 flex-col gap-3 min-[900px]:col-start-1 min-[900px]:row-span-2 min-[900px]:row-start-1 min-[900px]:min-h-0" aria-label="Lyrics">
-          <div className="relative h-40 shrink-0 overflow-hidden rounded-2xl bg-ink-900/70 ring-1 ring-ink-800 min-[900px]:h-[clamp(110px,24vh,240px)]">
+          <div className="relative h-40 shrink-0 overflow-hidden rounded-2xl bg-ink-900/70 ring-1 ring-ink-800 min-[900px]:h-[clamp(120px,30vh,320px)]">
             <VoiceVisualizer getTime={getTime} getTrails={getTrails} analyser={mode === 'solo' ? analyser : null} getLevels={getLevels} />
           </div>
           <div className="relative flex min-h-[16rem] flex-auto items-center justify-center min-[900px]:min-h-0 min-[900px]:overflow-y-auto">
@@ -670,6 +681,12 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   className="stage-gradient mt-6 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
+                {mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && (
+                  <button type="button" onClick={() => void start(true)} disabled={!ready.main || !ready.guide}
+                    className="mx-auto mt-3 block text-xs font-bold text-ink-300 underline hover:text-ink-50 disabled:opacity-40">
+                    Karaoke out of step? Line it up again, then sing
+                  </button>
+                )}
                 <details className="mx-auto mt-6 max-w-2xl text-left text-sm">
                   <summary className="cursor-pointer text-center text-xs font-bold uppercase tracking-widest text-ink-300 hover:text-ink-50">Choose videos</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">

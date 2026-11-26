@@ -132,8 +132,10 @@ async function playFrom(p: YTPlayer, to: number, signal: AbortSignal) {
   return false;
 }
 
-async function listen(an: AnalyserNode, sampleRate: number, time: () => number | null, ms: number, signal: AbortSignal): Promise<Frame[]> {
+/** Frames heard while `time` says the video is playing; `level` collects the mic's loudness (dBFS) per frame. */
+async function listen(an: AnalyserNode, sampleRate: number, time: () => number | null, ms: number, signal: AbortSignal, level: number[]): Promise<Frame[]> {
   const db = new Float32Array(an.frequencyBinCount);
+  const wave = new Float32Array(an.fftSize);
   const out: Frame[] = [];
   let prev: Float32Array | null = null;
   const end = performance.now() + ms;
@@ -142,7 +144,13 @@ async function listen(an: AnalyserNode, sampleRate: number, time: () => number |
     an.getFloatFrequencyData(db);
     const f = features(db, sampleRate, an.fftSize, prev);
     prev = f.mag;
-    if (t != null) out.push({ t, v: f.v });
+    if (t != null) {
+      out.push({ t, v: f.v });
+      an.getFloatTimeDomainData(wave);
+      let sum = 0;
+      for (const x of wave) sum += x * x;
+      level.push(10 * Math.log10(sum / wave.length + 1e-12));
+    }
     await sleep(40);
   }
   return out;
@@ -168,7 +176,13 @@ export async function micMaybeAllowed(): Promise<boolean> {
 const REF_S = 6;
 const SLACK_S = 4;
 
-export interface SyncResult { offset: number; match: Match | null; ok: boolean }
+export type SyncOutcome = 'ok' | 'low-confidence' | 'no-mic' | 'skipped' | 'original-did-not-play' | 'karaoke-did-not-play' | 'error';
+export interface SyncResult {
+  offset: number; match: Match | null; ok: boolean; outcome: SyncOutcome;
+  refFrames: number; candFrames: number;
+  /** median mic level while listening (dBFS): very low means it couldn't hear the speakers */
+  levelDb: number | null;
+}
 
 /**
  * Measure the karaoke video's offset (video time = lyrics time + offset) against the original, whose offset
@@ -179,9 +193,16 @@ export async function measureKaraokeOffset(o: {
   ctx: AudioContext; karaoke: YTPlayer; original: YTPlayer; originalOffset: number; guess: number; at: number;
   signal: AbortSignal; onStep?: (step: 'original' | 'karaoke') => void;
 }): Promise<SyncResult> {
-  const fail = (match: Match | null = null): SyncResult => ({ offset: o.guess, match, ok: false });
-  const stream = await micUntilAborted(o.signal);
-  if (!stream) return fail();
+  let ref: Frame[] = [], cand: Frame[] = [];
+  const level: number[] = [];
+  const result = (outcome: SyncOutcome, match: Match | null = null, offset = o.guess): SyncResult => {
+    const lv = [...level].sort((a, b) => a - b);
+    return { offset, match, ok: outcome === 'ok', outcome, refFrames: ref.length, candFrames: cand.length,
+             levelDb: lv.length ? Math.round(lv[Math.floor(lv.length / 2)]! * 10) / 10 : null };
+  };
+  let stream: MediaStream | null;
+  try { stream = await micUntilAborted(o.signal); } catch { return result('no-mic'); }
+  if (!stream) return result('skipped');
   const src = o.ctx.createMediaStreamSource(stream);
   const an = o.ctx.createAnalyser();
   an.fftSize = 8192;
@@ -193,24 +214,26 @@ export async function measureKaraokeOffset(o: {
     g.unMute(); g.setVolume(100);
     o.onStep?.('original');
     const gFrom = Math.max(0, o.at + o.originalOffset);
-    if (!(await playFrom(g, gFrom, o.signal))) return fail();
-    const ref = await listen(an, o.ctx.sampleRate, smoothTime(g), REF_S * 1000, o.signal);
+    if (!(await playFrom(g, gFrom, o.signal))) return result(o.signal.aborted ? 'skipped' : 'original-did-not-play');
+    ref = await listen(an, o.ctx.sampleRate, smoothTime(g), REF_S * 1000, o.signal, level);
     g.pauseVideo();
-    if (o.signal.aborted) return fail();
+    if (o.signal.aborted) return result('skipped');
 
     k.unMute(); k.setVolume(100);
     o.onStep?.('karaoke');
     const kFrom = Math.max(0, o.at + o.guess - SLACK_S);
-    if (!(await playFrom(k, kFrom, o.signal))) return fail();
-    const cand = await listen(an, o.ctx.sampleRate, smoothTime(k), (REF_S + 2 * SLACK_S) * 1000, o.signal);
+    if (!(await playFrom(k, kFrom, o.signal))) return result(o.signal.aborted ? 'skipped' : 'karaoke-did-not-play');
+    cand = await listen(an, o.ctx.sampleRate, smoothTime(k), (REF_S + 2 * SLACK_S) * 1000, o.signal, level);
     k.pauseVideo();
-    if (o.signal.aborted) return fail();
+    if (o.signal.aborted) return result('skipped');
 
     // cand time = ref time + s, so karaoke offset = original offset + s
     const center = o.guess - o.originalOffset;
     const match = bestShift(ref, cand, center - SLACK_S, center + SLACK_S);
-    if (!confident(match)) return fail(match);
-    return { offset: Math.round((o.originalOffset + match.shift) * 100) / 100, match, ok: true };
+    if (!confident(match)) return result('low-confidence', match);
+    return result('ok', match, Math.round((o.originalOffset + match.shift) * 100) / 100);
+  } catch {
+    return result('error');
   } finally {
     try { k.pauseVideo(); g.pauseVideo(); k.unMute(); } catch { /* gone */ }   // the Stage restores volumes
     src.disconnect();
