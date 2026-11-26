@@ -81,3 +81,18 @@ Deno.test('rankVideos: real karaoke only: acoustic/guitar re-takes and versions 
   assertEquals(ids.includes('g1ggggggggg'), false);
   assertEquals(ids.includes('c1ccccccccc'), false);
 });
+
+Deno.test('rankVideos: the studio track beats a different mix, edit or acoustic take (Light Switch)', () => {
+  const r = rankVideos([
+    { id: 'SJSPFzx5uQQ', title: 'Light Switch (Brighter Mix)', channel: 'Charlie Puth - Topic', durationS: 179 },
+    { id: 'ulVONgJRO8Y', title: 'Charlie Puth - Light Switch (Audio)', channel: 'Audios', durationS: 186 },
+    { id: 'VXICqrmV7FA', title: 'Charlie Puth - Light Switch (Acoustic) [Official Audio]', channel: 'Charlie Puth', durationS: 187 },
+    { id: 'UnwyaZU2Nak', title: 'Charlie Puth - Light Switch [Official Full Audio]', channel: 'Elektric', durationS: 189 },
+  ], { title: 'Light Switch', artist: 'Charlie Puth', durationS: 186 });
+  assertEquals(r.originals[0]!.id, 'ulVONgJRO8Y');
+  assert(!r.originals.some((v) => v.id === 'VXICqrmV7FA'), 'acoustic take dropped');
+  assertEquals(r.originals.at(-1)!.id, 'SJSPFzx5uQQ');
+  // a song that *is* a mix keeps its own mix
+  const m = rankVideos([{ id: 'a', title: 'Song (Club Mix)', channel: 'Artist - Topic', durationS: 200 }], { title: 'Song (Club Mix)', artist: 'Artist', durationS: 200 });
+  assertEquals(m.originals[0]!.id, 'a');
+});

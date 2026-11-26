@@ -11,6 +11,8 @@ export interface StageVideo {
   /** where the offset came from: other singers' corrections, your own, or a guess from the video's length */
   offsetSource: 'shared' | 'guess';
   votes: number;
+  /** how many of those were measured by auto sync (0: it still needs measuring) */
+  measured: number;
 }
 
 export interface VideoStageData {
@@ -51,11 +53,11 @@ export function useVideoStageData(trackId: string): VideoStageLoad {
             ? sb.from('artwork').select('source_url, storage_path').eq('entity_type', 'album').eq('entity_id', track.album_id).eq('is_primary', true).maybeSingle()
             : Promise.resolve({ data: null }),
         ]);
-        const shared = new Map(((offs.data ?? []) as { video_id: string; offset_ms: number; votes: number }[]).map((o) => [o.video_id, o]));
+        const shared = new Map(((offs.data ?? []) as { video_id: string; offset_ms: number; votes: number; measured: number }[]).map((o) => [o.video_id, o]));
         const toVideo = (v: Ranked): StageVideo => {
           const s = shared.get(v.id);
           return { id: v.id, title: v.title, channel: v.channel, durationS: v.durationS, kind: v.kind,
-                   offset: (s ? s.offset_ms : v.offsetGuessMs) / 1000, offsetSource: s ? 'shared' : 'guess', votes: s?.votes ?? 0 };
+                   offset: (s ? s.offset_ms : v.offsetGuessMs) / 1000, offsetSource: s ? 'shared' : 'guess', votes: s?.votes ?? 0, measured: s?.measured ?? 0 };
         };
         if (!live) return;
         setState({
@@ -81,7 +83,7 @@ export function useVideoStageData(trackId: string): VideoStageLoad {
   return state;
 }
 
-/** Remember a lyrics-offset correction for a video (shared as a median with other singers). */
-export async function saveVideoOffset(trackId: string, videoId: string, offsetS: number) {
-  await supabaseBrowser().rpc('set_video_offset', { p_track_id: trackId, p_video_id: videoId, p_offset_ms: Math.round(offsetS * 1000) });
+/** Remember a video's offset (shared as a median with other singers); `measured`: by auto sync, not a nudge. */
+export async function saveVideoOffset(trackId: string, videoId: string, offsetS: number, measured = false) {
+  await supabaseBrowser().rpc('set_video_offset', { p_track_id: trackId, p_video_id: videoId, p_offset_ms: Math.round(offsetS * 1000), p_measured: measured });
 }

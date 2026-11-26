@@ -29,6 +29,7 @@ import { LyricsSyncer } from './LyricsSyncer';
 import { lineAt, StageLyrics } from './StageLyrics';
 import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
 import { VideoClock } from './videoClock';
+import { localOffset, measureKaraokeOffset, micMaybeAllowed, rememberOffset } from './autoSync';
 
 type Phase = 'intro' | 'singing' | 'scoring' | 'results';
 type Mode = 'solo' | 'party';
@@ -38,7 +39,7 @@ const midiOf = (f0: number) => 69 + 12 * Math.log2(f0 / 440);
 const fmtOffset = (s: number) => `${s >= 0 ? '+' : '−'}${Math.abs(s).toFixed(1)} s`;
 
 function pasted(id: string, kind: StageVideo['kind']): StageVideo {
-  return { id, title: 'Your link', channel: 'YouTube', durationS: null, kind, offset: 0, offsetSource: 'guess', votes: 0 };
+  return { id, title: 'Your link', channel: 'YouTube', durationS: null, kind, offset: 0, offsetSource: 'guess', votes: 0, measured: 0 };
 }
 
 /** A YouTube player in a div (YouTube's own visible player, never hidden or covered). */
@@ -87,7 +88,9 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const [scores, setScores] = useState<ScoreView[] | null>(null);
   const [group, setGroup] = useState<{ score: number; grade: 'S' | 'A' | 'B' | 'C' | 'D'; singers: number } | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
-  const [offsets, setOffsets] = useState<Record<string, number>>(() => Object.fromEntries([...data.karaoke, ...data.originals].map((v) => [v.id, v.offset])));
+  // offsets: other singers' shared ones, else one this browser measured, else the guess from the video's length
+  const [offsets, setOffsets] = useState<Record<string, number>>(() => Object.fromEntries([...data.karaoke, ...data.originals].map((v) =>
+    [v.id, v.measured ? v.offset : localOffset(v.id) ?? v.offset])));
   const [paste, setPaste] = useState('');
   const [pasteKind, setPasteKind] = useState<StageVideo['kind']>('karaoke');
   const [lines, setLines] = useState(data.lyricsGranularity === 'plain' ? [] : data.lines);
@@ -230,19 +233,75 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   }, [phase]);
   useEffect(() => () => { void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true); }, []);
 
+  // auto sync: the first time a karaoke version is sung, line it up with the original by ear (see autoSync.ts)
+  const [aligning, setAligning] = useState<'original' | 'karaoke' | null>(null);
+  const [autoNote, setAutoNote] = useState<string | null>(null);
+  const alignAbort = useRef<AbortController | null>(null);
+  const tried = useRef(new Set<string>());
+  useEffect(() => () => alignAbort.current?.abort(), []);
+  const needsAutoSync = () => !!(mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
+    && ready.guide && guidePlayer.current && mainPlayer.current && !karaokeVid.measured
+    && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id));
+
+  /** Lyrics time to compare at: somewhere with the full band (about 40% in, after the first line). */
+  function compareAt(): number {
+    const first = lines.find((l) => l.start != null && l.text.trim())?.start ?? 10;
+    let dur = 0;
+    try { dur = (guidePlayer.current?.getDuration() ?? 0) - (offsets[guideVid!.id] ?? 0); } catch { /* not ready */ }
+    if (!(dur > 40)) return first + 8;
+    return Math.min(Math.max(first + 4, dur * 0.4), dur - 20);
+  }
+
+  async function autoSync(ac: AudioContext): Promise<number | null> {
+    const k = karaokeVid!, kp = mainPlayer.current!, gp = guidePlayer.current!;
+    const guess = offsets[k.id] ?? 0;
+    tried.current.add(k.id);
+    const ctl = new AbortController();
+    alignAbort.current = ctl;
+    clock.current.hold = true;
+    setAligning('original');
+    try {
+      const r = await measureKaraokeOffset({ ctx: ac, karaoke: kp, original: gp, originalOffset: offsets[guideVid!.id] ?? 0, guess,
+        at: compareAt(), signal: ctl.signal, onStep: setAligning });
+      if (ctl.signal.aborted) return null;
+      if (!r.ok) {
+        setAutoNote('Couldn’t hear the music clearly enough to line up the karaoke version (headphones, or the volume is low). If it’s off, use the Lyrics Earlier / Later buttons.');
+        return null;
+      }
+      rememberOffset(k.id, r.offset);
+      setOffsets((o) => ({ ...o, [k.id]: r.offset }));
+      if (data.signedIn) void saveVideoOffset(data.track.id, k.id, r.offset, true);
+      const moved = r.offset - guess;
+      setAutoNote(Math.abs(moved) < 0.15 ? 'Checked: the karaoke version is in sync with the song.' : `Karaoke version lined up with the song automatically (moved ${fmtOffset(moved)}).`);
+      return r.offset;
+    } catch {
+      return null;   // no mic, or it was blocked: begin() reports that
+    } finally {
+      clock.current.hold = false;
+      alignAbort.current = null;
+      setAligning(null);
+    }
+  }
+
   async function start() {
     const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
     ctx.current = ac;
     void ac.resume();
+    const synced = needsAutoSync() && (await micMaybeAllowed()) ? await autoSync(ac) : null;
+    await begin(ac, synced);
+  }
+
+  async function begin(ac: AudioContext, offsetOverride: number | null) {
     frames.current = [];
     trail.current = [];
     host.resetTake();
     setScores(null); setScoreError(null);
     void singRec.current?.report(voicedSeconds(frames.current, noiseFloor.current), true);
     singRec.current = mode === 'solo' && data.signedIn ? new SingRecorder(data.track.id, 'lyrics', false) : null;
-    // start the video inside the click, before any await
+    // start the video inside the click, before any await (unless auto sync ran first: the page has been clicked)
     resetPlayers();
-    clock.current.seekLyric(-mainOffset);   // from the top of the video
+    if (offsetOverride != null) clock.current.mainOffset = offsetOverride;
+    clock.current.seekLyric(-clock.current.mainOffset);   // from the top of the video
     clock.current.resetDrift();
     clock.current.play();
     setPhase('singing');
@@ -469,6 +528,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
         </aside>
           {showStage && (
             <div className="order-3 space-y-2 self-start rounded-xl bg-ink-900/70 p-3 ring-1 ring-ink-800 min-[900px]:col-start-2 min-[900px]:row-start-2 min-[900px]:max-h-full min-[900px]:w-full min-[900px]:overflow-y-auto" role="group" aria-label="Mix">
+              {autoNote && phase === 'singing' && <p role="status" className="rounded-lg bg-ink-850 p-2 text-xs text-ink-300">{autoNote}</p>}
               {handedOff && phase === 'singing' && (
                 <p role="status" className="rounded-lg bg-cyan-400/10 p-2 text-xs text-cyan-400">The karaoke version ended early, so the original is finishing the song.</p>
               )}
@@ -538,6 +598,15 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   setSyncing(false);
                   setSyncNote(applied ? 'Thanks! These lyrics are now synced for everyone.' : 'Lyrics timed for this session.');
                 }} />
+            ) : phase === 'intro' && aligning ? (
+              <div className="w-full max-w-xl py-4 text-center" role="status" aria-live="polite">
+                <h1 className="font-display text-3xl font-extrabold tracking-tight">Lining up the karaoke version</h1>
+                <p className="mt-3 text-lg font-bold text-pink-400">{aligning === 'original' ? 'Listening to the original song…' : 'Listening to the karaoke version…'}</p>
+                <p className="mt-3 text-sm text-ink-300">
+                  Keep your speakers up and stay quiet for about 20 seconds. This happens once per video: everyone who sings it after you starts in sync.
+                </p>
+                <button type="button" onClick={() => alignAbort.current?.abort()} className="mt-5 rounded-full bg-ink-800 px-5 py-2 text-sm font-bold hover:bg-ink-700">Skip</button>
+              </div>
             ) : phase === 'intro' ? (
               <div className="w-full max-w-2xl py-4 text-center">
                 <h1 className="font-display text-4xl font-extrabold tracking-tight">Ready to sing?</h1>

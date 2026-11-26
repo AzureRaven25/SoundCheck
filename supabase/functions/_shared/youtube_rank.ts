@@ -15,6 +15,9 @@ const NOT_ORIGINAL = /\b(cover|live|remix|sped ?up|slowed|reverb|nightcore|react
 const NOT_KARAOKE = /\b(cover|live|remix|sped ?up|slowed|nightcore|reaction|tutorial|lesson|8d)\b/i;
 /** Re-arrangements, not the song as recorded: acoustic/piano/guitar takes, lo-fi, orchestral, etc. */
 const REARRANGED = /\b(acoustic|piano|guitar|unplugged|ukulele|lo-?fi|orchestral|strings|jazz|rock|reggae|bossa|lullaby|music box|8 ?bit|cello|violin|sax(ophone)?|harp|stripped|ballad|female|male|lower|higher|duet) (version|ver\.?|cover|karaoke|instrumental|backing)|\b(piano|guitar|acoustic) (karaoke|instrumental|backing)|backing tracks?\b.*\b(guitar|piano)\b/i;
+/** A different take or edit of the song than the studio track the lyrics are timed to. */
+const VARIANT_TAKE = /\b(acoustic|stripped|unplugged|demo|a ?cappella|session|piano version|orchestral)\b/i;
+const VARIANT_EDIT = /[([][^)\]]*\b(mix|edit|version|extended|rework|vip|flip|dub)\b[^)\]]*[)\]]/i;
 /** Karaoke producers who re-record songs faithfully to the original arrangement. */
 const KARAOKE_BRANDS = /sing king|karafun|karaoke version|stingray|zoom karaoke|party tyme|sunfly|singsnap|lucky voice|kj ?karaoke|zzang|musisi|edkara|global karaoke|singsong|karaoke hits|bellysings|peareoke|hdpopkaraoke|karaoke channel/i;
 const KARAOKE_CHANNELS = /sing king|karafun|karaoke version|stingray|zzang|musisi|singsong|sing2music|carpool|karaoke hits|global karaoke|edkara|songjam|kj/i;
@@ -83,10 +86,15 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
                      offsetGuessMs: sameMaster ? 0 : offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
     } else {
       if (NOT_ORIGINAL.test(v.title) && !NOT_ORIGINAL.test(song.title)) continue;
+      if (VARIANT_TAKE.test(v.title) && !VARIANT_TAKE.test(song.title)) continue;
       const artistHit = titleMatch(`${v.title} ${v.channel}`, song.artist) >= 0.5;
       if (!artistHit) continue;
       let q = match + (topic ? 1 : 0) + (/official audio|\baudio\b/i.test(v.title) ? 0.5 : 0) + (/lyric/i.test(v.title) ? 0.2 : 0)
-        + (/vevo$/i.test(v.channel) ? 0.2 : 0) - (durDiff == null ? 0.3 : Math.min(1, Math.abs(durDiff) / 20));
+        + (/vevo$/i.test(v.channel) ? 0.2 : 0)
+        // the lyrics are timed to the studio track: a "(Brighter Mix)" or "(Radio Edit)" is a different edit, and a
+        // video shorter than the song is missing part of it, so both drift out of step (longer is usually an intro)
+        - (VARIANT_EDIT.test(v.title) && !VARIANT_EDIT.test(song.title) ? 1.2 : 0)
+        - (durDiff == null ? 0.3 : durDiff < -2 ? Math.min(1.5, -durDiff / 4) : Math.min(1, Math.abs(durDiff) / 20));
       originals.push({ ...v, kind: 'original', quality: +q.toFixed(3), offsetGuessMs: offsetGuessMs('original', v.durationS, song.durationS, topic) });
     }
   }

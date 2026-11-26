@@ -1434,6 +1434,7 @@ export type Database = {
       }
       video_sync: {
         Row: {
+          measured: boolean
           offset_ms: number
           track_id: string
           updated_at: string
@@ -1441,6 +1442,7 @@ export type Database = {
           video_id: string
         }
         Insert: {
+          measured?: boolean
           offset_ms: number
           track_id: string
           updated_at?: string
@@ -1448,6 +1450,7 @@ export type Database = {
           video_id: string
         }
         Update: {
+          measured?: boolean
           offset_ms?: number
           track_id?: string
           updated_at?: string
@@ -1766,7 +1769,7 @@ export type Database = {
         }[]
       }
       set_video_offset: {
-        Args: { p_offset_ms: number; p_track_id: string; p_video_id: string }
+        Args: { p_measured?: boolean; p_offset_ms: number; p_track_id: string; p_video_id: string }
         Returns: undefined
       }
       share_song_video: {
@@ -1805,6 +1808,7 @@ export type Database = {
       video_offsets: {
         Args: { p_track_id: string }
         Returns: {
+          measured: number
           offset_ms: number
           video_id: string
           votes: number

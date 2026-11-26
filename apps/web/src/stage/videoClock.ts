@@ -3,7 +3,7 @@
  * Singing along to YouTube: one clock for the lyrics, driven by the visible video the singer chose (a karaoke
  * version, or the original), plus an optional second visible player with the original recording as a guide
  * vocal, kept in step with it. Both are YouTube's own players: their audio is never captured or processed, so the
- * guide level is simply that player's volume.
+ * guide level is simply that player's volume. (Auto sync, in autoSync.ts, listens to them through the mic.)
  *
  * Offsets (seconds): video time = lyrics time + offset. A video with a 7 s title card has offset 7.
  */
@@ -16,6 +16,8 @@ export class VideoClock {
   guide: YTPlayer | null = null;
   mainOffset = 0;
   guideOffset = 0;
+  /** While auto sync plays the videos itself: no guide syncing, no state events, no handoff. */
+  hold = false;
   private anchor = { yt: 0, at: 0, playing: false };
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastSeek = 0;
@@ -49,6 +51,7 @@ export class VideoClock {
   isPlaying(): boolean { return this.anchor.playing; }
 
   private tick() {
+    if (this.hold) return;
     const m = this.main;
     if (!m?.getCurrentTime) return;
     let yt: number, state: number;

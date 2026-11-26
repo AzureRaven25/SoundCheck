@@ -1,0 +1,228 @@
+'use client';
+/**
+ * Automatic sync of a karaoke video to the original recording (which the lyrics follow).
+ *
+ * YouTube's players can't be read from the page, so this listens the way a person would: through the microphone.
+ * It plays a few seconds of the original, then the same stretch of the karaoke version (with a few seconds of
+ * slack on either side), and finds the time shift where the two sound most alike. "Alike" is measured on chroma
+ * (which notes are sounding: the chords, shared by a full mix and its instrumental) plus onset strength (the
+ * beat). Nothing is recorded or uploaded: only the resulting offset is kept, and shared so the next singer of
+ * that video starts in sync without listening again.
+ */
+import type { YTPlayer } from '@/player/youtube';
+
+/** One analysis frame: video time (seconds) and features (12 chroma + onset strength). */
+export interface Frame { t: number; v: Float32Array }
+
+const DIMS = 13;
+const FLUX_WEIGHT = 1;
+
+/** Chroma + spectral flux of one spectrum (dB per bin, as AnalyserNode.getFloatFrequencyData gives). */
+export function features(db: Float32Array, sampleRate: number, fftSize: number, prev: Float32Array | null): { v: Float32Array; mag: Float32Array } {
+  const v = new Float32Array(DIMS);
+  const mag = new Float32Array(db.length);
+  const hz = sampleRate / fftSize;
+  let flux = 0;
+  for (let k = 1; k < db.length; k++) {
+    const f = k * hz;
+    if (f > 4000) break;
+    const m = Number.isFinite(db[k]!) ? 10 ** (db[k]! / 20) : 0;
+    mag[k] = m;
+    if (prev) flux += Math.max(0, m - prev[k]!);
+    if (f < 55 || f > 2000) continue;
+    const pc = ((Math.round(12 * Math.log2(f / 440)) % 12) + 12) % 12;
+    v[pc]! += m * m;
+  }
+  let total = 0;
+  for (let i = 0; i < 12; i++) total += v[i]!;
+  let norm = 0;
+  for (let i = 0; i < 12; i++) { v[i] = Math.log1p((100 * v[i]!) / (total || 1)); norm += v[i]! * v[i]!; }
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < 12; i++) v[i]! /= norm;
+  v[12] = Math.log1p(flux);
+  return { v, mag };
+}
+
+/** Frames resampled onto a regular grid (nearest frame), each feature z-scored over the stretch. */
+function grid(frames: Frame[], step: number): { t0: number; rows: Float32Array[] } | null {
+  if (frames.length < 10) return null;
+  const sorted = [...frames].sort((a, b) => a.t - b.t);
+  const t0 = sorted[0]!.t;
+  const n = Math.floor((sorted[sorted.length - 1]!.t - t0) / step) + 1;
+  const rows: Float32Array[] = [];
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i * step;
+    while (j + 1 < sorted.length && Math.abs(sorted[j + 1]!.t - t) <= Math.abs(sorted[j]!.t - t)) j++;
+    rows.push(Float32Array.from(sorted[j]!.v));
+  }
+  for (let d = 0; d < DIMS; d++) {
+    let mean = 0;
+    for (const r of rows) mean += r[d]!;
+    mean /= rows.length;
+    let sd = 0;
+    for (const r of rows) sd += (r[d]! - mean) ** 2;
+    sd = Math.sqrt(sd / rows.length) || 1;
+    const w = d === 12 ? FLUX_WEIGHT : 1;
+    for (const r of rows) r[d] = ((r[d]! - mean) / sd) * w;
+  }
+  return { t0, rows };
+}
+
+export interface Match { shift: number; score: number; margin: number }
+
+/**
+ * The shift s (cand time = ref time + s) in [lo, hi] where `cand` best matches `ref`. `score` is a correlation
+ * (about 0 for unrelated sound, 1 for identical); `margin` is how far it beats the next-best peak.
+ */
+export function bestShift(ref: Frame[], cand: Frame[], lo: number, hi: number, step = 0.05): Match | null {
+  const r = grid(ref, step), c = grid(cand, step);
+  if (!r || !c) return null;
+  const scale = 12 + FLUX_WEIGHT * FLUX_WEIGHT;
+  const scores: { s: number; score: number }[] = [];
+  for (let s = lo; s <= hi + 1e-9; s += step) {
+    let sum = 0, n = 0;
+    for (let i = 0; i < r.rows.length; i++) {
+      const j = Math.round((r.t0 + i * step + s - c.t0) / step);
+      if (j < 0 || j >= c.rows.length) continue;
+      const a = r.rows[i]!, b = c.rows[j]!;
+      let dot = 0;
+      for (let d = 0; d < DIMS; d++) dot += a[d]! * b[d]!;
+      sum += dot; n++;
+    }
+    if (n >= r.rows.length * 0.8) scores.push({ s, score: sum / n / scale });
+  }
+  if (!scores.length) return null;
+  const best = scores.reduce((a, b) => (b.score > a.score ? b : a));
+  // the runner-up is the best *other peak*: shifts next to the best one sit on its slope (a chord lasts a while)
+  const peaks = scores.filter((x, i) => x.score >= (scores[i - 1]?.score ?? -Infinity) && x.score >= (scores[i + 1]?.score ?? -Infinity));
+  const rival = peaks.filter((x) => Math.abs(x.s - best.s) >= 0.25).reduce((m, x) => Math.max(m, x.score), -1);
+  return { shift: Math.round(best.s * 100) / 100, score: best.score, margin: best.score - rival };
+}
+
+/** Accept a match only when it is clearly the music (not a quiet room or headphones) and clearly one place. */
+export const confident = (m: Match | null): m is Match => !!m && m.score >= 0.22 && m.margin >= 0.04;
+
+// ---- in the browser ----
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A player's time, smoothed between the API's coarse updates (like VideoClock). */
+function smoothTime(p: YTPlayer) {
+  let anchor = { yt: 0, at: 0, playing: false };
+  return () => {
+    let yt: number, playing: boolean;
+    try { yt = p.getCurrentTime(); playing = p.getPlayerState() === 1; } catch { return null; }
+    const predicted = anchor.playing ? anchor.yt + (performance.now() - anchor.at) / 1000 : anchor.yt;
+    if (!playing || !anchor.playing || Math.abs(predicted - yt) > 0.12) anchor = { yt, at: performance.now(), playing };
+    return playing ? (anchor.playing ? anchor.yt + (performance.now() - anchor.at) / 1000 : yt) : null;
+  };
+}
+
+/** Seek, play, and wait until it's really playing near `to` (an ad or buffering can delay it). */
+async function playFrom(p: YTPlayer, to: number, signal: AbortSignal) {
+  p.seekTo(to, true);
+  p.playVideo();
+  const until = performance.now() + 15_000;
+  while (performance.now() < until) {
+    if (signal.aborted) return false;
+    try { if (p.getPlayerState() === 1 && Math.abs(p.getCurrentTime() - to) < 1.5) { await sleep(350); return true; } } catch { /* not ready */ }
+    await sleep(100);
+  }
+  return false;
+}
+
+async function listen(an: AnalyserNode, sampleRate: number, time: () => number | null, ms: number, signal: AbortSignal): Promise<Frame[]> {
+  const db = new Float32Array(an.frequencyBinCount);
+  const out: Frame[] = [];
+  let prev: Float32Array | null = null;
+  const end = performance.now() + ms;
+  while (performance.now() < end && !signal.aborted) {
+    const t = time();
+    an.getFloatFrequencyData(db);
+    const f = features(db, sampleRate, an.fftSize, prev);
+    prev = f.mag;
+    if (t != null) out.push({ t, v: f.v });
+    await sleep(40);
+  }
+  return out;
+}
+
+/** The raw mic (echo cancellation would remove exactly the music we need to hear), or null if Skip came first. */
+function micUntilAborted(signal: AbortSignal): Promise<MediaStream | null> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return resolve(null);
+    const onAbort = () => resolve(null);
+    signal.addEventListener('abort', onAbort, { once: true });
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } })
+      .then((s) => { signal.removeEventListener('abort', onAbort); if (signal.aborted) s.getTracks().forEach((t) => t.stop()); resolve(signal.aborted ? null : s); },
+            (e) => { signal.removeEventListener('abort', onAbort); reject(e); });
+  });
+}
+
+/** False when the browser already says the mic is blocked (then there's nothing to listen with). */
+export async function micMaybeAllowed(): Promise<boolean> {
+  try { return (await navigator.permissions.query({ name: 'microphone' as PermissionName })).state !== 'denied'; } catch { return true; }
+}
+
+const REF_S = 6;
+const SLACK_S = 4;
+
+export interface SyncResult { offset: number; match: Match | null; ok: boolean }
+
+/**
+ * Measure the karaoke video's offset (video time = lyrics time + offset) against the original, whose offset
+ * (`originalOffset`) the lyrics already match. `guess` is the current karaoke offset; the answer is searched
+ * within ±4 s of it. `at`: the lyrics time to compare (somewhere with full music). Leaves both players paused.
+ */
+export async function measureKaraokeOffset(o: {
+  ctx: AudioContext; karaoke: YTPlayer; original: YTPlayer; originalOffset: number; guess: number; at: number;
+  signal: AbortSignal; onStep?: (step: 'original' | 'karaoke') => void;
+}): Promise<SyncResult> {
+  const fail = (match: Match | null = null): SyncResult => ({ offset: o.guess, match, ok: false });
+  const stream = await micUntilAborted(o.signal);
+  if (!stream) return fail();
+  const src = o.ctx.createMediaStreamSource(stream);
+  const an = o.ctx.createAnalyser();
+  an.fftSize = 8192;
+  an.smoothingTimeConstant = 0;
+  src.connect(an);
+  const { karaoke: k, original: g } = o;
+  try {
+    k.pauseVideo(); k.mute();
+    g.unMute(); g.setVolume(100);
+    o.onStep?.('original');
+    const gFrom = Math.max(0, o.at + o.originalOffset);
+    if (!(await playFrom(g, gFrom, o.signal))) return fail();
+    const ref = await listen(an, o.ctx.sampleRate, smoothTime(g), REF_S * 1000, o.signal);
+    g.pauseVideo();
+    if (o.signal.aborted) return fail();
+
+    k.unMute(); k.setVolume(100);
+    o.onStep?.('karaoke');
+    const kFrom = Math.max(0, o.at + o.guess - SLACK_S);
+    if (!(await playFrom(k, kFrom, o.signal))) return fail();
+    const cand = await listen(an, o.ctx.sampleRate, smoothTime(k), (REF_S + 2 * SLACK_S) * 1000, o.signal);
+    k.pauseVideo();
+    if (o.signal.aborted) return fail();
+
+    // cand time = ref time + s, so karaoke offset = original offset + s
+    const center = o.guess - o.originalOffset;
+    const match = bestShift(ref, cand, center - SLACK_S, center + SLACK_S);
+    if (!confident(match)) return fail(match);
+    return { offset: Math.round((o.originalOffset + match.shift) * 100) / 100, match, ok: true };
+  } finally {
+    try { k.pauseVideo(); g.pauseVideo(); k.unMute(); } catch { /* gone */ }   // the Stage restores volumes
+    src.disconnect();
+    stream.getTracks().forEach((t) => t.stop());
+  }
+}
+
+/** Offsets this browser has measured (for visitors who aren't signed in, whose results aren't shared). */
+const localKey = (videoId: string) => `soundcheck.autosync.${videoId}`;
+export function localOffset(videoId: string): number | null {
+  try { const v = localStorage.getItem(localKey(videoId)); return v == null ? null : Number(v); } catch { return null; }
+}
+export function rememberOffset(videoId: string, offset: number) {
+  try { localStorage.setItem(localKey(videoId), String(offset)); } catch { /* storage blocked */ }
+}

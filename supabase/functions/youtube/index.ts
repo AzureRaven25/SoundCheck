@@ -20,6 +20,7 @@ async function videosFor(trackId: string, key: string): Promise<{ songS: number 
   const songS = t.duration_ms ? Math.round(t.duration_ms / 1000) : null;
   const stored = await storedVideos(t);
   if (stored) return { songS, ...stored };
+  if (!key) return null;   // no API key: only videos found earlier (or shared by singers)
   try {
     return { songS, ...(await searchAndStore(t, key, dailyUnits())) };
   } catch (e) {
@@ -31,16 +32,16 @@ async function videosFor(trackId: string, key: string): Promise<{ songS: number 
 async function stage(trackId: string, key: string) {
   const v = await videosFor(trackId, key);
   if (v === 'missing') return json({ error: 'song not found' }, 404);
-  if (!v) return json({ configured: true, songS: null, originals: [], karaoke: [], quotaExhausted: true });
-  return json({ configured: true, ...v });
+  if (!v) return json({ configured: !!key, songS: null, originals: [], karaoke: [], quotaExhausted: !!key });
+  return json({ configured: !!key, ...v });
 }
 
 Deno.serve((req) => handle(req, async (body) => {
   const key = Deno.env.get('YOUTUBE_API_KEY');
   const trackId = String(body.track_id ?? '');
   if (!/^[0-9a-f-]{36}$/.test(trackId)) return json({ error: 'track_id required' }, 400);
+  if (body.action === 'stage') return stage(trackId, key ?? '');
   if (!key) return json({ configured: false, videos: [], originals: [], karaoke: [] });
-  if (body.action === 'stage') return stage(trackId, key);
 
   const v = await videosFor(trackId, key);
   if (v === 'missing') return json({ error: 'song not found' }, 404);
