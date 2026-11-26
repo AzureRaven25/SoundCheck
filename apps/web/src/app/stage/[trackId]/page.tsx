@@ -25,6 +25,7 @@ import { LineCheers, rateLine } from '@/stage/Cheers';
 import { useStageData, type StageData } from '@/stage/useStageData';
 import { useVideoStageData } from '@/stage/useVideoStageData';
 import { VideoStage } from '@/stage/VideoStage';
+import { useLocalStage } from '@/stems/useLocalStage';
 
 type Phase = 'intro' | 'loading' | 'calibrating' | 'singing' | 'scoring' | 'results';
 type Mode = 'solo' | 'party';
@@ -325,7 +326,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
     }
     if (!useMic || frames.current.length < 100) {
       setScores(null);
-      setScoreError(useMic ? 'We didn’t capture enough singing to score.' : null);
+      setScoreError(useMic ? 'We didn’t capture enough singing to score.' : 'You sang without the mic, so this take wasn’t scored.');
       setPhase('results');
       return;
     }
@@ -555,6 +556,12 @@ function StageRoute() {
   const { trackId } = useParams<{ trackId: string }>();
   const resume = useSearchParams().get('party');
   const forceVideo = useSearchParams().get('video') === '1';
+  const localId = useSearchParams().get('local');
+  if (localId) return <LocalStageRoute trackId={trackId} localId={localId} />;
+  return <ServerStageRoute trackId={trackId} resume={resume} forceVideo={forceVideo} />;
+}
+
+function ServerStageRoute({ trackId, resume, forceVideo }: { trackId: string; resume: string | null; forceVideo: boolean }) {
   const state = useStageData(trackId);
   if (state.kind === 'ready' && !forceVideo) return <Stage data={state.data} resume={resume} />;
   // no karaoke tracks (or asked for the video): sing along to YouTube with synced lyrics
@@ -562,6 +569,19 @@ function StageRoute() {
   return (
     <div className="flex h-full items-center justify-center p-8 text-center">
       {state.kind === 'loading' && <p className="flex items-center gap-3 text-ink-300"><Loader2 className="animate-spin" /> Setting the stage…</p>}
+      {state.kind === 'error' && <p role="alert" className="text-danger-400">Couldn’t open Stage: {state.message}</p>}
+    </div>
+  );
+}
+
+/** Karaoke this device made from the singer's own recording (see /make-karaoke). */
+function LocalStageRoute({ trackId, localId }: { trackId: string; localId: string }) {
+  const state = useLocalStage(trackId, localId);
+  if (state.kind === 'ready') return <VideoStage data={state.data} resume={null} local={{ deck: state.deck, source: state.source }} />;
+  return (
+    <div className="flex h-full items-center justify-center p-8 text-center">
+      {state.kind === 'loading' && <p className="flex items-center gap-3 text-ink-300"><Loader2 className="animate-spin" /> Loading your karaoke track…</p>}
+      {state.kind === 'missing' && <p className="text-ink-300">That karaoke track isn’t on this device (it’s only kept in the browser that made it). <Link href="/make-karaoke" className="font-bold text-ink-50 underline">Make it again</Link></p>}
       {state.kind === 'error' && <p role="alert" className="text-danger-400">Couldn’t open Stage: {state.message}</p>}
     </div>
   );

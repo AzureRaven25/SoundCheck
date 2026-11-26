@@ -30,6 +30,7 @@ import { lineAt, StageLyrics } from './StageLyrics';
 import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
 import { VideoClock } from './videoClock';
 import { agree, localOffset, measureKaraokeOffset, micMaybeAllowed, rememberOffset } from './autoSync';
+import type { StemDeck } from '@/stems/deck';
 
 type Phase = 'intro' | 'singing' | 'scoring' | 'results';
 type Mode = 'solo' | 'party';
@@ -42,12 +43,13 @@ function pasted(id: string, kind: StageVideo['kind']): StageVideo {
   return { id, title: 'Your link', channel: 'YouTube', durationS: null, kind, offset: 0, offsetSource: 'guess', votes: 0, measured: 0 };
 }
 
-/** A YouTube player in a div (YouTube's own visible player, never hidden or covered). */
-function usePlayer(videoId: string | null, onReady: (p: YTPlayer | null) => void) {
+/** A YouTube player in a div (YouTube's own visible player, never hidden or covered); or a local stem's player. */
+function usePlayer(videoId: string | null, onReady: (p: YTPlayer | null) => void, local: YTPlayer | null = null) {
   const el = useRef<HTMLDivElement | null>(null);
   const cb = useRef(onReady);
   useEffect(() => { cb.current = onReady; });
   useEffect(() => {
+    if (local) { cb.current(local); return () => cb.current(null); }
     if (!videoId || !el.current) { cb.current(null); return; }
     let p: YTPlayer | null = null;
     let dead = false;
@@ -62,11 +64,15 @@ function usePlayer(videoId: string | null, onReady: (p: YTPlayer | null) => void
       });
     });
     return () => { dead = true; cb.current(null); try { p?.destroy(); } catch { /* gone */ } };
-  }, [videoId]);
+  }, [videoId, local]);
   return el;
 }
 
-export function VideoStage({ data, resume }: { data: VideoStageData; resume: string | null }) {
+/**
+ * `local`: karaoke this device made from the singer's own recording (stems/deck.ts). The backing and the vocal are
+ * one recording, so there's nothing to line up: the "guide vocal" is the singer's own voice from the original.
+ */
+export function VideoStage({ data, resume, local = null }: { data: VideoStageData; resume: string | null; local?: { deck: StemDeck; source: string } | null }) {
   const router = useRouter();
   const clock = useRef(new VideoClock());
   const [karaokeList, setKaraokeList] = useState(data.karaoke);
@@ -139,15 +145,15 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   // players
   const mainPlayer = useRef<YTPlayer | null>(null);
   const guidePlayer = useRef<YTPlayer | null>(null);
-  const mainEl = usePlayer(mainVid?.id ?? null, (p) => { mainPlayer.current = p; clock.current.main = p; setReady((r) => ({ ...r, main: !!p })); });
-  const guideEl = usePlayer(guideVid?.id ?? null, (p) => { guidePlayer.current = p; clock.current.guide = p; setReady((r) => ({ ...r, guide: !!p })); });
+  const mainEl = usePlayer(mainVid?.id ?? null, (p) => { mainPlayer.current = p; clock.current.main = p; setReady((r) => ({ ...r, main: !!p })); }, local?.deck.backing);
+  const guideEl = usePlayer(guideVid?.id ?? null, (p) => { guidePlayer.current = p; clock.current.guide = p; setReady((r) => ({ ...r, guide: !!p })); }, local?.deck.vocals);
   /** Back to the chosen backing + guide (after the original took over at the end of the last take). */
   const resetPlayers = () => {
     const c = clock.current;
     c.main = mainPlayer.current;
     c.guide = guidePlayer.current;
     c.mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0;
-    c.guideOffset = guideVid ? offsets[guideVid.id] ?? 0 : 0;
+    c.guideOffset = local ? c.mainOffset : guideVid ? offsets[guideVid.id] ?? 0 : 0;
     try { mainPlayer.current?.setVolume(Math.round(music * 100)); } catch { /* not ready */ }
     c.setGuideVolume(guide);
     setHandedOff(false);
@@ -159,7 +165,9 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   }, []);
   // offsets and volumes follow the chosen videos and sliders
   useEffect(() => { clock.current.mainOffset = mainVid ? offsets[mainVid.id] ?? 0 : 0; }, [mainVid, offsets]);
-  useEffect(() => { clock.current.guideOffset = guideVid ? offsets[guideVid.id] ?? 0 : 0; }, [guideVid, offsets]);
+  useEffect(() => {
+    clock.current.guideOffset = local ? (mainVid ? offsets[mainVid.id] ?? 0 : 0) : guideVid ? offsets[guideVid.id] ?? 0 : 0;
+  }, [guideVid, mainVid, offsets, local]);
   useEffect(() => { try { clock.current.main?.setVolume(Math.round(music * 100)); } catch { /* not ready */ } }, [music, ready.main]);
   useEffect(() => { clock.current.setGuideVolume(guide); }, [guide, ready.guide]);
   // the karaoke video ended before the song did: the original plays on at the music volume
@@ -203,7 +211,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     if (!v) return;
     setOffsets((o) => {
       const next = Math.round(((o[v.id] ?? 0) + delta) * 100) / 100;
-      if (data.signedIn) {
+      if (data.signedIn && !local) {
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => void saveVideoOffset(data.track.id, v.id, next), 1500);
       }
@@ -240,7 +248,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const tried = useRef(new Set<string>());
   useEffect(() => () => alignAbort.current?.abort(), []);
   /** `again`: the singer asked to line it up again, even though it was measured before. */
-  const needsAutoSync = (again = false) => !!(mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
+  const needsAutoSync = (again = false) => !!(!local && mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
     && ready.guide && guidePlayer.current && mainPlayer.current
     && (again || (!karaokeVid.measured && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id))));
 
@@ -425,7 +433,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       return;
     }
     if (!useMic || frames.current.length < 100) {
-      setScoreError(useMic ? 'We didn’t capture enough singing to score.' : null);
+      setScoreError(useMic ? 'We didn’t capture enough singing to score.' : 'You sang without the mic, so this take wasn’t scored.');
       setPhase('results');
       return;
     }
@@ -534,6 +542,18 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       {/* Stage: lyrics and the visualiser are the show; YouTube's players sit in a side rail as compact tiles (they must
           stay visible while playing, so they're kept mounted and are only hidden on the results screen, paused). */}
       <div className={clsx('relative flex-1 gap-4 px-4 pb-3 md:px-6', showStage ? 'flex flex-col min-[900px]:grid min-[900px]:min-h-0 min-[900px]:grid-cols-[minmax(0,1fr)_26rem] min-[900px]:grid-rows-[auto_minmax(0,1fr)]' : 'hidden')}>
+        {local ? (
+          <aside className="order-1 min-[900px]:col-start-2 min-[900px]:row-start-1" aria-label="Recording">
+            <div className="flex items-center gap-3 rounded-xl bg-ink-900/70 p-3 ring-1 ring-ink-800">
+              <div className="w-16 shrink-0"><Artwork src={data.track.artworkUrl} title={data.track.title} resolve={false} sizes="64px" /></div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-300">Your recording · vocal split on this device</p>
+                <p className="truncate font-bold">{data.track.title}</p>
+                <p className="truncate text-xs text-ink-300">{local.source}</p>
+              </div>
+            </div>
+          </aside>
+        ) : (
         <aside className="order-1 -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 min-[900px]:col-start-2 min-[900px]:row-start-1 min-[900px]:mx-0 min-[900px]:flex min-[900px]:flex-col min-[900px]:gap-2 min-[900px]:overflow-visible min-[900px]:px-0 min-[900px]:pb-0" aria-label="Videos">
           <div className="w-[260px] shrink-0 min-[900px]:w-full">
             <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-widest text-ink-300">
@@ -553,13 +573,14 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
             </div>
           )}
         </aside>
+        )}
           {showStage && (
             <div className="order-3 space-y-2 self-start rounded-xl bg-ink-900/70 p-3 ring-1 ring-ink-800 min-[900px]:col-start-2 min-[900px]:row-start-2 min-[900px]:max-h-full min-[900px]:w-full min-[900px]:overflow-y-auto" role="group" aria-label="Mix">
               {autoNote && phase === 'singing' && <p role="status" className="rounded-lg bg-ink-850 p-2 text-xs text-ink-300">{autoNote}</p>}
               {handedOff && phase === 'singing' && (
                 <p role="status" className="rounded-lg bg-cyan-400/10 p-2 text-xs text-cyan-400">The karaoke version ended early, so the original is finishing the song.</p>
               )}
-              {karaokeVid && originalVid && (
+              {karaokeVid && originalVid && !local && (
                 <div role="radiogroup" aria-label="Backing track" className="grid grid-cols-2 rounded-full bg-ink-850 p-1 text-xs font-bold">
                   {(['karaoke', 'original'] as const).map((b) => (
                     <button key={b} type="button" role="radio" aria-checked={backing === b} onClick={() => setBacking(b)} disabled={phase === 'singing'}
@@ -576,17 +597,17 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
               {guideVid && (
                 <>
                   <label className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-widest text-ink-300">
-                    Guide vocal
-                    <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-36" aria-label="Guide vocal volume" />
+                    {local ? 'Singer’s voice' : 'Guide vocal'}
+                    <input type="range" min={0} max={1} step={0.05} value={guide} onChange={(e) => setGuide(Number(e.target.value))} className="w-36" aria-label={local ? 'Singer’s voice volume' : 'Guide vocal volume'} />
                   </label>
-                  <div className="flex items-center justify-between gap-2 text-xs" role="group" aria-label="Guide timing">
+                  {!local && <div className="flex items-center justify-between gap-2 text-xs" role="group" aria-label="Guide timing">
                     <span className="font-bold uppercase tracking-widest text-ink-300">Guide timing</span>
                     <span className="flex gap-1">
                       <button type="button" onClick={() => nudge(-0.1, 'guide')} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Guide earlier">Earlier</button>
                       <button type="button" onClick={() => nudge(0.1, 'guide')} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Guide later">Later</button>
                     </span>
-                  </div>
-                  {driftWarn && phase === 'singing' && (
+                  </div>}
+                  {driftWarn && !local && phase === 'singing' && (
                     <p role="status" className="flex gap-2 rounded-lg bg-gold-400/10 p-2 text-xs text-gold-400">
                       <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
                       This karaoke version is a re-recording with slightly different timing, so the guide keeps slipping. Try another karaoke version, or lower the guide.
@@ -595,8 +616,8 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                 </>
               )}
               <div className="flex items-center justify-between gap-1.5 text-xs" role="group" aria-label="Lyrics timing"
-                title={guideVid ? 'Moves the lyrics and the original together, against the karaoke backing' : 'Moves the lyrics against the video'}>
-                <span className="font-bold uppercase tracking-widest text-ink-300">{guideVid ? 'Lyrics + original' : 'Lyrics'}</span>
+                title={local ? 'Moves the lyrics against your recording' : guideVid ? 'Moves the lyrics and the original together, against the karaoke backing' : 'Moves the lyrics against the video'}>
+                <span className="font-bold uppercase tracking-widest text-ink-300">{guideVid && !local ? 'Lyrics + original' : 'Lyrics'}</span>
                 <span className="flex items-center gap-1">
                   <button type="button" onClick={() => nudge(-0.25)} className="rounded-full bg-ink-800 px-2.5 py-1 font-bold" aria-label="Lyrics earlier">Earlier</button>
                   <span className="w-14 text-center font-bold tabular-nums" aria-live="polite" title="Video time minus lyrics time">{fmtOffset(mainOffset)}</span>
@@ -617,7 +638,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
           </div>
           <div className="relative flex min-h-[16rem] flex-auto items-center justify-center min-[900px]:min-h-0 min-[900px]:overflow-y-auto">
             {phase === 'intro' && syncing ? (
-              <LyricsSyncer trackId={data.track.id} videoId={mainVid?.id ?? null} signedIn={data.signedIn}
+              <LyricsSyncer trackId={data.track.id} videoId={local ? null : mainVid?.id ?? null} signedIn={data.signedIn}
                 initial={data.lyricsGranularity === 'plain' ? data.lines.map((l) => l.text).filter((t) => t.trim()) : []}
                 getTime={getTime} playFromTop={() => { clock.current.seekLyric(-mainOffset); clock.current.play(); }} pause={() => clock.current.pause()}
                 onCancel={() => setSyncing(false)}
@@ -698,12 +719,17 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   className="stage-gradient mt-6 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
-                {mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && (
+                {!local && mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && (
                   <button type="button" onClick={() => void start(true)} disabled={!ready.main || !ready.guide}
                     className="mx-auto mt-3 block text-xs font-bold text-ink-300 underline hover:text-ink-50 disabled:opacity-40">
                     Karaoke out of step? Line it up again, then sing
                   </button>
                 )}
+                {local ? (
+                  <p className="mt-6 text-xs text-ink-300">
+                    Your recording stays on this device. <Link href="/make-karaoke" className="font-bold text-ink-50 underline">Make karaoke from another song</Link>
+                  </p>
+                ) : (<>
                 <details className="mx-auto mt-6 max-w-2xl text-left text-sm">
                   <summary className="cursor-pointer text-center text-xs font-bold uppercase tracking-widest text-ink-300 hover:text-ink-50">Choose videos</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -721,6 +747,10 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                     className="min-w-0 flex-1 rounded-full bg-ink-850 px-4 py-2 text-sm placeholder:text-ink-500" aria-label="YouTube link" />
                   <button type="submit" disabled={!videoIdFrom(paste)} className="rounded-full bg-ink-50 px-4 py-2 text-sm font-bold text-ink-950 disabled:opacity-40">Use video</button>
                 </form>
+                <p className="mt-4 text-xs text-ink-300">
+                  Have the song as a file? <Link href={`/make-karaoke?track=${data.track.id}`} className="font-bold text-ink-50 underline">Split the singer out of it</Link> and sing over the real recording.
+                </p>
+                </>)}
               </div>
             ) : (
               <div className="relative w-full">

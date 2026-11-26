@@ -90,7 +90,7 @@ export function Results({ scores, trackId, onAgain, error, group, guests, battle
       {/* one singer on a wide screen: the card beside XP, badges, leaderboard and actions, so it all fits on screen */}
       <div className={clsx(solo && 'md:mx-auto md:grid md:max-w-4xl md:grid-cols-[minmax(0,1fr)_20rem] md:items-start md:gap-6')}>
       {!scores ? (
-        <p className="text-center text-ink-300">Scoring your performance…</p>
+        error ? null : <p className="text-center text-ink-300">Scoring your performance…</p>
       ) : (
         <div className={clsx('grid gap-6', scores.length > 1 ? 'md:grid-cols-2' : 'mx-auto w-full max-w-md')}>
           {scores.map((s, i) => (
