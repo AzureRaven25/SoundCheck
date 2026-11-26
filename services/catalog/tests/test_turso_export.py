@@ -56,7 +56,7 @@ def test_append_adds_and_indexes_only_new_ranks(conn, fake_dump):
     ex = SqliteExecutor()
     assert export(conn, ex, 1, 3, log=lambda *_: None) == 2
     with pytest.raises(ValueError):
-        export_append(conn, ex, 2, 100, log=lambda *_: None)                  # would double-index rank 2
+        export_append(conn, ex, 2, 100, log=lambda *_: None)                  # rank 2 is already there
     assert export_append(conn, ex, 3, 100, window=1, log=lambda *_: None) == 2
     assert ex.execute_many([("select count(*) from songs", ())])[0][0][0] == 4
     assert ex.execute_many([("select count(*) from songs_fts", ())])[0][0][0] == 4   # each song indexed once

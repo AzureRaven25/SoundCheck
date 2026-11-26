@@ -109,6 +109,17 @@ class TursoHttp(Executor):
         self.client = httpx.Client(base_url=base, headers={"Authorization": f"Bearer {token}"}, timeout=120)
 
     def execute_many(self, statements):
+        # Turso is SQLite: one writer at a time. Another writer holding the lock fails a statement with SQLITE_BUSY;
+        # every batch here is safe to re-run (insert or replace / one index statement), so wait and retry it.
+        for attempt in range(30):
+            try:
+                return self._execute_many(statements)
+            except RuntimeError as e:
+                if ("SQLITE_BUSY" not in str(e) and "database is locked" not in str(e)) or attempt == 29:
+                    raise
+                time.sleep(min(10, 0.5 * (attempt + 1)))
+
+    def _execute_many(self, statements):
         reqs = [{"type": "execute", "stmt": {"sql": "BEGIN"}}]
         reqs += [{"type": "execute", "stmt": {"sql": sql, "args": [_hrana_value(a) for a in args]}} for sql, args in statements]
         reqs += [{"type": "execute", "stmt": {"sql": "COMMIT"}}, {"type": "close"}]
@@ -185,11 +196,13 @@ def export(conn: psycopg.Connection, ex: Executor, start: int, end: int, window:
     return total
 
 
-def index_range(ex: Executor, start: int, end: int) -> None:
-    """Add songs ranked [start, end) to the search index (they must not be indexed yet)."""
-    ex.execute_many([("insert into songs_fts(rowid, title, artist_credit) "
-                      f"select rank, {strip_apostrophes_sql('title')}, {strip_apostrophes_sql('artist_credit')} "
-                      "from songs where rank >= ? and rank < ?", (start, end))])
+def index_range(ex: Executor, start: int, end: int, chunk: int = 2000) -> None:
+    """Add songs ranked [start, end) to the search index (they must not be indexed yet), in short transactions so
+    parallel exporters don't hold Turso's single write lock for long."""
+    for s in range(start, end, chunk):
+        ex.execute_many([("insert into songs_fts(rowid, title, artist_credit) "
+                          f"select rank, {strip_apostrophes_sql('title')}, {strip_apostrophes_sql('artist_credit')} "
+                          "from songs where rank >= ? and rank < ?", (s, min(end, s + chunk)))])
 
 
 def export_append(conn: psycopg.Connection, ex: Executor, start: int, end: int, window: int = 20000, log=print) -> int:
@@ -200,9 +213,10 @@ def export_append(conn: psycopg.Connection, ex: Executor, start: int, end: int, 
     later --start. Ranks must be new: re-exporting existing ranks would index them twice.
     """
     init_schema(ex)
-    have = ex.execute_many([("select coalesce(max(rank), 0) from songs", ())])[0][0][0]
-    if start <= int(have):
-        raise ValueError(f"append must start after the last exported rank ({int(have):,}); got {start:,}")
+    # the range must be untouched (parallel workers each take their own range; songs already there would be indexed twice)
+    taken = ex.execute_many([("select count(*) from songs where rank >= ? and rank < ?", (start, end))])[0][0][0]
+    if int(taken):
+        raise ValueError(f"ranks {start:,}-{end - 1:,} already have {int(taken):,} exported songs")
     total = 0
     for s in range(start, end, window):
         e = min(end, s + window)
