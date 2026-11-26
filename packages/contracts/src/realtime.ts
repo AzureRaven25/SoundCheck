@@ -149,6 +149,17 @@ export interface RtcEvent {
   candidate?: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
 }
 
+/**
+ * Host → everyone: the party's singing mode for the song starting. Duet: singers alternate lyric lines, `parts`
+ * maps each singer to their half (0 = lines 1, 3, 5…; 1 = lines 2, 4, 6…). Battle: everyone sings it all, head to head.
+ */
+export interface DuetEvent {
+  type: 'duet';
+  v: typeof PROTOCOL_VERSION;
+  mode: 'duet' | 'battle' | null;
+  parts: Record<string, 0 | 1>;
+}
+
 /** Phone → host: how loud this singer wants their own voice through the host's speakers (0–2, 1 = as mixed). */
 export interface VoiceGainEvent {
   type: 'voice_gain';
@@ -169,7 +180,8 @@ export type SessionEvent =
   | QueueChangedEvent
   | VoiceEvent
   | RtcEvent
-  | VoiceGainEvent;
+  | VoiceGainEvent
+  | DuetEvent;
 
 /** Presence payload each device tracks on the channel. */
 export interface PresenceState {

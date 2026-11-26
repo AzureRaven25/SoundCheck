@@ -1,4 +1,5 @@
 'use client';
+import type React from 'react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { StageLine, StageNote } from './useStageData';
 
@@ -44,7 +45,11 @@ const Line = memo(function Line({ words, id }: { words: { text: string }[]; id: 
  * 3-2-1 countdown before singing resumes after a long instrumental break. Word progress is written
  * straight to CSS variables each animation frame (no React re-render at 60 fps).
  */
-export function StageLyrics({ lines, notes, getTime }: { lines: StageLine[]; notes: StageNote[]; getTime: () => number }) {
+export function StageLyrics({ lines, notes, getTime, decorate }: {
+  lines: StageLine[]; notes: StageNote[]; getTime: () => number;
+  /** shown above the current line, e.g. whose line it is in a duet (index among the sung lines) */
+  decorate?: (lineIndex: number) => React.ReactNode;
+}) {
   const sung = useMemo(() => lines.filter((l) => l.text.trim() && l.start != null), [lines]);
   const [idx, setIdx] = useState(-1);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -93,6 +98,7 @@ export function StageLyrics({ lines, notes, getTime }: { lines: StageLine[]; not
           <span key={n} className={`h-5 w-5 rounded-full transition-colors ${countdown >= n ? 'bg-pink-500' : 'bg-ink-700'}`} />
         ))}
       </div>
+      {cur && decorate ? <div className="mb-2">{decorate(idx)}</div> : null}
       {cur ? <Line key={`c${idx}`} id="cur" words={cur} /> : <p className="font-display text-4xl font-bold text-ink-500">{idx < 0 ? 'Get ready…' : ''}</p>}
       <div className="mt-4 min-h-[2.5rem] text-ink-500">
         {next && <p className="font-display text-[clamp(1.1rem,min(2.6vw,4.2vh),2.6rem)] font-bold leading-tight">{next.map((w) => w.text).join(' ')}</p>}

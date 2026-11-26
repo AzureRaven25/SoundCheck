@@ -51,7 +51,7 @@ function Bar({ label, value }: { label: string; value: number }) {
 interface Row { rank: number; display_name: string; score: number; grade: string }
 
 /** SoundCheck Score results: one card per singer, then the song's leaderboard. */
-export function Results({ scores, trackId, onAgain, error, group, guests }: { scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null; guests?: { score: number; grade: string; singers: number } | null }) {
+export function Results({ scores, trackId, onAgain, error, group, guests, battle }: { battle?: boolean; scores: ScoreView[] | null; trackId: string; onAgain: () => void; error?: string | null; group?: { score: number; grade: string; singers: number } | null; guests?: { score: number; grade: string; singers: number } | null }) {
   const [board, setBoard] = useState<Row[]>([]);
   const [badges, setBadges] = useState<{ title: string; tier: string }[]>([]);
   const [xp, setXp] = useState(0);
@@ -78,6 +78,15 @@ export function Results({ scores, trackId, onAgain, error, group, guests }: { sc
       {celebrate && <Confetti />}
       <h2 className="mb-4 text-center font-display text-3xl font-extrabold tracking-tight md:text-4xl">SoundCheck Score</h2>
       {error && <p role="alert" className="mb-6 text-center text-danger-400">{error}</p>}
+      {battle && scores && scores.length >= 2 && (() => {
+        const sorted = [...scores].sort((a, b) => b.score - a.score);
+        const [w, r] = [sorted[0]!, sorted[1]!];
+        return (
+          <p role="status" aria-label="Battle result" className="mx-auto mb-5 w-fit animate-stamp rounded-2xl bg-gold-400/15 px-5 py-2 text-center font-display text-2xl font-extrabold text-gold-400">
+            {w.score === r.score ? `It’s a tie at ${w.score}!` : `🏆 ${w.name} wins by ${w.score - r.score} point${w.score - r.score === 1 ? '' : 's'}!`}
+          </p>
+        );
+      })()}
       {/* one singer on a wide screen: the card beside XP, badges, leaderboard and actions, so it all fits on screen */}
       <div className={clsx(solo && 'md:mx-auto md:grid md:max-w-4xl md:grid-cols-[minmax(0,1fr)_20rem] md:items-start md:gap-6')}>
       {!scores ? (

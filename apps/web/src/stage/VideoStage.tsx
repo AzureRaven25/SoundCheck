@@ -104,6 +104,14 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const host = useHostSession(data.track.id, resume);
+  // party singing mode from the host's panel: duet parts (who sings which lines) or a head-to-head battle
+  const [partyMode, setPartyMode] = useState<{ mode: 'duet' | 'battle' | null; parts: Record<string, 0 | 1> }>({ mode: null, parts: {} });
+  const onPartyMode = useCallback((m: 'duet' | 'battle' | null, parts: Record<string, 0 | 1>) => setPartyMode({ mode: m, parts }), []);
+  const duetLabel = (i: number) => {
+    const who = host.singers().filter((x) => partyMode.parts[x.memberId] === i % 2);
+    if (!who.length) return null;
+    return <span className="rounded-full px-3 py-1 text-sm font-bold text-ink-950" style={{ background: who[0]!.color }}>{who.map((x) => x.name).join(' & ')}’s line</span>;
+  };
   const [guests, setGuests] = useState<GuestScore | null>(null);
   const hostRef = useRef(host);
   useEffect(() => { hostRef.current = host; });
@@ -310,7 +318,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       setPhase('scoring');
       const { data: res, error } = await sb.functions.invoke<{ results: (Omit<ScoreView, 'name' | 'color'> & { member_id: string; performance_id: string })[]; group: typeof group; guests?: GuestScore | null }>('score-performance', {
         body: { track_id: data.track.id, session_id: hostRef.current.session!.id, mode: 'lyrics',
-                singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb })) },
+                party_mode: partyMode.mode, singers: singers.map((s) => ({ member_id: s.memberId, frames: hostRef.current.framesOf(s.memberId), latency_ms: null, noise_floor_db: s.noiseFloorDb, part: partyMode.mode === 'duet' ? partyMode.parts[s.memberId] : undefined })) },
       });
       if (error || !res) setScoreError('Scoring failed. Please try again.');
       else {
@@ -424,7 +432,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
       {!showStage && (
         <div className="relative flex flex-1 flex-col py-6">
           <div className="my-auto w-full">
-            <Results scores={scores} group={mode === 'party' ? group : null} guests={mode === 'party' ? guests : null} trackId={data.track.id} error={scoreError}
+            <Results battle={mode === 'party' && partyMode.mode === 'battle'} scores={scores} group={mode === 'party' ? group : null} guests={mode === 'party' ? guests : null} trackId={data.track.id} error={scoreError}
               onAgain={() => { setScores(null); setGroup(null); setGuests(null); setScoreError(null); setPhase('intro'); }} />
             {mode === 'party' && nextUp && phase === 'results' && (
               <div className="mx-auto mt-6 flex max-w-md items-center gap-3 rounded-2xl bg-ink-850/90 p-4">
@@ -618,7 +626,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                   const rs = hostRef.current.singers().map((sg) => rateLine(hostRef.current.framesOf(sg.memberId), a, b, sg.noiseFloorDb ?? null)).filter((r): r is number => r != null);
                   return rs.length ? Math.max(...rs) : null;
                 }} />
-                <StageLyrics lines={lines} notes={[]} getTime={getTime} />
+                <StageLyrics lines={lines} notes={[]} getTime={getTime} decorate={mode === 'party' && partyMode.mode === 'duet' ? duetLabel : undefined} />
               </div>
             )}
           </div>
@@ -642,7 +650,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
 
       {mode === 'party' && host.session && (
         <div className={clsx('relative px-4 pb-6 md:px-6', phase !== 'intro' && 'hidden')}>
-          <PartyPanel host={host} items={queue.items} reload={queue.reload} currentTrackId={data.track.id} phase={phase} />
+          <PartyPanel host={host} items={queue.items} reload={queue.reload} currentTrackId={data.track.id} phase={phase} onMode={onPartyMode} />
         </div>
       )}
       </div>

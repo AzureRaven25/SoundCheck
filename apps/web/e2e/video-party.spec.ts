@@ -179,3 +179,66 @@ test('host controls: reorder and remove requests, mute and remove singers, take 
   await dee.ctx.close(); await eli.ctx.close();
   fs.rmSync(wav, { force: true });
 });
+
+test('duet and battle: lines alternate between two phones, and a battle crowns a winner', async ({ page, browser }) => {
+  test.skip(!process.env.E2E_SB_URL, 'set E2E_SB_URL / E2E_SB_SERVICE');
+  test.setTimeout(180_000);
+  const wav = singingWav();
+  await signUp(page, 'Duet Host');
+  await page.goto(`/stage/${FIXTURE_TRACK}?video=1`);
+  await page.getByLabel('Kind of video').selectOption('original');
+  await page.getByLabel('YouTube link').fill('pKtLNYNWbBw');
+  await page.getByRole('button', { name: 'Use video' }).click();
+  await page.getByRole('radio', { name: /Phones as mics/ }).click();
+  await page.getByRole('button', { name: 'Open the party' }).click();
+  const code = (await page.getByTestId('pairing-code').textContent({ timeout: 15_000 }))!.trim();
+  const join = async (name: string) => {
+    const ctx = await browser.newContext({ permissions: ['microphone'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const p = await ctx.newPage();
+    await fakeMicrophone(p, wav);
+    await p.goto(`/join/${code}`);
+    await p.getByLabel('Stage name').fill(name);
+    await p.getByRole('button', { name: 'Join' }).click();
+    await p.getByRole('button', { name: 'Turn on my microphone' }).click();
+    await expect(p.getByText('Waiting for the song')).toBeVisible({ timeout: 15_000 });
+    return { ctx, p };
+  };
+  const ana = await join('Ana');
+  const bo = await join('Bo');
+  await expect(page.getByRole('list', { name: 'Singers' }).getByText('mic ready')).toHaveCount(2, { timeout: 15_000 });
+
+  const play = async () => {
+    await page.getByRole('button', { name: 'Start singing' }).click();
+    await page.evaluate(() => {
+      const c = (window as unknown as HostW).__soundcheckStage.clock;
+      const t0 = performance.now();
+      c.videoTime = () => 2.5 + (performance.now() - t0) / 1000;
+      c.onState?.('playing');
+    });
+    for (const x of [ana, bo]) await x.p.evaluate(() => (window as unknown as { __fakeMicSing: (s: number) => void }).__fakeMicSing(0));
+  };
+
+  // duet: Ana has lines 1, 3; Bo has lines 2, 4
+  await page.getByLabel('Party mode').selectOption('duet');
+  await expect(page.getByText(/Ana sing lines 1, 3, 5…; Bo sing lines 2, 4, 6…/)).toBeVisible();
+  await play();
+  await expect(page.getByText('Ana’s line')).toBeVisible({ timeout: 10_000 });
+  await expect(ana.p.getByText('Your line!')).toBeVisible({ timeout: 10_000 });
+  await expect(bo.p.getByText('Their line')).toBeVisible();
+  await page.waitForTimeout(7_000);   // into line 2 (8 s)
+  await expect(bo.p.getByText('Your line!')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('button', { name: 'Finish and score' }).click();
+  await expect(page.getByRole('dialog', { name: 'Results' })).toContainText('Ana', { timeout: 30_000 });
+  await expect(page.getByRole('dialog', { name: 'Results' })).toContainText('Bo');
+
+  // battle: both sing everything, the TV names a winner
+  await page.getByRole('button', { name: 'Sing again' }).click();
+  await page.getByLabel('Party mode').selectOption('battle');
+  await play();
+  await expect(ana.p.getByText('Battle! Out-sing everyone')).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(6_000);
+  await page.getByRole('button', { name: 'Finish and score' }).click();
+  await expect(page.getByRole('status', { name: 'Battle result' })).toContainText(/wins by|tie/, { timeout: 30_000 });
+  await ana.ctx.close(); await bo.ctx.close();
+  fs.rmSync(wav, { force: true });
+});

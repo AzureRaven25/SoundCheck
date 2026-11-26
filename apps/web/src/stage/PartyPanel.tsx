@@ -14,7 +14,8 @@ import type { useHostSession } from '@/session/useHostSession';
 type Host = ReturnType<typeof useHostSession>;
 const turnKey = (sid: string) => `soundcheck.turns.${sid}`;
 
-interface Turns { on: boolean; index: number }
+export type PartyMode = 'all' | 'duet' | 'battle';
+interface Turns { on: boolean; index: number; mode?: PartyMode }
 function readTurns(sid: string): Turns {
   try { return { on: false, index: 0, ...(JSON.parse(sessionStorage.getItem(turnKey(sid)) ?? '{}') as Partial<Turns>) }; } catch { return { on: false, index: 0 }; }
 }
@@ -23,8 +24,10 @@ function readTurns(sid: string): Turns {
  * `phase`: when a song starts with turns on, everyone but the singer whose turn it is gets muted; when results
  * come in, the turn passes on (kept per party in sessionStorage so it survives moving to the next song's page).
  */
-export function PartyPanel({ host, items, reload, currentTrackId, phase }: {
+export function PartyPanel({ host, items, reload, currentTrackId, phase, onMode }: {
   host: Host; items: QueueItem[]; reload: () => Promise<void>; currentTrackId: string; phase: string;
+  /** the singing mode and each singer's duet part (0/1), for the Stage's lyrics and scoring */
+  onMode?: (mode: 'duet' | 'battle' | null, parts: Record<string, 0 | 1>) => void;
 }) {
   const sid = host.session?.id ?? '';
   const [turns, setTurns] = useState<Turns>(() => (sid ? readTurns(sid) : { on: false, index: 0 }));
@@ -34,6 +37,11 @@ export function PartyPanel({ host, items, reload, currentTrackId, phase }: {
   useEffect(() => { if (sid) try { sessionStorage.setItem(turnKey(sid), JSON.stringify(turns)); } catch { /* ignore */ } }, [sid, turns]);
 
   const singers = host.singers();
+  const mode: PartyMode = turns.mode ?? 'all';
+  const ready = singers.filter((x) => x.mic === 'ready' || x.mic === 'live');
+  const parts: Record<string, 0 | 1> = mode === 'duet' ? Object.fromEntries(ready.map((x, i) => [x.memberId, (i % 2) as 0 | 1])) : {};
+  const partsKey = JSON.stringify(parts);
+  useEffect(() => { onMode?.(mode === 'all' ? null : mode, JSON.parse(partsKey) as Record<string, 0 | 1>); }, [mode, partsKey, onMode]);
   const turnSinger = turns.on && singers.length ? singers[turns.index % singers.length] : null;
   const command = (memberId: string, c: 'mute' | 'unmute' | 'kick') => host.send({ type: 'host_command', v: PROTOCOL_VERSION, memberId, command: c });
   const setMute = (memberId: string, on: boolean) => {
@@ -46,7 +54,8 @@ export function PartyPanel({ host, items, reload, currentTrackId, phase }: {
   useEffect(() => {
     const prev = last.current;
     last.current = phase;
-    if (!turns.on || !singers.length) return;
+    if (phase === 'singing' && prev !== 'singing') host.send({ type: 'duet', v: PROTOCOL_VERSION, mode: mode === 'all' ? null : mode, parts });
+    if (!turns.on || mode !== 'all' || !singers.length) return;
     if (phase === 'singing' && prev !== 'singing' && turnSinger) for (const s of singers) setMute(s.memberId, s.memberId !== turnSinger.memberId);
     if (phase === 'results' && prev !== 'results') setTurns((t) => ({ ...t, index: t.index + 1 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,10 +86,24 @@ export function PartyPanel({ host, items, reload, currentTrackId, phase }: {
       <div className="rounded-xl bg-ink-850/80 p-3">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-bold uppercase tracking-widest text-ink-300">Singers</p>
-          <label className="flex items-center gap-2 text-xs font-bold">
-            <input type="checkbox" checked={turns.on} onChange={(e) => setTurns((t) => ({ ...t, on: e.target.checked }))} /> Take turns
-          </label>
+          {mode === 'all' && (
+            <label className="flex items-center gap-2 text-xs font-bold">
+              <input type="checkbox" checked={turns.on} onChange={(e) => setTurns((t) => ({ ...t, on: e.target.checked }))} /> Take turns
+            </label>
+          )}
         </div>
+        <label className="mb-2 flex items-center justify-between gap-2 text-xs font-bold">
+          <span className="uppercase tracking-widest text-ink-300">Mode</span>
+          <select value={mode} onChange={(e) => setTurns((t) => ({ ...t, mode: e.target.value as PartyMode }))} aria-label="Party mode"
+            className="rounded-full bg-ink-800 px-3 py-1 text-xs">
+            <option value="all">Everyone sings</option>
+            <option value="duet" disabled={ready.length < 2}>Duet: take lines in turn</option>
+            <option value="battle" disabled={ready.length < 2}>Battle: head to head</option>
+          </select>
+        </label>
+        {mode === 'duet' && ready.length >= 2 && (
+          <p className="mb-2 text-xs text-ink-300">{ready.filter((x) => parts[x.memberId] === 0).map((x) => x.name).join(', ')} sing lines 1, 3, 5…; {ready.filter((x) => parts[x.memberId] === 1).map((x) => x.name).join(', ')} sing lines 2, 4, 6…</p>
+        )}
         {turnSinger && <p className="mb-2 rounded-lg bg-pink-500/15 px-2 py-1 text-xs font-bold text-pink-400" role="status">Next up to sing: {turnSinger.name}</p>}
         {singers.length === 0 ? <p className="text-ink-500">No phones yet.</p> : (
           <ul className="space-y-1" aria-label="Manage singers">

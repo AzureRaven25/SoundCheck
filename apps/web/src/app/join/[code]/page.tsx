@@ -46,6 +46,8 @@ export default function JoinSessionPage() {
   const [tuner, setTuner] = useState<{ name: string; cents: number } | null>(null);
   const [tip, setTip] = useState<string | null>(null);
   const [myGain, setMyGain] = useState(1);
+  // party mode for the current song: in a duet, which half of the lines are yours; or a head-to-head battle
+  const [duet, setDuet] = useState<{ mode: 'duet' | 'battle' | null; part: 0 | 1 | null }>({ mode: null, part: null });
   const trail = useRef<[number, number | null][]>([]);
   const quietSince = useRef<number | null>(null);
   const [muted, setMuted] = useState(false);
@@ -148,6 +150,9 @@ export default function JoinSessionPage() {
       syncVoice();
     } else if (e.type === 'rtc' && e.from === 'host' && e.memberId === me) {
       void sender.current?.handle(e);
+    } else if (e.type === 'duet') {
+      const mine = me ? e.parts[me] : undefined;
+      setDuet({ mode: e.mode, part: mine === 0 || mine === 1 ? mine : null });
     } else if (e.type === 'queue_changed') {
       setQueueVersion((v) => v + 1);
     } else if (e.type === 'host_command' && e.memberId === me) {
@@ -354,7 +359,11 @@ export default function JoinSessionPage() {
             {live && <span role="status" style={{ color: member?.color }}>On pitch {Math.round(live.hitRate * 100)}%</span>}
           </div>
           <div className="w-full">
-            {lyrics.length ? <StageLyrics lines={lyrics} notes={notes} getTime={songTime} /> : <p className="py-10 text-ink-500">Lyrics will show here when the song starts.</p>}
+            {duet.mode === 'battle' && <p className="mb-1 text-center text-xs font-bold uppercase tracking-widest text-gold-400">Battle! Out-sing everyone</p>}
+            {lyrics.length ? <StageLyrics lines={lyrics} notes={notes} getTime={songTime}
+              decorate={duet.mode === 'duet' && duet.part != null ? (i) => (i % 2 === duet.part
+                ? <span className="rounded-full bg-pink-500 px-3 py-1 text-sm font-bold text-ink-950">Your line!</span>
+                : <span className="rounded-full bg-ink-800 px-3 py-1 text-sm font-bold text-ink-300">Their line</span>) : undefined} /> : <p className="py-10 text-ink-500">Lyrics will show here when the song starts.</p>}
           </div>
           <div className="h-24 w-full overflow-hidden rounded-xl bg-ink-900/70 ring-1 ring-ink-800">
             <PitchHud notes={notes} keyShift={transport.current?.keyShift ?? 0} getTime={songTime}

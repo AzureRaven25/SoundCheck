@@ -24,7 +24,25 @@ import { grade, LYRICS_SCORING_VERSION, scoreLyrics, scorePerformance, SCORING_V
 
 const MAX_FRAMES = 4 * 100 * 60 * 15; // 15 minutes of 10 ms frames
 
-interface SingerIn { member_id?: string; frames: number[]; latency_ms?: number | null; noise_floor_db?: number | null }
+interface SingerIn { member_id?: string; frames: number[]; latency_ms?: number | null; noise_floor_db?: number | null; part?: 0 | 1 }
+
+/** Duet: the singer's half of the lyric lines (0 = first, third, …; 1 = second, fourth, …), each still ending where the next line starts. */
+function duetLines(lines: LyricLine[], part: 0 | 1): LyricLine[] {
+  const sung = lines.filter((l) => l.start != null && l.text.trim());
+  return sung.map((l, i) => ({ ...l, end: l.end ?? sung[i + 1]?.start ?? (l.start! + 8) })).filter((_, i) => i % 2 === part);
+}
+/** Duet: the singer's half of the melody (alternate phrases), with phrase note indexes renumbered. */
+function duetMelody(notes: RefNote[], phrases: Phrase[], part: 0 | 1): { notes: RefNote[]; phrases: Phrase[] } {
+  const ps = phrases?.length ? phrases : [];
+  if (!ps.length) return { notes: notes.filter((_, i) => i % 2 === part), phrases: [] };
+  const outNotes: RefNote[] = [], outPhrases: Phrase[] = [];
+  ps.forEach((ph, i) => {
+    if (i % 2 !== part) return;
+    const idx = ph.noteIdx.map((k) => { outNotes.push(notes[k]!); return outNotes.length - 1; });
+    outPhrases.push({ start: ph.start, end: ph.end, noteIdx: idx });
+  });
+  return { notes: outNotes, phrases: outPhrases };
+}
 
 Deno.serve((req) =>
   handle(req, async (body) => {
@@ -83,9 +101,10 @@ Deno.serve((req) =>
     const results = [];
     for (const { memberId, userId, s } of resolved) {
       const r: ScoreResult = useLyrics
-        ? scoreLyrics({ lines, frames: s.frames, noiseFloorDb: s.noise_floor_db ?? null })
+        ? scoreLyrics({ lines: s.part === 0 || s.part === 1 ? duetLines(lines, s.part) : lines, frames: s.frames, noiseFloorDb: s.noise_floor_db ?? null })
         : scorePerformance({
-          notes: analysis!.notes, phrases: analysis!.phrases, frames: s.frames, keyShift,
+          ...(s.part === 0 || s.part === 1 ? duetMelody(analysis!.notes, analysis!.phrases, s.part) : { notes: analysis!.notes, phrases: analysis!.phrases }),
+          frames: s.frames, keyShift,
           latencyMs: s.latency_ms ?? null, noiseFloorDb: s.noise_floor_db ?? null,
         });
       let tMin = Infinity, tMax = -Infinity;    // frames can arrive out of order: use the real span
@@ -96,7 +115,8 @@ Deno.serve((req) =>
         score: r.score, pitch_score: r.pitch, timing_score: r.timing, rhythm_score: r.rhythm, stability_score: r.stability,
         duration_score: r.duration, transition_score: r.transitions,
         grade: r.grade, scoring_version: useLyrics ? LYRICS_SCORING_VERSION : SCORING_VERSION, duration_ms: Math.max(0, durationMs),
-        details: { ...r.details, feedback: r.feedback, expression: r.expression, bonus: r.bonus, analysis_id: useLyrics ? null : analysis!.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id },
+        details: { ...r.details, feedback: r.feedback, expression: r.expression, bonus: r.bonus, analysis_id: useLyrics ? null : analysis!.id, capture: sessionId ? 'session' : 'solo', submitted_by: user.id,
+                   ...(s.part === 0 || s.part === 1 ? { duet_part: s.part } : {}), ...(body.party_mode === 'duet' || body.party_mode === 'battle' ? { party_mode: body.party_mode } : {}) },
       }).select('id').single();
       if (error) throw error;
       results.push({ member_id: memberId, user_id: userId, performance_id: perf.id, score: r.score, grade: r.grade,
