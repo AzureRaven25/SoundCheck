@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestShift, confident, features, type Frame } from './autoSync';
+import { agree, bestShift, confident, features, type Frame } from './autoSync';
 
 const SR = 22050;
 const FFT = 4096;
@@ -116,5 +116,13 @@ describe('auto sync', () => {
     const ref = hear(original, 10, 16, (t) => t);
     const cand = hear(room, 6, 20, (t) => t);
     expect(confident(bestShift(ref, cand, -4, 4))).toBe(false);
+  });
+
+  it('accepts two near misses only when they agree on the shift', () => {
+    const m = (shift: number, score = 0.2, margin = 0.05) => ({ shift, score, margin });
+    expect(confident(m(2.5))).toBe(false);
+    expect(agree(m(2.5), m(2.45))).toBe(true);
+    expect(agree(m(2.5), m(1.9))).toBe(false);
+    expect(agree(m(2.5), m(2.5, 0.1))).toBe(false);
   });
 });

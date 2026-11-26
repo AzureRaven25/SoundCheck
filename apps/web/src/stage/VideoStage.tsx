@@ -29,7 +29,7 @@ import { LyricsSyncer } from './LyricsSyncer';
 import { lineAt, StageLyrics } from './StageLyrics';
 import { saveVideoOffset, type StageVideo, type VideoStageData } from './useVideoStageData';
 import { VideoClock } from './videoClock';
-import { localOffset, measureKaraokeOffset, micMaybeAllowed, rememberOffset } from './autoSync';
+import { agree, localOffset, measureKaraokeOffset, micMaybeAllowed, rememberOffset } from './autoSync';
 
 type Phase = 'intro' | 'singing' | 'scoring' | 'results';
 type Mode = 'solo' | 'party';
@@ -245,12 +245,12 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     && (again || (!karaokeVid.measured && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id))));
 
   /** Lyrics time to compare at: somewhere with the full band (about 40% in, after the first line). */
-  function compareAt(): number {
+  function compareAt(second = false): number {
     const first = lines.find((l) => l.start != null && l.text.trim())?.start ?? 10;
     let dur = 0;
     try { dur = (guidePlayer.current?.getDuration() ?? 0) - (offsets[guideVid!.id] ?? 0); } catch { /* not ready */ }
-    if (!(dur > 40)) return first + 8;
-    return Math.min(Math.max(first + 4, dur * 0.4), dur - 20);
+    if (!(dur > 40)) return first + (second ? 20 : 8);
+    return Math.min(Math.max(first + (second ? 16 : 4), dur * (second ? 0.65 : 0.4)), dur - 20);
   }
 
   async function autoSync(ac: AudioContext): Promise<number | null> {
@@ -262,13 +262,25 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     clock.current.hold = true;
     setAligning('original');
     try {
-      const r = await measureKaraokeOffset({ ctx: ac, karaoke: kp, original: gp, originalOffset: offsets[guideVid!.id] ?? 0, guess,
-        at: compareAt(), signal: ctl.signal, onStep: setAligning });
-      void supabaseBrowser().rpc('log_video_sync_attempt', {
-        p_track_id: data.track.id, p_video_id: k.id, p_outcome: r.outcome, p_guess_ms: Math.round(guess * 1000),
-        p_offset_ms: r.match ? Math.round(((offsets[guideVid!.id] ?? 0) + r.match.shift) * 1000) : null,
-        p_score: r.match?.score ?? null, p_margin: r.match?.margin ?? null, p_ref_frames: r.refFrames, p_cand_frames: r.candFrames, p_level_db: r.levelDb,
-      }).then(() => {});
+      const gOff = offsets[guideVid!.id] ?? 0;
+      const measure = async (at: number) => {
+        const res = await measureKaraokeOffset({ ctx: ac, karaoke: kp, original: gp, originalOffset: gOff, guess, at, signal: ctl.signal, onStep: setAligning });
+        void supabaseBrowser().rpc('log_video_sync_attempt', {
+          p_track_id: data.track.id, p_video_id: k.id, p_outcome: res.outcome, p_guess_ms: Math.round(guess * 1000),
+          p_offset_ms: res.match ? Math.round((gOff + res.match.shift) * 1000) : null,
+          p_score: res.match?.score ?? null, p_margin: res.match?.margin ?? null, p_ref_frames: res.refFrames, p_cand_frames: res.candFrames, p_level_db: res.levelDb,
+        }).then(() => {});
+        return res;
+      };
+      let r = await measure(compareAt());
+      // a near miss: check a second part of the song, and accept the shift if both parts agree on it
+      if (r.outcome === 'low-confidence' && r.match && r.match.score >= 0.15) {
+        const r2 = await measure(compareAt(true));
+        if (r2.ok || agree(r.match, r2.match)) {
+          const shift = r2.ok && !agree(r.match, r2.match) ? r2.match!.shift : (r.match.shift + r2.match!.shift) / 2;
+          r = { ...r2, ok: true, outcome: 'ok', offset: Math.round((gOff + shift) * 100) / 100 };
+        } else if (r2.outcome === 'skipped') r = r2;
+      }
       if (r.outcome === 'skipped') return null;
       if (!r.ok) {
         setAutoNote(r.outcome === 'low-confidence' && r.levelDb != null && r.levelDb > -50

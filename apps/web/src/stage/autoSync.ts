@@ -102,6 +102,9 @@ export function bestShift(ref: Frame[], cand: Frame[], lo: number, hi: number, s
 
 /** Accept a match only when it is clearly the music (not a quiet room or headphones) and clearly one place. */
 export const confident = (m: Match | null): m is Match => !!m && m.score >= 0.22 && m.margin >= 0.04;
+/** Two weaker matches from different parts of the song that land on the same shift are as good as one strong one. */
+export const agree = (a: Match | null, b: Match | null): boolean =>
+  !!a && !!b && Math.min(a.score, b.score) >= 0.15 && Math.min(a.margin, b.margin) >= 0.03 && Math.abs(a.shift - b.shift) <= 0.15;
 
 // ---- in the browser ----
 
