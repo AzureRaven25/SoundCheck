@@ -180,9 +180,10 @@ export async function micMaybeAllowed(): Promise<boolean> {
   try { return (await navigator.permissions.query({ name: 'microphone' as PermissionName })).state !== 'denied'; } catch { return true; }
 }
 
-const REF_S = 6;
+/** Long enough to cross a change of section (verse into chorus): a short stretch of a looping groove fits a bar off. */
+const REF_S = 16;
 const START_REF_S = 8;
-const SLACK_S = 4;
+const SLACK_S = 6;
 /** Seconds of the room's own quiet recorded as "before the video starts" (the song's very start is then unmistakable). */
 const PRE_S = 1.5;
 

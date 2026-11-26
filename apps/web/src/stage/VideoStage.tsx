@@ -250,7 +250,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     let dur = 0;
     try { dur = (guidePlayer.current?.getDuration() ?? 0) - (offsets[guideVid!.id] ?? 0); } catch { /* not ready */ }
     if (!(dur > 40)) return first + 8;
-    return Math.min(Math.max(first + 4, dur * 0.4), dur - 20);
+    return Math.min(Math.max(first + 4, dur * 0.35), dur - 24);
   }
 
   async function autoSync(ac: AudioContext): Promise<number | null> {
@@ -272,15 +272,15 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
         }).then(() => {});
         return res;
       };
-      // the opening first: music starting out of silence can't be mistaken for another bar of the same groove
-      let r = await measure(-gOff);
-      // not sure (a title card with sound, a talky intro): try the middle, which needs a clear match or to agree with the opening
+      // a long stretch of the middle, where the singing is (an intro can be shortened in a karaoke version)
+      let r = await measure(compareAt());
+      // not sure: the song's opening (music out of silence) settles it only if it agrees
       if (!r.ok && r.outcome !== 'skipped' && r.outcome !== 'no-mic') {
-        const r2 = await measure(compareAt());
-        if (r2.ok || agree(r.match, r2.match)) {
+        const r2 = await measure(-gOff);
+        if (agree(r.match, r2.match) || (r2.ok && !r.match)) {
           const shift = agree(r.match, r2.match) ? (r.match!.shift + r2.match!.shift) / 2 : r2.match!.shift;
           r = { ...r2, ok: true, outcome: 'ok', offset: Math.round((gOff + shift) * 100) / 100 };
-        } else r = r2;
+        } else if (r2.outcome === 'skipped') r = r2;
       }
       if (r.outcome === 'skipped') return null;
       if (!r.ok) {
@@ -631,7 +631,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
                 <h1 className="font-display text-3xl font-extrabold tracking-tight">Lining up the karaoke version</h1>
                 <p className="mt-3 text-lg font-bold text-pink-400">{aligning === 'original' ? 'Listening to the original song…' : 'Listening to the karaoke version…'}</p>
                 <p className="mt-3 text-sm text-ink-300">
-                  Keep your speakers up and stay quiet for about half a minute. This happens once per video: everyone who sings it after you starts in sync.
+                  Keep your speakers up and stay quiet for up to a minute. This happens once per video: everyone who sings it after you starts in sync.
                 </p>
                 <button type="button" onClick={() => alignAbort.current?.abort()} className="mt-5 rounded-full bg-ink-800 px-5 py-2 text-sm font-bold hover:bg-ink-700">Skip</button>
               </div>

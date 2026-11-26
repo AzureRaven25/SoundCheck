@@ -143,4 +143,33 @@ describe('auto sync', () => {
     expect(agree(m(2.5), m(1.9))).toBe(false);
     expect(agree(m(2.5), m(2.5, 0.1))).toBe(false);
   });
+
+  it('a long stretch of the middle lines up the singing even when the karaoke version cut 2 s from the intro', () => {
+    // intro and verse share one looping 4-chord groove; the chorus has its own chords
+    const A = [CHORDS[0]!, CHORDS[1]!, CHORDS[0]!, CHORDS[1]!], B = [CHORDS[2]!, CHORDS[3]!, CHORDS[4]!, CHORDS[5]!];
+    const form = [...A, ...A, ...A, ...A, ...B, ...B, ...A, ...A, ...B, ...B];   // one chord per second
+    const make = (cut: number, vocal: boolean, timbre: number) => {
+      const out = new Float32Array(Math.round((form.length - cut) * SR));
+      const n = rng(3 + timbre);
+      for (let i = 0; i < out.length; i++) {
+        const u = i / SR + cut, t = i / SR;
+        let x = 0;
+        for (const m of form[Math.floor(u)]!) for (let h = 1; h <= 1 + timbre; h++) x += Math.sin(2 * Math.PI * hz(m) * h * t) / h;
+        const bt = u % 0.5;
+        x += bt < 0.03 ? (n() * 2 - 1) * 3 * (1 - bt / 0.03) : 0;
+        if (vocal && u >= 8) x += 0.7 * Math.sin(2 * Math.PI * hz(72 + (Math.floor(u * 2) % 5)) * t);
+        out[i] = x * 0.1 + (n() * 2 - 1) * 0.02;
+      }
+      return out;
+    };
+    const orig = make(0, true, 2), kar = make(2, false, 0);   // the karaoke intro is 2 s shorter
+    const kOff = 6, truth = kOff - 2;                         // so its song (from the verse on) is 4 s behind the original's
+    const guess = 8, at = 10;                                 // a bad stored guess; compare from 10 s, across the chorus at 16 s
+    const ref = hear(orig, at, at + 16, (u) => u);
+    const kFrom = at + guess - 6;
+    const cand = hear(kar, kFrom - kOff, kFrom - kOff + 28, (u) => u + kOff);
+    const m = bestShift(ref, cand, guess - 6, guess + 6);
+    expect(confident(m)).toBe(true);
+    expect(m!.shift).toBeCloseTo(truth, 1);
+  });
 });
