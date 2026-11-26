@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { subtract } from './separate';
+import { subtract, vocalShare } from './separate';
 import { fromInt16, toInt16 } from './store';
 
 describe('karaoke made on this device', () => {
@@ -17,5 +17,13 @@ describe('karaoke made on this device', () => {
     const y = fromInt16(toInt16(x));
     const expected = [0, 0.5, -0.5, 1, -1, 1, -1, 0.123456];
     expected.forEach((v, i) => expect(Math.abs(y[i]! - v)).toBeLessThan(1 / 32767 + 1e-9));
+  });
+
+  it('measures how much of a recording is the singer (an instrumental is close to none)', () => {
+    const band = Float32Array.from({ length: 4000 }, (_, i) => 0.3 * Math.sin(i / 7));
+    const quiet = Float32Array.from({ length: 4000 }, (_, i) => 0.001 * Math.sin(i / 3));
+    const loud = Float32Array.from({ length: 4000 }, (_, i) => 0.2 * Math.sin(i / 3));
+    expect(vocalShare({ left: band, right: band }, { left: quiet, right: quiet })).toBeLessThan(0.01);
+    expect(vocalShare({ left: band, right: band }, { left: loud, right: loud })).toBeGreaterThan(0.1);
   });
 });

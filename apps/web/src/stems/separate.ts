@@ -28,6 +28,13 @@ export function subtract(mix: Stereo, vocals: Stereo): Stereo {
   return { left, right };
 }
 
+/** How much of the recording's energy is the vocal (0–1). A sung song is typically 0.1–0.4. */
+export function vocalShare(mix: Stereo, vocals: Stereo): number {
+  let v = 0, m = 0;
+  for (let i = 0; i < mix.left.length; i += 4) { v += vocals.left[i]! ** 2 + vocals.right[i]! ** 2; m += mix.left[i]! ** 2 + mix.right[i]! ** 2; }
+  return m > 0 ? v / m : 0;
+}
+
 export async function splitVocals(bytes: ArrayBuffer, onProgress: (p: SplitProgress) => void, signal?: AbortSignal): Promise<Stems> {
   onProgress({ step: 'decoding' });
   const mix = await decode(bytes);
@@ -51,6 +58,7 @@ export async function splitVocals(bytes: ArrayBuffer, onProgress: (p: SplitProgr
       const msg: ToWorker = { type: 'separate', left: mix.left.slice(), right: mix.right.slice() };
       worker.postMessage(msg, [msg.left.buffer, msg.right.buffer]);
     });
+    if (vocalShare(mix, vocals) < 0.01) throw new Error('Couldn’t find a lead singer in this recording (is it an instrumental?), so there’s nothing to take out.');
     return { vocals, backing: subtract(mix, vocals), rate: RATE };
   } finally {
     worker.terminate();
