@@ -346,9 +346,9 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         <img src={data.track.artworkUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-125 object-cover opacity-25 blur-3xl" />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-ink-950/70 to-ink-950" aria-hidden />
-      <div className="absolute inset-0 flex flex-col overflow-y-auto [&>*]:shrink-0">
+      <div className={clsx('absolute inset-0 flex flex-col overflow-y-auto [&>*]:shrink-0', phase !== 'intro' && phase !== 'results' && phase !== 'scoring' && 'min-[900px]:overflow-hidden')}>
 
-      <header className="relative flex items-center gap-4 px-6 pt-5">
+      <header className="relative flex items-center gap-4 px-4 py-3 md:px-6">
         <Link href={`/track/${data.track.id}`} aria-label="Leave Stage" className="rounded-full bg-ink-900/70 p-2 hover:bg-ink-800"><ArrowLeft size={20} /></Link>
         <div className="w-12"><Artwork src={data.track.artworkUrl} title={data.track.title} resolve={false} sizes="48px" /></div>
         <div className="min-w-0">
@@ -383,13 +383,13 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
         </div>
       ) : (
         <>
-          <div className="relative mx-6 mt-6 h-48 overflow-hidden rounded-2xl bg-ink-900/60 ring-1 ring-ink-800 md:h-56">
+          <div className="relative mx-4 mt-1 h-40 overflow-hidden rounded-2xl bg-ink-900/60 ring-1 ring-ink-800 md:mx-6 min-[900px]:h-[clamp(110px,26vh,260px)]">
             <VoiceVisualizer notes={data.notes} keyShift={keyShift} getTime={getTime} getTrails={getTrails} analyser={mode === 'solo' ? analyser : null} getLevels={getLevels} />
           </div>
-          <div className="relative flex flex-1 items-center justify-center px-8">
+          <div className={clsx('relative flex min-h-[12rem] items-center justify-center px-6', phase === 'intro' ? 'flex-auto py-4' : 'flex-1 min-[900px]:min-h-0')}>
             {phase === 'intro' ? (
               <div className="w-full max-w-3xl text-center">
-                <h1 className="font-display text-5xl font-extrabold tracking-tight">Ready to sing?</h1>
+                <h1 className="font-display text-5xl font-extrabold tracking-tight [@media(max-height:640px)]:text-3xl">Ready to sing?</h1>
                 <div role="radiogroup" aria-label="Microphones" className="mx-auto mt-6 inline-flex rounded-full bg-ink-850 p-1">
                   {(['solo', 'party'] as const).map((m) => (
                     <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
@@ -460,7 +460,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
                 {scoreError && <p role="alert" className="mt-3 text-sm text-danger-400">{scoreError}</p>}
                 <p className="mt-4 text-xs text-ink-500"><Link href={`/stage/${data.track.id}?video=1`} className="underline hover:text-ink-300">Sing with the YouTube video instead</Link></p>
                 <button type="button" onClick={() => void start()} disabled={mode === 'party' && !partySingers.some((s) => s.mic === 'ready')}
-                  className="stage-gradient mt-8 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 disabled:opacity-40 disabled:hover:scale-100">
+                  className="stage-gradient mt-8 rounded-full px-10 py-4 font-display text-xl font-bold shadow-lift hover:scale-105 [@media(max-height:640px)]:mt-4 [@media(max-height:640px)]:py-3 disabled:opacity-40 disabled:hover:scale-100">
                   Start singing
                 </button>
               </div>
@@ -480,7 +480,7 @@ function Stage({ data, resume }: { data: StageData; resume: string | null }) {
               </div>
             )}
           </div>
-          <footer className="relative flex flex-wrap items-center justify-center gap-3 px-6 pb-6">
+          <footer className="relative flex flex-wrap items-center justify-center gap-2 px-4 py-3 md:px-6">
             <button type="button" aria-label={playing ? 'Pause' : 'Play'} disabled={phase !== 'singing'} onClick={() => void toggle()}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50 text-ink-950 disabled:opacity-30">
               {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="translate-x-0.5" />}

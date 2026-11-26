@@ -33,17 +33,29 @@ def http(url: str, key: str | None = None, method: str = "GET", body: object | N
         return json.loads(raw) if raw else None
 
 
+def retry(fn, tries: int = 4):
+    """Network hiccups shouldn't stop a long run."""
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception:  # noqa: BLE001
+            if i == tries - 1:
+                raise
+            time.sleep(3 * (i + 1))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--artists", type=int, default=3000)
+    ap.add_argument("--start", type=int, default=0, help="resume from this artist index")
     a = ap.parse_args()
     url, key = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_SECRET_KEY"]
     rest = f"{url}/rest/v1"
     # the artists behind the most popular songs (sum of their songs' popularity), most popular first
     score: dict[str, list] = {}
     for off in range(0, 30000, 1000):
-        page = http(f"{rest}/tracks?select=popularity,track_artists(position,artists(id,mbid,name))&popularity=gt.0"
-                    f"&order=popularity.desc&limit=1000&offset={off}", key)
+        page = retry(lambda: http(f"{rest}/tracks?select=popularity,track_artists(position,artists(id,mbid,name))&popularity=gt.0"
+                                  f"&order=popularity.desc&limit=1000&offset={off}", key))
         for t in page:  # type: ignore[union-attr]
             for ta in t.get("track_artists") or []:
                 ar = ta.get("artists")
@@ -56,6 +68,8 @@ def main() -> int:
     print(f"{len(artists)} artists", flush=True)
     tagged = songs = 0
     for n, ar in enumerate(artists):
+        if n < a.start:
+            continue
         d = None
         for attempt in range(3):   # MusicBrainz answers 503 when busy: back off and retry
             try:
@@ -73,11 +87,14 @@ def main() -> int:
         gs = to_genres(names)
         if gs:
             tagged += 1
-            tids = [r["track_id"] for r in http(f"{rest}/track_artists?select=track_id&artist_id=eq.{ar['id']}&position=eq.0&limit=5000", key)]  # type: ignore[union-attr]
-            for i in range(0, len(tids), 150):
-                ids = ",".join(tids[i:i + 150])
-                http(f"{rest}/tracks?id=in.({ids})&genres=eq.{{}}", key, "PATCH", {"genres": gs})
-            songs += len(tids)
+            try:
+                tids = [r["track_id"] for r in retry(lambda: http(f"{rest}/track_artists?select=track_id&artist_id=eq.{ar['id']}&position=eq.0&limit=5000", key))]  # type: ignore[union-attr]
+                for i in range(0, len(tids), 150):
+                    ids = ",".join(tids[i:i + 150])
+                    retry(lambda: http(f"{rest}/tracks?id=in.({ids})&genres=eq.{{}}", key, "PATCH", {"genres": gs}))
+                songs += len(tids)
+            except Exception as e:  # noqa: BLE001
+                print("db", ar["name"], e, flush=True)
         if n % 100 == 0:
             print(f"  {n}/{len(artists)} artists, {tagged} with genres, ~{songs} songs", flush=True)
         time.sleep(1.05)   # MusicBrainz: 1 request per second
