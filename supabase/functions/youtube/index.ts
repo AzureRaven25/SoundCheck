@@ -10,7 +10,7 @@
  * developer policies restrict that, so YouTube is listen and sing-along only.
  */
 import { adminClient, handle, json } from '../_shared/runtime.ts';
-import { dailyUnits, QuotaExhausted, searchAndStore, storedVideos } from '../_shared/youtube_api.ts';
+import { addOfficialInstrumental, dailyUnits, QuotaExhausted, searchAndStore, storedVideos } from '../_shared/youtube_api.ts';
 import type { RankedVideo } from '../_shared/youtube_rank.ts';
 
 /** Stored videos, or a live search when the song has none (null when the day's quota is used up). */
@@ -19,6 +19,12 @@ async function videosFor(trackId: string, key: string): Promise<{ songS: number 
   if (!t) return 'missing';
   const songS = t.duration_ms ? Math.round(t.duration_ms / 1000) : null;
   const stored = await storedVideos(t);
+  if (stored && key && !stored.karaoke.some((k) => k.sameMaster)) {
+    // searched before official instrumentals were looked for by name: look once now (they need no lining up)
+    try {
+      if (await addOfficialInstrumental(t, key, dailyUnits())) return { songS, ...((await storedVideos(t)) ?? stored) };
+    } catch (e) { if (!(e instanceof QuotaExhausted)) console.error(e); }
+  }
   if (stored) return { songS, ...stored };
   if (!key) return null;   // no API key: only videos found earlier (or shared by singers)
   try {

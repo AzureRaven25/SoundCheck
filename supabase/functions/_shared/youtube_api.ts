@@ -54,18 +54,30 @@ export async function videoDetails(ids: string[], key: string, limit: number, fe
 
 export interface Song { id: string; title: string; artist_credit: string; duration_ms: number | null }
 
-/** Search a song's originals and karaoke versions (2 searches + 1 details call) and store them. */
+/** Search a song's originals and karaoke versions (2–3 searches + details calls) and store them. */
 export async function searchAndStore(song: Song, key: string, limit: number, fetcher = fetch): Promise<{ originals: RankedVideo[]; karaoke: RankedVideo[] }> {
   const songS = song.duration_ms ? Math.round(song.duration_ms / 1000) : null;
   const [orig, kar] = await Promise.all([
     search(`${song.artist_credit} ${song.title} audio`, key, limit, 8, fetcher),
     search(`${song.artist_credit} ${song.title} instrumental karaoke`, key, limit, 8, fetcher),
   ]);
-  const ids = [...new Set([...orig, ...kar].map((v) => v.id))];
-  const details = ids.length ? await videoDetails(ids, key, limit, fetcher) : new Map<string, VideoDetails>();
-  const videos: YtVideo[] = [...orig, ...kar].filter((v) => details.get(v.id)?.embeddable)
-    .map((v) => ({ ...v, durationS: details.get(v.id)?.durationS ?? null }));
-  const ranked = rankVideos(videos, { title: song.title, artist: song.artist_credit, durationS: songS });
+  const found = [...orig, ...kar];
+  const rank = async () => {
+    const ids = [...new Set(found.map((v) => v.id))];
+    const details = ids.length ? await videoDetails(ids, key, limit, fetcher) : new Map<string, VideoDetails>();
+    const videos: YtVideo[] = found.filter((v) => details.get(v.id)?.embeddable)
+      .map((v) => ({ ...v, durationS: details.get(v.id)?.durationS ?? null }));
+    return rankVideos(videos, { title: song.title, artist: song.artist_credit, durationS: songS });
+  };
+  let ranked = await rank();
+  // No official instrumental yet: look for one by name. It's the same recording as the original minus the vocal, so
+  // it plays in exact step with the lyrics: karaoke with nothing to line up. (One more search, only when needed.)
+  if (!ranked.karaoke.some((k) => k.sameMaster)) {
+    try {
+      found.push(...(await search(`${song.artist_credit} ${song.title} official instrumental`, key, limit, 10, fetcher)));
+      ranked = await rank();
+    } catch (e) { if (!(e instanceof QuotaExhausted)) throw e; }
+  }
   const rows = [...ranked.originals, ...ranked.karaoke].map((v) => ({
     track_id: song.id, video_id: v.id, kind: v.kind, title: v.title, channel: v.channel, duration_s: v.durationS,
     quality: v.quality, offset_guess_ms: v.offsetGuessMs, source: 'search', refreshed_at: new Date().toISOString(),
@@ -77,6 +89,32 @@ export async function searchAndStore(song: Song, key: string, limit: number, fet
   }
   await db.rpc('youtube_mark_searched', { p_track_id: song.id, p_found: rows.length });
   return ranked;
+}
+
+/**
+ * For a song searched before query_version 3 with no official instrumental stored: one search for it by name, stored
+ * alongside the earlier results. Returns true when it ran (the caller re-reads the stored videos).
+ */
+export async function addOfficialInstrumental(song: Song, key: string, limit: number, fetcher = fetch): Promise<boolean> {
+  const db = adminClient();
+  const { data: version } = await db.rpc('youtube_query_version', { p_track_id: song.id });
+  if ((version ?? 0) >= 3) return false;
+  const hits = await search(`${song.artist_credit} ${song.title} official instrumental`, key, limit, 10, fetcher);
+  const details = hits.length ? await videoDetails(hits.map((h) => h.id), key, limit, fetcher) : new Map<string, VideoDetails>();
+  const songS = song.duration_ms ? Math.round(song.duration_ms / 1000) : null;
+  const ranked = rankVideos(hits.filter((v) => details.get(v.id)?.embeddable).map((v) => ({ ...v, durationS: details.get(v.id)?.durationS ?? null })),
+    { title: song.title, artist: song.artist_credit, durationS: songS });
+  const rows = ranked.karaoke.map((v) => ({
+    track_id: song.id, video_id: v.id, kind: v.kind, title: v.title, channel: v.channel, duration_s: v.durationS,
+    quality: v.quality, offset_guess_ms: v.offsetGuessMs, source: 'search', refreshed_at: new Date().toISOString(),
+  }));
+  if (rows.length) {
+    const { error } = await db.from('song_videos').upsert(rows, { onConflict: 'track_id,video_id' });
+    if (error) throw error;
+  }
+  const { count } = await db.from('song_videos').select('video_id', { count: 'exact', head: true }).eq('track_id', song.id);
+  await db.rpc('youtube_mark_searched', { p_track_id: song.id, p_found: count ?? rows.length });
+  return true;
 }
 
 /**

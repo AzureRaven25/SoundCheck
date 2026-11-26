@@ -13,6 +13,8 @@ export interface StageVideo {
   votes: number;
   /** how many of those were measured by auto sync (0: it still needs measuring) */
   measured: number;
+  /** an official instrumental of the studio recording: in step with the lyrics from the start, nothing to line up */
+  sameMaster?: boolean;
 }
 
 export interface VideoStageData {
@@ -30,7 +32,7 @@ export interface VideoStageData {
 
 export type VideoStageLoad = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; data: VideoStageData };
 
-interface Ranked { id: string; title: string; channel: string; durationS: number | null; kind: 'original' | 'karaoke'; offsetGuessMs: number }
+interface Ranked { id: string; title: string; channel: string; durationS: number | null; kind: 'original' | 'karaoke'; offsetGuessMs: number; sameMaster?: boolean }
 
 /** Everything the YouTube sing-along Stage needs: synced lyrics, candidate videos and their lyrics offsets. */
 export function useVideoStageData(trackId: string): VideoStageLoad {
@@ -57,7 +59,7 @@ export function useVideoStageData(trackId: string): VideoStageLoad {
         const toVideo = (v: Ranked): StageVideo => {
           const s = shared.get(v.id);
           return { id: v.id, title: v.title, channel: v.channel, durationS: v.durationS, kind: v.kind,
-                   offset: (s ? s.offset_ms : v.offsetGuessMs) / 1000, offsetSource: s ? 'shared' : 'guess', votes: s?.votes ?? 0, measured: s?.measured ?? 0 };
+                   offset: (s ? s.offset_ms : v.offsetGuessMs) / 1000, offsetSource: s ? 'shared' : 'guess', votes: s?.votes ?? 0, measured: s?.measured ?? 0, sameMaster: !!v.sameMaster };
         };
         if (!live) return;
         setState({

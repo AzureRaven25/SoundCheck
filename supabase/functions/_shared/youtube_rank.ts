@@ -71,8 +71,9 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
       const artistChannel = titleMatch(v.channel.replace(/ - Topic$/i, ''), song.artist) >= 0.5;
       const official = /instrumental/i.test(v.title) && !/karaoke/i.test(v.title) && !rerecorded
         && (artistChannel || /official instrumental/i.test(v.title));
-      // same master: an official instrumental whose length matches the original to the second
-      const sameMaster = official && durDiff != null && Math.abs(durDiff) <= 2;
+      // same master: an official instrumental of the studio track. It starts with the song (instrumental releases
+      // have no title card), though it may run a few seconds longer at the end (Light Switch's: +4 s, offset 0.05 s)
+      const sameMaster = official && durDiff != null && durDiff >= -2 && durDiff <= 5;
       const brand = KARAOKE_BRANDS.test(v.channel);
       let q = match + (official ? 1.2 : 0) + (sameMaster ? 0.5 : 0) + (brand ? 0.6 : 0)
         + (/karaoke/i.test(v.title) ? 0.2 : 0)
@@ -83,7 +84,7 @@ export function rankVideos(videos: YtVideo[], song: { title: string; artist: str
       // a karaoke video of someone else's version (same title, different artist)
       if (titleMatch(`${v.title} ${v.channel}`, song.artist) < 0.5) q -= 0.6;
       karaoke.push({ ...v, kind: 'karaoke', quality: +q.toFixed(3), sameMaster,
-                     offsetGuessMs: sameMaster ? 0 : offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
+                     offsetGuessMs: official ? 0 : offsetGuessMs('karaoke', v.durationS, song.durationS, false) });
     } else {
       if (NOT_ORIGINAL.test(v.title) && !NOT_ORIGINAL.test(song.title)) continue;
       if (VARIANT_TAKE.test(v.title) && !VARIANT_TAKE.test(song.title)) continue;

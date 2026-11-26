@@ -257,7 +257,7 @@ export function VideoStage({ data, resume, local = null }: { data: VideoStageDat
   /** `again`: the singer asked to line it up again, even though it was measured before. */
   const needsAutoSync = (again = false) => !!(!local && mode === 'solo' && useMic && backing === 'karaoke' && karaokeVid && guideVid && mainVid === karaokeVid
     && ready.guide && guidePlayer.current && mainPlayer.current
-    && (again || (!karaokeVid.measured && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id))));
+    && (again || (!karaokeVid.sameMaster && !karaokeVid.measured && localOffset(karaokeVid.id) == null && !tried.current.has(karaokeVid.id))));
 
   /** Lyrics time to compare at when the opening wasn't clear: somewhere with the full band (about 40% in, after the first line). */
   function compareAt(): number {

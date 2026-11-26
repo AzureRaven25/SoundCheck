@@ -96,3 +96,14 @@ Deno.test('rankVideos: the studio track beats a different mix, edit or acoustic 
   const m = rankVideos([{ id: 'a', title: 'Song (Club Mix)', channel: 'Artist - Topic', durationS: 200 }], { title: 'Song (Club Mix)', artist: 'Artist', durationS: 200 });
   assertEquals(m.originals[0]!.id, 'a');
 });
+
+Deno.test('rankVideos: an official instrumental that runs a few seconds longer at the end is still the same recording (offset 0)', () => {
+  const r = rankVideos([
+    { id: 'ls1aaaaaaaa', title: 'Charlie Puth - Light Switch (Official Instrumental with Backing Vocals)', channel: 'PitchedProduction', durationS: 190 },
+    { id: 'ls2bbbbbbbb', title: 'Light Switch - Charlie Puth (Karaoke Version)', channel: 'Sing King', durationS: 196 },
+  ], { title: 'Light Switch', artist: 'Charlie Puth', durationS: 186 });
+  assertEquals(r.karaoke[0]!.id, 'ls1aaaaaaaa');
+  assertEquals(r.karaoke[0]!.sameMaster, true);
+  assertEquals(r.karaoke[0]!.offsetGuessMs, 0);
+  assertEquals(r.karaoke[1]!.sameMaster, false);
+});
