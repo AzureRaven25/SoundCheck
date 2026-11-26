@@ -46,3 +46,19 @@ def test_apostrophes_are_ignored(conn, fake_dump):
     assert match_query("Don’t Stop") == match_query("dont stop") == '"dont" "stop"*'
     for q in ("dont signal", "don't signal", "don’t sig"):
         assert [h[2] for h in search(ex, q)] == ["Don’t Signal"], q
+
+
+def test_append_adds_and_indexes_only_new_ranks(conn, fake_dump):
+    from karaoke_catalog.turso_export import export_append
+    import pytest
+    load_staging(conn, fake_dump)
+    run_ranked_subset(conn)
+    ex = SqliteExecutor()
+    assert export(conn, ex, 1, 3, log=lambda *_: None) == 2
+    with pytest.raises(ValueError):
+        export_append(conn, ex, 2, 100, log=lambda *_: None)                  # would double-index rank 2
+    assert export_append(conn, ex, 3, 100, window=1, log=lambda *_: None) == 2
+    assert ex.execute_many([("select count(*) from songs", ())])[0][0][0] == 4
+    assert ex.execute_many([("select count(*) from songs_fts", ())])[0][0][0] == 4   # each song indexed once
+    assert search(ex, "zoe lantern")[0][2] == "Paper Lanterns"
+    assert len(search(ex, "midnight sig")) == 2

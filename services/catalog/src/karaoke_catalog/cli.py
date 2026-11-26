@@ -129,7 +129,7 @@ def cmd_sync_supabase(args) -> int:
 
 def cmd_export_turso(args) -> int:
     from .supabase_sync import load_env
-    from .turso_export import TursoHttp, export
+    from .turso_export import TursoHttp, export, export_append
 
     load_env()
     url, token = os.environ.get("TURSO_DATABASE_URL"), os.environ.get("TURSO_AUTH_TOKEN")
@@ -137,7 +137,8 @@ def cmd_export_turso(args) -> int:
         print("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env.local", file=sys.stderr)
         return 1
     with db.connect() as conn:
-        n = export(conn, TursoHttp(url, token), args.start, args.start + args.top, window=args.window)
+        run = export_append if args.append else export
+        n = run(conn, TursoHttp(url, token), args.start, args.start + args.top, window=args.window)
     print(f"exported {n:,} songs to Turso (ranks {args.start:,}-{args.start + args.top - 1:,})")
     return 0
 
@@ -197,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", type=int, default=100_001)
     p.add_argument("--top", type=int, default=900_000, help="how many ranks (default stays under Turso Free's monthly write quota)")
     p.add_argument("--window", type=int, default=20_000)
+    p.add_argument("--append", action="store_true", help="add ranks beyond the last exported one, indexing as it goes (no full rebuild)")
     p.set_defaults(fn=cmd_export_turso)
 
     p = sub.add_parser("backfill-artwork", help="register Cover Art Archive covers for synced albums from the CAA dump")

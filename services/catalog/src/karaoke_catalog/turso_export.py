@@ -185,6 +185,37 @@ def export(conn: psycopg.Connection, ex: Executor, start: int, end: int, window:
     return total
 
 
+def index_range(ex: Executor, start: int, end: int) -> None:
+    """Add songs ranked [start, end) to the search index (they must not be indexed yet)."""
+    ex.execute_many([("insert into songs_fts(rowid, title, artist_credit) "
+                      f"select rank, {strip_apostrophes_sql('title')}, {strip_apostrophes_sql('artist_credit')} "
+                      "from songs where rank >= ? and rank < ?", (start, end))])
+
+
+def export_append(conn: psycopg.Connection, ex: Executor, start: int, end: int, window: int = 20000, log=print) -> int:
+    """Add ranks [start, end) beyond what's already exported, indexing each window as it lands.
+
+    Unlike export(), it never rebuilds the whole index (that rewrites every existing row, which counts against
+    Turso's monthly write quota), and a run stopped partway leaves every exported window searchable. Resume with a
+    later --start. Ranks must be new: re-exporting existing ranks would index them twice.
+    """
+    init_schema(ex)
+    have = ex.execute_many([("select coalesce(max(rank), 0) from songs", ())])[0][0][0]
+    if start <= int(have):
+        raise ValueError(f"append must start after the last exported rank ({int(have):,}); got {start:,}")
+    total = 0
+    for s in range(start, end, window):
+        e = min(end, s + window)
+        t0 = time.perf_counter()
+        n = export_window(conn, ex, s, e)
+        index_range(ex, s, e)
+        lo, hi = ex.execute_many([("select min(rank), max(rank) from songs", ())])[0][0]
+        ex.execute_many([("insert or replace into meta (key, value) values ('ranks', ?)", (json.dumps([lo, hi]),))])
+        total += n
+        log(f"  ranks {s:,}-{e - 1:,}: {n:,} songs ({time.perf_counter() - t0:.0f}s)", flush=True) if log is print else log(f"  ranks {s:,}-{e - 1:,}: {n:,} songs")
+    return total
+
+
 def match_query(q: str) -> str:
     """FTS5 query: every word must match, the last one as a prefix; words are quoted so input can't inject syntax."""
     q = q.lower()
