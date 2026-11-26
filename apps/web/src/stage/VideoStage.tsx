@@ -274,6 +274,7 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
         setAutoNote(r.outcome === 'low-confidence' && r.levelDb != null && r.levelDb > -50
           ? 'Heard the music but couldn’t find a sure match, so the timing wasn’t changed. If the original sounds ahead of the karaoke, press Later.'
           : r.outcome.endsWith('did-not-play') ? 'A video didn’t start in time (an ad, or slow loading), so the timing wasn’t checked. Try “Line up again”.'
+          : r.outcome === 'no-mic' ? 'The microphone isn’t allowed, so the timing wasn’t checked. Allow the mic for this site, then “Line up again”.'
           : 'Couldn’t hear the music through the mic (headphones, or the volume is low), so the timing wasn’t checked.');
         return null;
       }
@@ -296,7 +297,10 @@ export function VideoStage({ data, resume }: { data: VideoStageData; resume: str
     const ac = ctx.current ?? new AudioContext({ latencyHint: 'interactive' });
     ctx.current = ac;
     void ac.resume();
-    const synced = needsAutoSync(again) && (await micMaybeAllowed()) ? await autoSync(ac) : null;
+    const wanted = needsAutoSync(again);
+    const allowed = wanted && (await micMaybeAllowed());
+    if (wanted && !allowed) setAutoNote('The microphone is blocked, so the karaoke timing wasn’t checked. Allow the mic for this site, then “Line up again”.');
+    const synced = allowed ? await autoSync(ac) : null;
     await begin(ac, synced);
   }
 
